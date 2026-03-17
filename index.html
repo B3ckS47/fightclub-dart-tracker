@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlightClub · Dart Tracker</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="checkout.js"></script>
+</head>
+
+<body>
+
+    <!-- ── SPLASH / PASSWORD SCREEN ── -->
+    <div id="splash-screen">
+        <div id="splash-content">
+            <img src="Logo.png" alt="DC Flight Club 47" id="splash-logo">
+            <p class="splash-subtitle">MEMBERS ONLY</p>
+            <div class="splash-input-wrap">
+                <input
+                    type="password"
+                    id="splash-password"
+                    placeholder="Enter password"
+                    class="splash-input"
+                    onkeydown="if(event.key==='Enter') checkPassword()"
+                    autocomplete="off"
+                >
+                <button onclick="checkPassword()" class="splash-btn">ENTER</button>
+            </div>
+            <p id="splash-error" class="splash-error"></p>
+        </div>
+    </div>
+
+    <!-- ── NAVIGATION ── -->
+    <nav id="main-nav" style="display:none;">
+        <div class="nav-inner">
+            <span class="nav-brand">🎯 FLIGHTCLUB</span>
+            <div class="nav-links">
+                <button id="nav-game" class="nav-btn active" onclick="showPage('game-page')">Neues Spiel</button>
+                <button id="nav-stats" class="nav-btn" onclick="showPage('stats-page')">Dashboard</button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="app-wrapper" id="app-wrapper" style="display:none;">
+
+        <!-- ══════════════════════════════════════
+             PAGE: GAME
+        ══════════════════════════════════════ -->
+        <div id="game-page" class="page active">
+
+            <!-- SETUP VIEW -->
+            <div id="setup-view" class="card">
+                <h2 class="card-title">NEUES SPIEL</h2>
+                <div class="divider"></div>
+
+                <div class="vs-block">
+                    <select id="p1-select" class="select-field">
+                        <option>Loading...</option>
+                    </select>
+                    <span class="vs-label">VS</span>
+                    <select id="p2-select" class="select-field">
+                        <option>Loading...</option>
+                    </select>
+                </div>
+
+                <div class="divider"></div>
+
+                <div class="options-row">
+                    <select id="start-score-select" class="select-field select-small">
+                        <option value="501">501</option>
+                        <option value="301">301</option>
+                    </select>
+                    <select id="checkout-mode-select" class="select-field select-small">
+                        <option value="double">Double Out</option>
+                        <option value="single">Single Out</option>
+                    </select>
+                    <select id="legs-to-win-select" class="select-field select-small">
+                        <option value="1">First to 1 Leg</option>
+                        <option value="2">First to 2 Legs</option>
+                        <option value="3">First to 3 Legs</option>
+                        <option value="5">First to 5 Legs</option>
+                    </select>
+                </div>
+
+                <button onclick="startGame()" class="btn btn-primary btn-full btn-lg">
+                    SPIEL STARTEN
+                </button>
+            </div>
+
+            <!-- ACTIVE GAME VIEW -->
+            <div id="active-game-view" class="game-view" style="display:none;">
+
+                <!-- Game Header -->
+                <div class="game-header">
+                    <div class="header-spacer"></div>
+                    <h2 id="mode-display" class="game-title">FIRST TO 3 LEGS</h2>
+                    <button onclick="exitGame()" class="btn btn-danger btn-exit">EXIT</button>
+                </div>
+
+                <!-- Score Cards -->
+                <div class="game-row">
+                    <div class="player-column">
+                        <div id="p1-name-display" class="player-name">Player 1</div>
+                        <div id="p1-legs-display" class="legs-badge">LEGS: 0</div>
+                        <div id="p1-card" class="score-card">
+                            <div id="p1-avg-display" class="avg-display">AVG: 0.00</div>
+                            <div id="p1-score-display" class="score-display score-active">501</div>
+                            <div id="p1-history" class="history-list"></div>
+                        </div>
+                    </div>
+
+                    <div class="player-column">
+                        <div id="p2-name-display" class="player-name">Player 2</div>
+                        <div id="p2-legs-display" class="legs-badge">LEGS: 0</div>
+                        <div id="p2-card" class="score-card score-card--inactive">
+                            <div id="p2-avg-display" class="avg-display">AVG: 0.00</div>
+                            <div id="p2-score-display" class="score-display">501</div>
+                            <div id="p2-history" class="history-list"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Checkout Helper -->
+                <div id="checkout-helper" class="checkout-box" style="display:none;">
+                    <span class="checkout-label">CHECKOUT</span>
+                    <div id="checkout-path" class="checkout-path">- - -</div>
+                </div>
+
+                <!-- Input Pad -->
+                <div class="input-pad">
+                    <div class="input-preview-row">
+                        Eingabe: <span id="input-preview" class="input-preview-value">0</span>
+                    </div>
+                    <div class="controls">
+                        <button onclick="pressKey('1')" class="key-btn">1</button>
+                        <button onclick="pressKey('2')" class="key-btn">2</button>
+                        <button onclick="pressKey('3')" class="key-btn">3</button>
+                        <button onclick="pressKey('4')" class="key-btn">4</button>
+                        <button onclick="pressKey('5')" class="key-btn">5</button>
+                        <button onclick="pressKey('6')" class="key-btn">6</button>
+                        <button onclick="pressKey('7')" class="key-btn">7</button>
+                        <button onclick="pressKey('8')" class="key-btn">8</button>
+                        <button onclick="pressKey('9')" class="key-btn">9</button>
+                        <button onclick="clearInput()" class="key-btn key-clear">C</button>
+                        <button onclick="pressKey('0')" class="key-btn">0</button>
+                        <button onclick="undoMove()" class="key-btn key-undo">↩ Undo</button>
+                        <button onclick="submitTurn()" class="key-btn key-submit">EINGABE</button>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- ══════════════════════════════════════
+             PAGE: STATS / DASHBOARD
+        ══════════════════════════════════════ -->
+        <div id="stats-page" class="page">
+            <div class="card">
+
+                <!-- Register Player -->
+                <div class="register-section">
+                    <h3 class="section-label">Neuen Spieler hinzufügen</h3>
+                    <div class="register-row">
+                        <input type="text" id="reg-name" placeholder="Nickname eingeben" class="input-field">
+                        <button onclick="registerPlayer()" class="btn btn-accent">HINZUFÜGEN</button>
+                    </div>
+                </div>
+
+                <div class="divider"></div>
+
+                <!-- Leaderboard -->
+                <div>
+                    <h3 class="section-label">FlightClub Mitglieder</h3>
+                    <div id="player-list-box" class="player-list">
+                        <p class="muted-text">Lade Mitglieder...</p>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- ══════════════════════════════════════
+             PAGE: PLAYER PROFILE
+        ══════════════════════════════════════ -->
+        <div id="player-profile-view" class="page">
+            <div class="card">
+
+                <!-- Profile Header -->
+                <div class="profile-header">
+                    <button onclick="showPage('stats-page')" class="btn btn-ghost">← Zurück</button>
+                    <h2 id="profile-name" class="profile-name-title">Player Name</h2>
+                    <div style="width:80px;"></div>
+                </div>
+
+                <!-- Key Stats Grid -->
+                <div id="profile-stats-summary" class="stats-grid"></div>
+
+                <!-- Advanced Analytics -->
+                <h3 class="subsection-title">Advanced Analytics</h3>
+                <div id="profile-advanced-stats" class="advanced-grid"></div>
+
+                <!-- Match History -->
+                <h3 class="subsection-title">Recent Match History</h3>
+                <div id="profile-history-list"></div>
+
+                <!-- Danger Zone -->
+                <div class="danger-zone">
+                    <button id="delete-player-btn" class="btn btn-danger-outline">
+                        DELETE PLAYER PROFILE
+                    </button>
+                </div>
+
+            </div>
+        </div>
+
+    </div><!-- /app-wrapper -->
+
+    <script src="database.js"></script>
+    <script src="game-logic.js"></script>
+    <script src="ui-manager.js"></script>
+
+    <script>
+        // ── SPLASH SCREEN LOGIC ──
+        // Change this to your club's password:
+        const CLUB_PASSWORD = "1902";
+        const SESSION_KEY   = "fc47_auth";
+
+        function checkPassword() {
+            const input = document.getElementById('splash-password').value;
+            const errEl = document.getElementById('splash-error');
+
+            if (input === CLUB_PASSWORD) {
+                sessionStorage.setItem(SESSION_KEY, '1');
+                unlockApp();
+            } else {
+                errEl.textContent = "Falsches Passwort. Versuch es nochmal.";
+                document.getElementById('splash-password').value = '';
+                document.getElementById('splash-password').classList.add('splash-input--error');
+                setTimeout(() => {
+                    document.getElementById('splash-password').classList.remove('splash-input--error');
+                    errEl.textContent = '';
+                }, 1800);
+            }
+        }
+
+        function unlockApp() {
+            const splash = document.getElementById('splash-screen');
+            splash.classList.add('splash-fade-out');
+            setTimeout(() => {
+                splash.style.display = 'none';
+                document.getElementById('main-nav').style.display = 'flex';
+                document.getElementById('app-wrapper').style.display = 'block';
+            }, 600);
+        }
+
+        // Auto-unlock if already authenticated this session
+        if (sessionStorage.getItem(SESSION_KEY) === '1') {
+            document.getElementById('splash-screen').style.display = 'none';
+            document.getElementById('main-nav').style.display = 'flex';
+            document.getElementById('app-wrapper').style.display = 'block';
+        }
+    </script>
+</body>
+</html>
