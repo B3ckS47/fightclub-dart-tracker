@@ -59,8 +59,9 @@ body {
     background-attachment: fixed;
 }
 
-/* ── NAVIGATION ── */
-#main-nav {
+/* ── NAVIGATION — shared ── */
+#nav-default,
+#nav-game-active {
     position: sticky;
     top: 0;
     z-index: 100;
@@ -70,13 +71,31 @@ body {
     border-bottom: 1px solid var(--border);
 }
 
-.nav-inner {
-    max-width: 700px;
-    margin: 0 auto;
+/* Default nav: brand left, buttons right */
+.nav-inner--default {
     height: 100%;
-    display: flex;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
     align-items: center;
-    justify-content: space-between;
+    padding: 0 20px;
+}
+
+.nav-inner--default .nav-brand {
+    justify-self: start;
+}
+
+.nav-inner--default .nav-links {
+    justify-self: end;
+    justify-content: flex-end;
+    margin-left: 0;
+}
+
+/* Game nav: 3 equal columns */
+.nav-inner--game {
+    height: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    align-items: center;
     padding: 0 20px;
 }
 
@@ -86,13 +105,31 @@ body {
     font-size: 1.2rem;
     letter-spacing: 2px;
     text-transform: uppercase;
-    color: var(--text-primary);
+    color: var(--accent);
     text-shadow: var(--shadow-glow);
 }
 
 .nav-links {
     display: flex;
     gap: 8px;
+    margin-left: auto;
+}
+
+.nav-game-title {
+    font-family: var(--font-display);
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--text-primary);
+    margin: 0;
+    text-align: center;
+    justify-self: center;
+    white-space: nowrap;
+}
+
+.nav-inner--game .btn-exit {
+    justify-self: end;
 }
 
 .nav-btn {
@@ -368,6 +405,9 @@ body {
     gap: 12px;
 }
 
+.checkout-box { margin-top: 8px; }
+.input-pad    { margin-top: 8px; }
+
 .game-header {
     display: flex;
     align-items: center;
@@ -553,6 +593,21 @@ body {
     max-width: 400px;
     margin: 0 auto;
 }
+
+/* Mobile: 3-col numpad shown by default */
+.controls--mobile {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    max-width: 400px;
+    margin: 0 auto;
+}
+
+/* Tablet: 5-col numpad hidden on mobile */
+.controls--tablet { display: none; }
+
+/* Quick score buttons hidden on mobile */
+.quick-scores { display: none; }
 
 .key-btn {
     font-family: var(--font-display);
@@ -741,7 +796,35 @@ body {
 }
 
 
-/* ── SPLASH / PASSWORD SCREEN ── */
+/* nav-brand that grows to push title to center */
+
+
+.nav-brand--flex {
+    justify-self: start;
+}
+
+.nav-game-title {
+    font-family: var(--font-display);
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--text-primary);
+    margin: 0;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.nav-exit-wrap {
+    justify-self: end;
+    display: flex;
+    align-items: center;
+}
+
+/* Quick score buttons — hidden on mobile */
+.quick-scores { display: none; }
+
+
 #splash-screen {
     position: fixed;
     inset: 0;
@@ -862,6 +945,93 @@ body {
     transition: opacity 0.2s;
 }
 
+
+/* ── GAME TYPE SELECTOR ── */
+.game-type-selector {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+}
+
+.game-type-btn {
+    flex: 1;
+    max-width: 160px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 14px 10px;
+    border-radius: var(--radius-md);
+    border: 2px solid var(--border);
+    background: var(--bg-element);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.18s ease;
+}
+
+.game-type-btn:hover {
+    border-color: var(--border-light);
+    color: var(--text-primary);
+    background: var(--bg-hover);
+}
+
+.game-type-btn--active {
+    border-color: var(--accent) !important;
+    background: var(--accent-dim) !important;
+    color: var(--text-primary) !important;
+}
+
+.game-type-icon  { font-size: 1.4rem; }
+.game-type-label {
+    font-family: var(--font-display);
+    font-size: 1rem;
+    font-weight: 800;
+    letter-spacing: 2px;
+}
+.game-type-sub { font-size: 0.7rem; color: var(--text-muted); letter-spacing: 1px; }
+
+/* ── DOUBLES PLAYER SELECT ── */
+.doubles-team-block {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    max-width: 340px;
+}
+
+.doubles-team-label {
+    font-family: var(--font-display);
+    font-size: 0.75rem;
+    font-weight: 800;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    padding: 4px 14px;
+    border-radius: 20px;
+}
+
+.team-label--1 { background: rgba(245,166,35,0.15); color: var(--accent); }
+.team-label--2 { background: rgba(41,216,124,0.15); color: var(--green); }
+
+/* ── CURRENT PLAYER BADGE ── */
+.current-player-badge {
+    font-family: var(--font-display);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: var(--accent);
+    background: var(--accent-dim);
+    border: 1px solid rgba(245,166,35,0.3);
+    border-radius: 20px;
+    padding: 3px 10px;
+    margin-bottom: 6px;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+
 @media (max-width: 420px) {
     .app-wrapper { padding: 16px 12px 50px; }
     .card { padding: 20px 16px; }
@@ -869,4 +1039,287 @@ body {
     .options-row .select-field { min-width: 120px; }
     .key-btn { padding: 15px; font-size: 1.3rem; }
     .score-display { font-size: 2.1rem; }
+}
+
+/* ============================================================
+   TABLET LANDSCAPE LAYOUT  (min-width: 768px)
+   ============================================================ */
+@media (min-width: 768px) {
+
+    /* ── BASE ── */
+    :root { --nav-height: 64px; }
+
+    .app-wrapper {
+        max-width: 100%;
+        padding: 20px 24px 40px;
+    }
+
+    /* Prevent the page from being taller than the viewport */
+    #game-page {
+        height: calc(100vh - var(--nav-height));
+        overflow: hidden;
+    }
+
+    #setup-view {
+        overflow-y: auto;
+        max-height: calc(100vh - var(--nav-height) - 40px);
+    }
+
+    .nav-inner--default, .nav-inner--game { padding: 0 32px; }
+    .nav-brand  { font-size: 1.35rem; }
+    .nav-btn    { font-size: 1rem; padding: 9px 24px; }
+
+    /* ── SETUP PAGE — two-column card ── */
+    #setup-view {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: auto;
+        column-gap: 40px;
+        align-items: start;
+        padding: 36px 40px;
+    }
+
+    /* Title spans both columns */
+    #setup-view .card-title {
+        grid-column: 1 / -1;
+        font-size: 2rem;
+        margin-bottom: 0;
+    }
+
+    /* First divider spans both columns */
+    #setup-view .divider:first-of-type {
+        grid-column: 1 / -1;
+    }
+
+    /* Game type selector — left column */
+    .game-type-selector { grid-column: 1; margin-bottom: 20px; }
+
+    /* Divider after game type — left column only */
+    #setup-view .divider:nth-of-type(2) { grid-column: 1; margin: 16px 0; }
+
+    /* Player selects — left column */
+    #singles-select  { grid-column: 1; }
+    #doubles-select  { grid-column: 1; }
+
+    /* Divider before options — right column start */
+    #setup-view .divider:nth-of-type(3) { display: none; }
+
+    /* Options row — right column */
+    .options-row {
+        grid-column: 2;
+        grid-row: 3 / 6;
+        flex-direction: column;
+        align-items: stretch;
+        justify-content: flex-start;
+        gap: 14px;
+        margin-bottom: 0;
+    }
+
+    .options-row .select-field {
+        max-width: 100%;
+        font-size: 1.05rem;
+        padding: 13px 16px;
+    }
+
+    /* Start button — right column bottom */
+    #setup-view .btn-primary {
+        grid-column: 2;
+        grid-row: 6;
+        align-self: end;
+        font-size: 1.3rem;
+        padding: 18px;
+        margin-top: 20px;
+    }
+
+    /* ── ACTIVE GAME — left/right split ── */
+    #active-game-view.game-active {
+        display: flex;
+        flex-direction: row;
+        gap: 20px;
+        align-items: stretch;
+        height: calc(100vh - var(--nav-height) - 56px);
+        max-height: 760px;
+        padding: 0;
+    }
+
+    /* LEFT half: player 1 above player 2, checkout at bottom */
+    .game-left {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        min-height: 0;
+    }
+
+    /* game-row: stacks the two player columns vertically */
+    #active-game-view .game-row {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        margin-bottom: 0;
+        min-height: 0;
+        width: 100%;
+    }
+
+    /* Each player column: half the height */
+    #active-game-view .player-column {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        min-height: 0;
+    }
+
+    /* Score card fills the player column */
+    #active-game-view .score-card {
+        flex: 1;
+        min-height: 0;
+    }
+
+    /* Per-player checkout boxes — only shown on tablet */
+    .checkout-box--player {
+        margin-top: 8px;
+        flex-shrink: 0;
+        padding: 8px 14px;
+    }
+
+    /* Hide the shared mobile checkout on tablet */
+    #checkout-helper { display: none !important; }
+
+    /* Checkout at bottom of left half */
+    #active-game-view .checkout-box {
+        margin-top: 0 !important;
+        flex-shrink: 0;
+    }
+
+    /* RIGHT half: input pad full height */
+    #active-game-view .input-pad {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        margin-top: 0 !important;
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-top: 3px solid var(--accent);
+        border-radius: var(--radius-lg);
+        padding: 24px 20px;
+        min-height: 0;
+    }
+
+    /* Score numbers */
+    .score-display        { font-size: 3rem; letter-spacing: -1px; }
+    .avg-display          { font-size: 0.82rem; margin-bottom: 6px; }
+    .history-list         { height: 80px; }
+    .history-list div     { font-size: 0.95rem; padding: 3px 0; }
+    .current-player-badge { font-size: 0.8rem; padding: 4px 10px; margin-bottom: 5px; }
+
+    /* Player name row: name left, legs right, both large */
+    #active-game-view .player-column {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        min-height: 0;
+    }
+
+    #active-game-view .player-name-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        margin-bottom: 8px;
+    }
+
+    .player-name  {
+        font-size: 1rem;
+        font-weight: 800;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        text-align: left;
+    }
+
+    .legs-badge {
+        font-size: 1rem;
+        font-weight: 700;
+        letter-spacing: 1px;
+        background: transparent;
+        border: none;
+        padding: 0;
+        color: var(--text-secondary);
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+
+    /* Numpad */
+    .controls             { gap: 10px; max-width: 100%; }
+    .key-btn              { padding: 18px; font-size: 1.7rem; border-radius: var(--radius-md); }
+    .key-undo             { font-size: 1rem !important; }
+    .key-submit           { font-size: 1.2rem !important; padding: 18px !important; letter-spacing: 3px; }
+    .input-preview-row    { font-size: 0.95rem; margin-bottom: 12px; }
+    .input-preview-value  { font-size: 2.6rem; }
+
+    /* Checkout text */
+    .checkout-path  { font-size: 1.4rem; letter-spacing: 3px; }
+    .checkout-label { font-size: 0.75rem; }
+
+    /* Tablet numpad — 5-col grid with quick scores on left/right */
+    .controls--mobile  { display: none; }
+    .controls--tablet {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 10px;
+        width: 100%;
+        margin: 0 auto;
+    }
+
+    /* EINGABE spans middle 3 cols in 5-col grid */
+    .key-submit--tablet {
+        grid-column: 2 / 5;
+    }
+
+    /* C button starts in col 2, pushing C/0/Undo to cols 2-4 */
+    .controls--tablet .key-clear {
+        grid-column: 2;
+    }
+
+    .key-quick {
+        font-size: 1.1rem !important;
+        padding: 12px 6px !important;
+        background: var(--bg-hover) !important;
+        border: 1px solid var(--border-light) !important;
+        color: var(--text-secondary) !important;
+    }
+
+    .key-quick:active {
+        background: var(--accent-dim) !important;
+        border-color: var(--accent) !important;
+        color: var(--accent) !important;
+    }
+
+    /* ── DASHBOARD ── */
+    .lb-row      { padding: 18px 20px; }
+    .lb-name     { font-size: 1.2rem; }
+    .lb-sub      { font-size: 0.85rem; }
+    .lb-winrate-val { font-size: 1.5rem; }
+    .lb-rank     { width: 36px; height: 36px; font-size: 1rem; margin-right: 18px; }
+
+    .register-row .input-field { font-size: 1.05rem; padding: 13px 16px; }
+    .btn-accent  { font-size: 1.05rem; padding: 13px 26px; }
+
+    /* ── PLAYER PROFILE ── */
+    .stats-grid    { grid-template-columns: repeat(4, 1fr); }
+    .advanced-grid { grid-template-columns: repeat(3, 1fr); }
+
+    .stat-value    { font-size: 1.8rem; }
+    .stat-label    { font-size: 0.7rem; }
+
+    .profile-name-title { font-size: 2rem; }
+
+    .match-row     { padding: 16px 20px; }
+    .match-avg     { font-size: 1rem; }
+    .match-result  { font-size: 0.95rem; }
+
+    /* Card general */
+    .card { padding: 32px 36px; }
 }

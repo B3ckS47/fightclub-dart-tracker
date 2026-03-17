@@ -159,7 +159,10 @@ async function openPlayerProfile(playerId) {
 }
 
 function refreshDisplay() {
-    // Basic Info
+    const isDoubles = gameState.gameType === 'doubles';
+    const activeIdx = gameState.currentIdx;
+
+    // Team / player names
     document.getElementById('p1-name-display').innerText = gameState.pNames[0];
     document.getElementById('p2-name-display').innerText = gameState.pNames[1];
     document.getElementById('p1-score-display').innerText = gameState.scores[0];
@@ -168,10 +171,22 @@ function refreshDisplay() {
     document.getElementById('p1-legs-display').innerText = `LEGS: ${gameState.legScore[0]}`;
     document.getElementById('p2-legs-display').innerText = `LEGS: ${gameState.legScore[1]}`;
 
+    // Doubles: show current player badge inside each team card
+    const cp1 = document.getElementById('p1-current-player');
+    const cp2 = document.getElementById('p2-current-player');
+    if (isDoubles) {
+        cp1.style.display = 'block';
+        cp2.style.display = 'block';
+        cp1.innerText = '🎯 ' + gameState.teamPlayers[0][gameState.teamPlayerIdx[0]];
+        cp2.innerText = '🎯 ' + gameState.teamPlayers[1][gameState.teamPlayerIdx[1]];
+    } else {
+        cp1.style.display = 'none';
+        cp2.style.display = 'none';
+    }
+
     // Active card highlight
-    const activeIdx = gameState.currentIdx;
-    const p1Card = document.getElementById('p1-card');
-    const p2Card = document.getElementById('p2-card');
+    const p1Card  = document.getElementById('p1-card');
+    const p2Card  = document.getElementById('p2-card');
     const p1Score = document.getElementById('p1-score-display');
     const p2Score = document.getElementById('p2-score-display');
 
@@ -194,26 +209,42 @@ function refreshDisplay() {
     renderHist(0, 'p1-history');
     renderHist(1, 'p2-history');
 
-    // Averages
+    // Averages — in doubles, average the two team members together
     const startScore = parseInt(document.getElementById('start-score-select').value);
-    [0, 1].forEach(idx => {
-        const pointsScored = startScore - gameState.scores[idx];
-        const turns = gameState.history[idx].filter(val => val !== "BUST").length;
+    [0, 1].forEach(teamIdx => {
+        const pointsScored = startScore - gameState.scores[teamIdx];
+        const turns = gameState.history[teamIdx].filter(val => val !== "BUST").length;
         const avg = turns > 0 ? (pointsScored / turns).toFixed(2) : "0.00";
-        document.getElementById(`p${idx + 1}-avg-display`).innerText = `AVG: ${avg}`;
+        document.getElementById(`p${teamIdx + 1}-avg-display`).innerText = `AVG: ${avg}`;
     });
 
-    // Checkout helper
-    const curScore = gameState.scores[activeIdx];
+    // Checkout helper — shared (mobile) + per-player (tablet)
+    const isTablet = window.innerWidth >= 768;
+
+    // Shared mobile checkout (active player only)
     const helper   = document.getElementById('checkout-helper');
     const pathText = document.getElementById('checkout-path');
-
-    if (gameState.mode === 'double' && curScore <= 170 && checkouts[curScore]) {
+    const curScore = gameState.scores[activeIdx];
+    if (!isTablet && gameState.mode === 'double' && curScore <= 170 && checkouts[curScore]) {
         helper.style.display = 'flex';
         pathText.innerText = checkouts[curScore];
     } else {
         helper.style.display = 'none';
     }
+
+    // Per-player checkouts (tablet only)
+    [0, 1].forEach(idx => {
+        const box  = document.getElementById(`p${idx + 1}-checkout`);
+        const path = document.getElementById(`p${idx + 1}-checkout-path`);
+        if (!box) return;
+        const score = gameState.scores[idx];
+        if (isTablet && gameState.mode === 'double' && score <= 170 && checkouts[score]) {
+            box.style.display = 'flex';
+            path.innerText = checkouts[score];
+        } else {
+            box.style.display = 'none';
+        }
+    });
 }
 
 // Keep the last 4 throws as history
@@ -232,12 +263,11 @@ function renderHist(pIdx, elId) {
 
 // Player dropdowns for game setup
 function updateDropdowns() {
-    const s1 = document.getElementById('p1-select');
-    const s2 = document.getElementById('p2-select');
-    if (!s1 || !s2) return;
     const options = players.map(p => `<option value="${p.name}">${p.name}</option>`).join('');
-    s1.innerHTML = options;
-    s2.innerHTML = options;
+    ['p1-select','p2-select','t1p1-select','t1p2-select','t2p1-select','t2p2-select'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = options;
+    });
 }
 
 function exitGame(isFinished = false) {
@@ -250,9 +280,13 @@ function exitGame(isFinished = false) {
         if (!confirmExit) return;
     }
 
-    document.getElementById('main-nav').style.display = 'flex';
-    document.getElementById('setup-view').style.display = 'block';
+    document.getElementById('nav-default').style.display     = 'flex';
+    document.getElementById('nav-game-active').style.display = 'none';
+    document.getElementById('setup-view').style.display      = 'block';
+    document.getElementById('active-game-view').classList.remove('game-active');
     document.getElementById('active-game-view').style.display = 'none';
+    gameState.input = "";
+    document.getElementById('input-preview').innerText = "0";
 
     showPage('game-page');
 }

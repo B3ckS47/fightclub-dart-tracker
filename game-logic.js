@@ -1,68 +1,85 @@
+// ── HELPERS ──
+function makePlayerStats() {
+    return {
+        oneEighties: 0,
+        twentySixes: 0,
+        totalPoints: 0,
+        dartsThrown: 0,
+        pointsPre170: 0,
+        dartsPre170: 0,
+        dartsToClose: 0,
+        isBelow170: false
+    };
+}
+
 let gameState = {
+    gameType: 'singles',
     pNames: ["P1", "P2"],
     scores: [501, 501],
     history: [[], []],
-    legScore: [0, 0], // Tracks legs won
-    targetLegs: 1, // First to X
-    legStarter: 0, // Who started the current leg
+    legScore: [0, 0],
+    targetLegs: 1,
+    legStarter: 0,
     currentIdx: 0,
     mode: 'double',
     input: "",
     logs: [],
-
-    // Statistics Trackers per player [P1, P2]
-    stats: [
-        {
-            oneEighties: 0,
-            twentySixes: 0,
-            totalPoints: 0,
-            dartsThrown: 0,
-            pointsPre170: 0,
-            dartsPre170: 0,
-            dartsToClose: 0,
-            isBelow170: false
-        },
-        {
-            oneEighties: 0,
-            twentySixes: 0,
-            totalPoints: 0,
-            dartsThrown: 0,
-            pointsPre170: 0,
-            dartsPre170: 0,
-            dartsToClose: 0,
-            isBelow170: false
-        }
-    ]
+    teamPlayers: [["A","B"], ["X","Y"]],
+    teamPlayerIdx: [0, 0],
+    stats: [makePlayerStats(), makePlayerStats()]
 };
 
-// Ensure the app waits for the HTML to load
 window.addEventListener('DOMContentLoaded', () => {
     fetchPlayers();
 });
 
-// --- GAME LOGIC ---
+function setGameType(type) {
+    gameState.gameType = type;
+    document.getElementById('type-singles').classList.toggle('game-type-btn--active', type === 'singles');
+    document.getElementById('type-doubles').classList.toggle('game-type-btn--active', type === 'doubles');
+    document.getElementById('singles-select').style.display = type === 'singles' ? 'flex' : 'none';
+    document.getElementById('doubles-select').style.display = type === 'doubles' ? 'flex' : 'none';
+}
+
 function startGame() {
-    const p1 = document.getElementById('p1-select').value;
-    const p2 = document.getElementById('p2-select').value;
-    const startVal = parseInt(document.getElementById('start-score-select').value);
-    if (!p1 || !p2) return alert("Select 2 players!");
+    const startVal  = parseInt(document.getElementById('start-score-select').value);
     const legTarget = parseInt(document.getElementById('legs-to-win-select').value);
+    const mode      = document.getElementById('checkout-mode-select').value;
 
-    gameState.legScore = [0, 0];
-    gameState.targetLegs = legTarget;
-    gameState.legStarter = 0; // Player 1 starts the first leg
-    gameState.pNames = [p1, p2];
-    gameState.scores = [startVal, startVal];
-    gameState.history = [[], []];
-    gameState.currentIdx = 0;
-    gameState.mode = document.getElementById('checkout-mode-select').value;
-    gameState.logs = [];
+    if (gameState.gameType === 'singles') {
+        const p1 = document.getElementById('p1-select').value;
+        const p2 = document.getElementById('p2-select').value;
+        if (!p1 || !p2)  return alert("Bitte zwei Spieler auswaehlen!");
+        if (p1 === p2)   return alert("Bitte zwei verschiedene Spieler auswaehlen!");
+        gameState.pNames      = [p1, p2];
+        gameState.teamPlayers = [[p1], [p2]];
+        gameState.stats       = [makePlayerStats(), makePlayerStats()];
+    } else {
+        const t1p1 = document.getElementById('t1p1-select').value;
+        const t1p2 = document.getElementById('t1p2-select').value;
+        const t2p1 = document.getElementById('t2p1-select').value;
+        const t2p2 = document.getElementById('t2p2-select').value;
+        if (new Set([t1p1,t1p2,t2p1,t2p2]).size < 4) return alert("Bitte vier verschiedene Spieler auswaehlen!");
+        gameState.pNames      = [t1p1 + " & " + t1p2, t2p1 + " & " + t2p2];
+        gameState.teamPlayers = [[t1p1, t1p2], [t2p1, t2p2]];
+        gameState.stats       = [makePlayerStats(), makePlayerStats(), makePlayerStats(), makePlayerStats()];
+    }
 
-    // HIDE NAVIGATION FOR FOCUS MODE
-    document.getElementById('main-nav').style.display = 'none';
+    gameState.scores        = [startVal, startVal];
+    gameState.history       = [[], []];
+    gameState.legScore      = [0, 0];
+    gameState.targetLegs    = legTarget;
+    gameState.legStarter    = 0;
+    gameState.currentIdx    = 0;
+    gameState.teamPlayerIdx = [0, 0];
+    gameState.mode          = mode;
+    gameState.logs          = [];
 
-    document.getElementById('setup-view').style.display = 'none';
-    document.getElementById('active-game-view').style.display = 'block';
+    document.getElementById('nav-default').style.display      = 'none';
+    document.getElementById('nav-game-active').style.display  = 'block';
+    document.getElementById('setup-view').style.display        = 'none';
+    document.getElementById('active-game-view').style.display  = '';
+    document.getElementById('active-game-view').classList.add('game-active');
     refreshDisplay();
 }
 
@@ -73,87 +90,75 @@ function pressKey(num) {
     }
 }
 
+// Directly set score and submit — used by tablet quick-score buttons
+function quickScore(val) {
+    gameState.input = String(val);
+    document.getElementById('input-preview').innerText = gameState.input;
+    submitTurn();
+}
+
 async function submitTurn() {
     const pts = parseInt(gameState.input) || 0;
     if (pts > 180) return alert("Max is 180!");
 
     gameState.logs.push(JSON.parse(JSON.stringify(gameState)));
 
-    const currentIdx = gameState.currentIdx;
-    const newScore = gameState.scores[currentIdx] - pts;
-    const pStats = gameState.stats[currentIdx];
+    const teamIdx          = gameState.currentIdx;
+    const playerWithinTeam = gameState.teamPlayerIdx[teamIdx];
+    const newScore         = gameState.scores[teamIdx] - pts;
 
-    // --- NEW STATISTICS LOGIC ---
-    pStats.dartsThrown += 3; // Standard turn
+    const statsIdx = gameState.gameType === 'singles'
+        ? teamIdx
+        : teamIdx === 0 ? playerWithinTeam : 2 + playerWithinTeam;
+    const pStats = gameState.stats[statsIdx];
+
+    pStats.dartsThrown += 3;
     pStats.totalPoints += pts;
-
-    // Track 180s and 26s
     if (pts === 180) pStats.oneEighties++;
-    if (pts === 26) pStats.twentySixes++;
-
-    // Track "Average until 170"
+    if (pts === 26)  pStats.twentySixes++;
     if (!pStats.isBelow170) {
         pStats.pointsPre170 += pts;
-        pStats.dartsPre170 += 3;
-        if (gameState.scores[currentIdx] - pts <= 170) {
-            pStats.isBelow170 = true;
-        }
+        pStats.dartsPre170  += 3;
+        if (gameState.scores[teamIdx] - pts <= 170) pStats.isBelow170 = true;
     } else {
-        // Track "Darts needed to close"
         pStats.dartsToClose += 3;
     }
-    // --- END STATISTICS LOGIC ---
 
     if (newScore === 0) {
-        const winnerIdx = gameState.currentIdx;
-
-        // Update both the leg score AND the current score to 0
-        gameState.legScore[winnerIdx]++;
-        gameState.scores[winnerIdx] = 0; // <--- ADD THIS LINE
-
+        gameState.legScore[teamIdx]++;
+        gameState.scores[teamIdx] = 0;
         if (typeof refreshDisplay === "function") refreshDisplay();
 
-        // 3. Check if they hit the target (e.g., "First to 1")
-        if (gameState.legScore[winnerIdx] >= gameState.targetLegs) {
-
-            // Use a slight timeout for the alert so the UI finishes 'painting' the 1-0 score
+        if (gameState.legScore[teamIdx] >= gameState.targetLegs) {
             setTimeout(async () => {
-                alert(`🏆 MATCH OVER! ${gameState.pNames[winnerIdx]} wins!`);
-
-                try {
-                    await saveMatchToSupabase();
-                    console.log("Match saved successfully.");
-
-                    // FORCE the scores to match start values so exitGame doesn't trigger
-                    const startVal = parseInt(document.getElementById('start-score-select').value);
-                    gameState.scores = [startVal, startVal];
-                    gameState.legScore = [0, 0];
-
-                    // Now call exit
-                    exitGame(true);
-                } catch (err) {
-                    console.error("Failed to save match:", err);
-                    exitGame(true); // Exit anyway so the user isn't stuck
+                alert("MATCH OVER! " + gameState.pNames[teamIdx] + " wins!");
+                if (gameState.gameType === 'singles') {
+                    try { await saveMatchToSupabase(); } catch(e) { console.error(e); }
                 }
+                const startVal = parseInt(document.getElementById('start-score-select').value);
+                gameState.scores   = [startVal, startVal];
+                gameState.legScore = [0, 0];
+                exitGame(true);
             }, 100);
-
         } else {
-            // Not the end of the match, just the end of a leg
-            alert(`Leg won by ${gameState.pNames[winnerIdx]}!`);
+            alert("Leg gewonnen von " + gameState.pNames[teamIdx] + "!");
             resetForNextLeg();
         }
-        return; // Stop the rest of submitTurn from running
+        return;
     }
 
     if (newScore < 0 || (newScore === 1 && gameState.mode === 'double')) {
         alert("BUST!");
-        gameState.history[currentIdx].push("BUST");
+        gameState.history[teamIdx].push("BUST");
     } else {
-        gameState.scores[currentIdx] = newScore;
-        gameState.history[currentIdx].push(pts);
+        gameState.scores[teamIdx] = newScore;
+        gameState.history[teamIdx].push(pts);
     }
 
-    gameState.currentIdx = currentIdx === 0 ? 1 : 0;
+    if (gameState.gameType === 'doubles') {
+        gameState.teamPlayerIdx[teamIdx] = (playerWithinTeam + 1) % 2;
+    }
+    gameState.currentIdx = teamIdx === 0 ? 1 : 0;
     clearInput();
     refreshDisplay();
 }
@@ -173,13 +178,14 @@ function clearInput() {
 
 function resetForNextLeg() {
     const startVal = parseInt(document.getElementById('start-score-select').value);
-    gameState.scores = [startVal, startVal];
+    gameState.scores  = [startVal, startVal];
     gameState.history = [[], []];
-
-    // Switch the leg starter
     gameState.legStarter = gameState.legStarter === 0 ? 1 : 0;
     gameState.currentIdx = gameState.legStarter;
-
+    if (gameState.gameType === 'doubles') {
+        gameState.teamPlayerIdx[gameState.legStarter] =
+            (gameState.teamPlayerIdx[gameState.legStarter] + 1) % 2;
+    }
     gameState.input = "";
     refreshDisplay();
 }

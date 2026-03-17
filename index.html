@@ -35,14 +35,23 @@
         </div>
     </div>
 
-    <!-- ── NAVIGATION ── -->
-    <nav id="main-nav" style="display:none;">
-        <div class="nav-inner">
-            <span class="nav-brand">🎯 FLIGHTCLUB</span>
+    <!-- ── NAV: DEFAULT (no game active) ── -->
+    <nav id="nav-default" style="display:none;">
+        <div class="nav-inner nav-inner--default">
+            <span class="nav-brand">FLIGHTCLUB</span>
             <div class="nav-links">
                 <button id="nav-game" class="nav-btn active" onclick="showPage('game-page')">Neues Spiel</button>
                 <button id="nav-stats" class="nav-btn" onclick="showPage('stats-page')">Dashboard</button>
             </div>
+        </div>
+    </nav>
+
+    <!-- ── NAV: GAME (active game only) ── -->
+    <nav id="nav-game-active" style="display:none;">
+        <div class="nav-inner nav-inner--game">
+            <span class="nav-brand">FLIGHTCLUB</span>
+            <h2 id="mode-display" class="nav-game-title">FIRST TO 3 LEGS</h2>
+            <button onclick="exitGame()" class="btn btn-danger btn-exit">EXIT</button>
         </div>
     </nav>
 
@@ -58,7 +67,24 @@
                 <h2 class="card-title">NEUES SPIEL</h2>
                 <div class="divider"></div>
 
-                <div class="vs-block">
+                <!-- Game Type Selector -->
+                <div class="game-type-selector">
+                    <button id="type-singles" class="game-type-btn game-type-btn--active" onclick="setGameType('singles')">
+                        <span class="game-type-icon">👤</span>
+                        <span class="game-type-label">EINZEL</span>
+                        <span class="game-type-sub">1 vs 1</span>
+                    </button>
+                    <button id="type-doubles" class="game-type-btn" onclick="setGameType('doubles')">
+                        <span class="game-type-icon">👥</span>
+                        <span class="game-type-label">DOPPEL</span>
+                        <span class="game-type-sub">2 vs 2</span>
+                    </button>
+                </div>
+
+                <div class="divider"></div>
+
+                <!-- Singles Player Select -->
+                <div id="singles-select" class="vs-block">
                     <select id="p1-select" class="select-field">
                         <option>Loading...</option>
                     </select>
@@ -66,6 +92,29 @@
                     <select id="p2-select" class="select-field">
                         <option>Loading...</option>
                     </select>
+                </div>
+
+                <!-- Doubles Player Select -->
+                <div id="doubles-select" style="display:none; flex-direction:column; align-items:center;">
+                    <div class="doubles-team-block">
+                        <div class="doubles-team-label team-label--1">TEAM 1</div>
+                        <select id="t1p1-select" class="select-field">
+                            <option>Loading...</option>
+                        </select>
+                        <select id="t1p2-select" class="select-field" style="margin-top:8px;">
+                            <option>Loading...</option>
+                        </select>
+                    </div>
+                    <div class="vs-label" style="margin: 12px 0;">VS</div>
+                    <div class="doubles-team-block">
+                        <div class="doubles-team-label team-label--2">TEAM 2</div>
+                        <select id="t2p1-select" class="select-field">
+                            <option>Loading...</option>
+                        </select>
+                        <select id="t2p2-select" class="select-field" style="margin-top:8px;">
+                            <option>Loading...</option>
+                        </select>
+                    </div>
                 </div>
 
                 <div class="divider"></div>
@@ -95,48 +144,63 @@
             <!-- ACTIVE GAME VIEW -->
             <div id="active-game-view" class="game-view" style="display:none;">
 
-                <!-- Game Header -->
-                <div class="game-header">
-                    <div class="header-spacer"></div>
-                    <h2 id="mode-display" class="game-title">FIRST TO 3 LEGS</h2>
-                    <button onclick="exitGame()" class="btn btn-danger btn-exit">EXIT</button>
-                </div>
+                <!-- LEFT: Player cards + checkout -->
+                <div class="game-left">
 
-                <!-- Score Cards -->
-                <div class="game-row">
-                    <div class="player-column">
-                        <div id="p1-name-display" class="player-name">Player 1</div>
-                        <div id="p1-legs-display" class="legs-badge">LEGS: 0</div>
-                        <div id="p1-card" class="score-card">
-                            <div id="p1-avg-display" class="avg-display">AVG: 0.00</div>
-                            <div id="p1-score-display" class="score-display score-active">501</div>
-                            <div id="p1-history" class="history-list"></div>
+                    <!-- Score Cards -->
+                    <div class="game-row">
+                        <div class="player-column">
+                            <div class="player-name-row">
+                                <div id="p1-name-display" class="player-name">Player 1</div>
+                                <div id="p1-legs-display" class="legs-badge">LEGS: 0</div>
+                            </div>
+                            <div id="p1-current-player" class="current-player-badge" style="display:none;"></div>
+                            <div id="p1-card" class="score-card">
+                                <div id="p1-avg-display" class="avg-display">AVG: 0.00</div>
+                                <div id="p1-score-display" class="score-display score-active">501</div>
+                                <div id="p1-history" class="history-list"></div>
+                            </div>
+                            <!-- Per-player checkout (tablet only) -->
+                            <div id="p1-checkout" class="checkout-box checkout-box--player" style="display:none;">
+                                <span class="checkout-label">CHECKOUT</span>
+                                <div id="p1-checkout-path" class="checkout-path">- - -</div>
+                            </div>
+                        </div>
+
+                        <div class="player-column">
+                            <div class="player-name-row">
+                                <div id="p2-name-display" class="player-name">Player 2</div>
+                                <div id="p2-legs-display" class="legs-badge">LEGS: 0</div>
+                            </div>
+                            <div id="p2-current-player" class="current-player-badge" style="display:none;"></div>
+                            <div id="p2-card" class="score-card score-card--inactive">
+                                <div id="p2-avg-display" class="avg-display">AVG: 0.00</div>
+                                <div id="p2-score-display" class="score-display">501</div>
+                                <div id="p2-history" class="history-list"></div>
+                            </div>
+                            <!-- Per-player checkout (tablet only) -->
+                            <div id="p2-checkout" class="checkout-box checkout-box--player" style="display:none;">
+                                <span class="checkout-label">CHECKOUT</span>
+                                <div id="p2-checkout-path" class="checkout-path">- - -</div>
+                            </div>
                         </div>
                     </div>
 
-                    <div class="player-column">
-                        <div id="p2-name-display" class="player-name">Player 2</div>
-                        <div id="p2-legs-display" class="legs-badge">LEGS: 0</div>
-                        <div id="p2-card" class="score-card score-card--inactive">
-                            <div id="p2-avg-display" class="avg-display">AVG: 0.00</div>
-                            <div id="p2-score-display" class="score-display">501</div>
-                            <div id="p2-history" class="history-list"></div>
-                        </div>
+                    <!-- Checkout Helper -->
+                    <div id="checkout-helper" class="checkout-box" style="display:none;">
+                        <span class="checkout-label">CHECKOUT</span>
+                        <div id="checkout-path" class="checkout-path">- - -</div>
                     </div>
-                </div>
 
-                <!-- Checkout Helper -->
-                <div id="checkout-helper" class="checkout-box" style="display:none;">
-                    <span class="checkout-label">CHECKOUT</span>
-                    <div id="checkout-path" class="checkout-path">- - -</div>
-                </div>
+                </div><!-- /game-left -->
 
-                <!-- Input Pad -->
+                <!-- RIGHT: Input Pad -->
                 <div class="input-pad">
                     <div class="input-preview-row">
                         Eingabe: <span id="input-preview" class="input-preview-value">0</span>
                     </div>
-                    <div class="controls">
+                    <!-- Mobile: 3-col numpad -->
+                    <div class="controls controls--mobile">
                         <button onclick="pressKey('1')" class="key-btn">1</button>
                         <button onclick="pressKey('2')" class="key-btn">2</button>
                         <button onclick="pressKey('3')" class="key-btn">3</button>
@@ -150,6 +214,31 @@
                         <button onclick="pressKey('0')" class="key-btn">0</button>
                         <button onclick="undoMove()" class="key-btn key-undo">↩ Undo</button>
                         <button onclick="submitTurn()" class="key-btn key-submit">EINGABE</button>
+                    </div>
+                    <!-- Tablet: 5-col numpad with quick scores on left/right -->
+                    <div class="controls controls--tablet">
+                        <button onclick="quickScore(26)"  class="key-btn key-quick">26</button>
+                        <button onclick="pressKey('1')" class="key-btn">1</button>
+                        <button onclick="pressKey('2')" class="key-btn">2</button>
+                        <button onclick="pressKey('3')" class="key-btn">3</button>
+                        <button onclick="quickScore(60)"  class="key-btn key-quick">60</button>
+
+                        <button onclick="quickScore(41)"  class="key-btn key-quick">41</button>
+                        <button onclick="pressKey('4')" class="key-btn">4</button>
+                        <button onclick="pressKey('5')" class="key-btn">5</button>
+                        <button onclick="pressKey('6')" class="key-btn">6</button>
+                        <button onclick="quickScore(85)"  class="key-btn key-quick">85</button>
+
+                        <button onclick="quickScore(45)"  class="key-btn key-quick">45</button>
+                        <button onclick="pressKey('7')" class="key-btn">7</button>
+                        <button onclick="pressKey('8')" class="key-btn">8</button>
+                        <button onclick="pressKey('9')" class="key-btn">9</button>
+                        <button onclick="quickScore(100)" class="key-btn key-quick">100</button>
+
+                        <button onclick="clearInput()" class="key-btn key-clear">C</button>
+                        <button onclick="pressKey('0')" class="key-btn">0</button>
+                        <button onclick="undoMove()" class="key-btn key-undo">↩ Undo</button>
+                        <button onclick="submitTurn()" class="key-btn key-submit key-submit--tablet">EINGABE</button>
                     </div>
                 </div>
 
@@ -253,7 +342,7 @@
             splash.classList.add('splash-fade-out');
             setTimeout(() => {
                 splash.style.display = 'none';
-                document.getElementById('main-nav').style.display = 'flex';
+                document.getElementById('nav-default').style.display = 'flex';
                 document.getElementById('app-wrapper').style.display = 'block';
             }, 600);
         }
@@ -261,7 +350,7 @@
         // Auto-unlock if already authenticated this session
         if (sessionStorage.getItem(SESSION_KEY) === '1') {
             document.getElementById('splash-screen').style.display = 'none';
-            document.getElementById('main-nav').style.display = 'flex';
+            document.getElementById('nav-default').style.display = 'flex';
             document.getElementById('app-wrapper').style.display = 'block';
         }
     </script>
