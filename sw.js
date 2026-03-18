@@ -1,17 +1,18 @@
 const CACHE_NAME = 'flightclub-v1';
+const BASE = '/fightclub-dart-tracker';
 const ASSETS = [
-    '/index.html',
-    '/game.html',
-    '/dashboard.html',
-    '/admin.html',
-    '/style.css',
-    '/game-logic.js',
-    '/ui-manager-game.js',
-    '/ui-manager-dashboard.js',
-    '/database.js',
-    '/checkout.js',
-    '/Logo.png',
-    '/manifest.json'
+    BASE + '/index.html',
+    BASE + '/game.html',
+    BASE + '/dashboard.html',
+    BASE + '/admin.html',
+    BASE + '/style.css',
+    BASE + '/game-logic.js',
+    BASE + '/ui-manager-game.js',
+    BASE + '/ui-manager-dashboard.js',
+    BASE + '/database.js',
+    BASE + '/checkout.js',
+    BASE + '/Logo.png',
+    BASE + '/manifest.json'
 ];
 
 // Install — cache all static assets

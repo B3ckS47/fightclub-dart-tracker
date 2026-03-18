@@ -2,17 +2,29 @@
     "name": "DC FlightClub 47",
     "short_name": "FlightClub",
     "description": "Dart Tracker für den DC Flight Club 47",
-    "start_url": "/index.html",
+    "start_url": "/fightclub-dart-tracker/index.html",
     "display": "standalone",
     "orientation": "any",
     "background_color": "#0d0d0f",
     "theme_color": "#0d0d0f",
     "icons": [
         {
-            "src": "Logo.png",
-            "sizes": "any",
+            "src": "icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "icon-512.png",
+            "sizes": "512x512",
             "type": "image/png",
             "purpose": "any maskable"
+        },
+        {
+            "src": "apple-touch-icon.png",
+            "sizes": "180x180",
+            "type": "image/png",
+            "purpose": "any"
         }
     ]
 }
