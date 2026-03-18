@@ -12,7 +12,10 @@ const ASSETS = [
     BASE + '/database.js',
     BASE + '/checkout.js',
     BASE + '/Logo.png',
-    BASE + '/manifest.json'
+    BASE + '/manifest.json',
+    BASE + '/icon-192.png',
+    BASE + '/icon-512.png',
+    BASE + '/apple-touch-icon.png'
 ];
 
 // Install — cache all static assets
