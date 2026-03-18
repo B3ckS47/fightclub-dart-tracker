@@ -61,7 +61,10 @@ body {
 
 /* ── NAVIGATION — shared ── */
 #nav-default,
-#nav-game-active {
+#nav-game-active,
+#nav-setup,
+#nav-dashboard,
+#nav-admin {
     position: sticky;
     top: 0;
     z-index: 100;
@@ -1574,4 +1577,30 @@ body {
         align-items: end;
         gap: 12px;
     }
+}
+
+/* ── PWA INSTALL BUTTON ── */
+.pwa-install-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-display);
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    padding: 8px 18px;
+    border-radius: var(--radius-md);
+    border: 1px solid #2a3a6a;
+    background: transparent;
+    color: #4a6fd4;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin-top: 8px;
+}
+
+.pwa-install-btn:hover {
+    background: rgba(60, 120, 255, 0.1);
+    border-color: #3c78ff;
+    color: #6a9fff;
 }

@@ -62,7 +62,7 @@
                 <div id="profile-advanced-stats" class="advanced-grid"></div>
                 <h3 class="subsection-title">Recent Match History</h3>
                 <div id="profile-history-list"></div>
-                <div class="danger-zone">
+                <div class="danger-zone" id="danger-zone" style="display:none;">
                     <button id="delete-player-btn" class="btn btn-danger-outline">DELETE PLAYER PROFILE</button>
                 </div>
             </div>
@@ -74,13 +74,18 @@
     <script src="ui-manager-dashboard.js"></script>
 
     <script>
-        // Auth guard
-        const SESSION_KEY = "fc47_user";
-        // guard handled above
+        // Auth guard — no const to avoid conflicts with other scripts
+        (function() {
+            var raw = sessionStorage.getItem('fc47_user');
+            if (!raw) { window.location.href = 'index.html'; return; }
+            var u = JSON.parse(raw);
+            if (u.role === 'ipad') window.location.href = 'game.html';
+        })();
     </script>
     <script>
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/fightclub-dart-tracker/sw.js');
+            navigator.serviceWorker.register('/fightclub-dart-tracker/sw.js')
+                .catch(() => {}); // silently ignore errors on local dev
         }
     </script>
 </body>

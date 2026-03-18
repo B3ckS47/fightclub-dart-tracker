@@ -211,7 +211,8 @@
     </script>
     <script>
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/fightclub-dart-tracker/sw.js');
+            navigator.serviceWorker.register('/fightclub-dart-tracker/sw.js')
+                .catch(() => {}); // silently ignore errors on local dev
         }
     </script>
 </body>
