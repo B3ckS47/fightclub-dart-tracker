@@ -1,357 +1,208 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FlightClub · Dart Tracker</title>
+    <title>FlightClub · DC 47</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0d0d0f">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="Logo.png">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="checkout.js"></script>
 </head>
-
 <body>
 
-    <!-- ── SPLASH / PASSWORD SCREEN ── -->
+    <!-- ── SPLASH / LOGIN SCREEN ── -->
     <div id="splash-screen">
         <div id="splash-content">
             <img src="Logo.png" alt="DC Flight Club 47" id="splash-logo">
             <p class="splash-subtitle">MEMBERS ONLY</p>
-            <div class="splash-input-wrap">
+
+            <div class="splash-form">
+                <input
+                    type="text"
+                    id="splash-username"
+                    placeholder="Username"
+                    class="splash-input"
+                    onkeydown="if(event.key==='Enter') checkLogin()"
+                    autocomplete="off"
+                    autocapitalize="none"
+                >
                 <input
                     type="password"
                     id="splash-password"
-                    placeholder="Enter password"
+                    placeholder="Password"
                     class="splash-input"
-                    onkeydown="if(event.key==='Enter') checkPassword()"
+                    onkeydown="if(event.key==='Enter') checkLogin()"
                     autocomplete="off"
                 >
-                <button onclick="checkPassword()" class="splash-btn">ENTER</button>
+                <button onclick="checkLogin()" class="splash-btn" id="splash-btn">EINLOGGEN</button>
             </div>
             <p id="splash-error" class="splash-error"></p>
         </div>
     </div>
 
-    <!-- ── NAV: DEFAULT (no game active) ── -->
-    <nav id="nav-default" style="display:none;">
-        <div class="nav-inner nav-inner--default">
-            <span class="nav-brand">FLIGHTCLUB</span>
-            <div class="nav-links">
-                <button id="nav-game" class="nav-btn active" onclick="showPage('game-page')">Neues Spiel</button>
-                <button id="nav-stats" class="nav-btn" onclick="showPage('stats-page')">Dashboard</button>
+    <!-- ── MENU PAGE ── -->
+    <div id="menu-page" style="display:none;">
+
+        <nav class="menu-nav">
+            <div class="nav-inner nav-inner--default">
+                <span class="nav-brand">FLIGHTCLUB</span>
+                <div class="nav-links">
+                    <span id="menu-user-display" class="menu-user-badge"></span>
+                    <button onclick="logOut()" class="nav-btn">Logout</button>
+                </div>
             </div>
-        </div>
-    </nav>
+        </nav>
 
-    <!-- ── NAV: GAME (active game only) ── -->
-    <nav id="nav-game-active" style="display:none;">
-        <div class="nav-inner nav-inner--game">
-            <span class="nav-brand">FLIGHTCLUB</span>
-            <h2 id="mode-display" class="nav-game-title">FIRST TO 3 LEGS</h2>
-            <button onclick="exitGame()" class="btn btn-danger btn-exit">EXIT</button>
-        </div>
-    </nav>
-
-    <div class="app-wrapper" id="app-wrapper" style="display:none;">
-
-        <!-- ══════════════════════════════════════
-             PAGE: GAME
-        ══════════════════════════════════════ -->
-        <div id="game-page" class="page active">
-
-            <!-- SETUP VIEW -->
-            <div id="setup-view" class="card">
-                <h2 class="card-title">NEUES SPIEL</h2>
-                <div class="divider"></div>
-
-                <!-- Game Type Selector -->
-                <div class="game-type-selector">
-                    <button id="type-singles" class="game-type-btn game-type-btn--active" onclick="setGameType('singles')">
-                        <span class="game-type-icon">👤</span>
-                        <span class="game-type-label">EINZEL</span>
-                        <span class="game-type-sub">1 vs 1</span>
-                    </button>
-                    <button id="type-doubles" class="game-type-btn" onclick="setGameType('doubles')">
-                        <span class="game-type-icon">👥</span>
-                        <span class="game-type-label">DOPPEL</span>
-                        <span class="game-type-sub">2 vs 2</span>
-                    </button>
-                </div>
-
-                <div class="divider"></div>
-
-                <!-- Singles Player Select -->
-                <div id="singles-select" class="vs-block">
-                    <select id="p1-select" class="select-field">
-                        <option>Loading...</option>
-                    </select>
-                    <span class="vs-label">VS</span>
-                    <select id="p2-select" class="select-field">
-                        <option>Loading...</option>
-                    </select>
-                </div>
-
-                <!-- Doubles Player Select -->
-                <div id="doubles-select" style="display:none; flex-direction:column; align-items:center;">
-                    <div class="doubles-team-block">
-                        <div class="doubles-team-label team-label--1">TEAM 1</div>
-                        <select id="t1p1-select" class="select-field">
-                            <option>Loading...</option>
-                        </select>
-                        <select id="t1p2-select" class="select-field" style="margin-top:8px;">
-                            <option>Loading...</option>
-                        </select>
-                    </div>
-                    <div class="vs-label" style="margin: 12px 0;">VS</div>
-                    <div class="doubles-team-block">
-                        <div class="doubles-team-label team-label--2">TEAM 2</div>
-                        <select id="t2p1-select" class="select-field">
-                            <option>Loading...</option>
-                        </select>
-                        <select id="t2p2-select" class="select-field" style="margin-top:8px;">
-                            <option>Loading...</option>
-                        </select>
-                    </div>
-                </div>
-
-                <div class="divider"></div>
-
-                <div class="options-row">
-                    <select id="start-score-select" class="select-field select-small">
-                        <option value="501">501</option>
-                        <option value="301">301</option>
-                    </select>
-                    <select id="checkout-mode-select" class="select-field select-small">
-                        <option value="double">Double Out</option>
-                        <option value="single">Single Out</option>
-                    </select>
-                    <select id="legs-to-win-select" class="select-field select-small">
-                        <option value="1">First to 1 Leg</option>
-                        <option value="2">First to 2 Legs</option>
-                        <option value="3">First to 3 Legs</option>
-                        <option value="5">First to 5 Legs</option>
-                    </select>
-                </div>
-
-                <button onclick="startGame()" class="btn btn-primary btn-full btn-lg">
-                    SPIEL STARTEN
-                </button>
+        <div class="menu-wrapper">
+            <div class="menu-logo-wrap">
+                <img src="Logo.png" alt="DC Flight Club 47" class="menu-logo">
+                <div class="menu-welcome">DC FLIGHT CLUB 47</div>
             </div>
 
-            <!-- ACTIVE GAME VIEW -->
-            <div id="active-game-view" class="game-view" style="display:none;">
-
-                <!-- LEFT: Player cards + checkout -->
-                <div class="game-left">
-
-                    <!-- Score Cards -->
-                    <div class="game-row">
-                        <div class="player-column">
-                            <div class="player-name-row">
-                                <div id="p1-name-display" class="player-name">Player 1</div>
-                                <div id="p1-legs-display" class="legs-badge">LEGS: 0</div>
-                            </div>
-                            <div id="p1-current-player" class="current-player-badge" style="display:none;"></div>
-                            <div id="p1-card" class="score-card">
-                                <div id="p1-avg-display" class="avg-display">AVG: 0.00</div>
-                                <div id="p1-score-display" class="score-display score-active">501</div>
-                                <div id="p1-history" class="history-list"></div>
-                            </div>
-                            <!-- Per-player checkout (tablet only) -->
-                            <div id="p1-checkout" class="checkout-box checkout-box--player" style="display:none;">
-                                <span class="checkout-label">CHECKOUT</span>
-                                <div id="p1-checkout-path" class="checkout-path">- - -</div>
-                            </div>
-                        </div>
-
-                        <div class="player-column">
-                            <div class="player-name-row">
-                                <div id="p2-name-display" class="player-name">Player 2</div>
-                                <div id="p2-legs-display" class="legs-badge">LEGS: 0</div>
-                            </div>
-                            <div id="p2-current-player" class="current-player-badge" style="display:none;"></div>
-                            <div id="p2-card" class="score-card score-card--inactive">
-                                <div id="p2-avg-display" class="avg-display">AVG: 0.00</div>
-                                <div id="p2-score-display" class="score-display">501</div>
-                                <div id="p2-history" class="history-list"></div>
-                            </div>
-                            <!-- Per-player checkout (tablet only) -->
-                            <div id="p2-checkout" class="checkout-box checkout-box--player" style="display:none;">
-                                <span class="checkout-label">CHECKOUT</span>
-                                <div id="p2-checkout-path" class="checkout-path">- - -</div>
-                            </div>
-                        </div>
+            <div class="menu-cards" id="menu-cards">
+                <a href="game.html" class="menu-card menu-card--game">
+                    <div class="menu-card-icon">🎯</div>
+                    <div class="menu-card-body">
+                        <div class="menu-card-title">NEUES SPIEL</div>
+                        <div class="menu-card-sub">501 · 301 · Einzel · Doppel</div>
                     </div>
+                    <div class="menu-card-arrow">→</div>
+                </a>
 
-                    <!-- Checkout Helper -->
-                    <div id="checkout-helper" class="checkout-box" style="display:none;">
-                        <span class="checkout-label">CHECKOUT</span>
-                        <div id="checkout-path" class="checkout-path">- - -</div>
+                <a href="dashboard.html" class="menu-card menu-card--dashboard" id="dashboard-card">
+                    <div class="menu-card-icon">📊</div>
+                    <div class="menu-card-body">
+                        <div class="menu-card-title">DASHBOARD</div>
+                        <div class="menu-card-sub">Statistiken · Leaderboard · Profile</div>
                     </div>
+                    <div class="menu-card-arrow">→</div>
+                </a>
 
-                </div><!-- /game-left -->
-
-                <!-- RIGHT: Input Pad -->
-                <div class="input-pad">
-                    <div class="input-preview-row">
-                        Eingabe: <span id="input-preview" class="input-preview-value">0</span>
-                    </div>
-                    <!-- Mobile: 3-col numpad -->
-                    <div class="controls controls--mobile">
-                        <button onclick="pressKey('1')" class="key-btn">1</button>
-                        <button onclick="pressKey('2')" class="key-btn">2</button>
-                        <button onclick="pressKey('3')" class="key-btn">3</button>
-                        <button onclick="pressKey('4')" class="key-btn">4</button>
-                        <button onclick="pressKey('5')" class="key-btn">5</button>
-                        <button onclick="pressKey('6')" class="key-btn">6</button>
-                        <button onclick="pressKey('7')" class="key-btn">7</button>
-                        <button onclick="pressKey('8')" class="key-btn">8</button>
-                        <button onclick="pressKey('9')" class="key-btn">9</button>
-                        <button onclick="clearInput()" class="key-btn key-clear">C</button>
-                        <button onclick="pressKey('0')" class="key-btn">0</button>
-                        <button onclick="undoMove()" class="key-btn key-undo">↩ Undo</button>
-                        <button onclick="submitTurn()" class="key-btn key-submit">EINGABE</button>
-                    </div>
-                    <!-- Tablet: 5-col numpad with quick scores on left/right -->
-                    <div class="controls controls--tablet">
-                        <button onclick="quickScore(26)"  class="key-btn key-quick">26</button>
-                        <button onclick="pressKey('1')" class="key-btn">1</button>
-                        <button onclick="pressKey('2')" class="key-btn">2</button>
-                        <button onclick="pressKey('3')" class="key-btn">3</button>
-                        <button onclick="quickScore(60)"  class="key-btn key-quick">60</button>
-
-                        <button onclick="quickScore(41)"  class="key-btn key-quick">41</button>
-                        <button onclick="pressKey('4')" class="key-btn">4</button>
-                        <button onclick="pressKey('5')" class="key-btn">5</button>
-                        <button onclick="pressKey('6')" class="key-btn">6</button>
-                        <button onclick="quickScore(85)"  class="key-btn key-quick">85</button>
-
-                        <button onclick="quickScore(45)"  class="key-btn key-quick">45</button>
-                        <button onclick="pressKey('7')" class="key-btn">7</button>
-                        <button onclick="pressKey('8')" class="key-btn">8</button>
-                        <button onclick="pressKey('9')" class="key-btn">9</button>
-                        <button onclick="quickScore(100)" class="key-btn key-quick">100</button>
-
-                        <button onclick="clearInput()" class="key-btn key-clear">C</button>
-                        <button onclick="pressKey('0')" class="key-btn">0</button>
-                        <button onclick="undoMove()" class="key-btn key-undo">↩ Undo</button>
-                        <button onclick="submitTurn()" class="key-btn key-submit key-submit--tablet">EINGABE</button>
-                    </div>
-                </div>
-
+                <!-- Admin card — injected by JS if role === admin -->
             </div>
         </div>
-
-        <!-- ══════════════════════════════════════
-             PAGE: STATS / DASHBOARD
-        ══════════════════════════════════════ -->
-        <div id="stats-page" class="page">
-            <div class="card">
-
-                <!-- Register Player -->
-                <div class="register-section">
-                    <h3 class="section-label">Neuen Spieler hinzufügen</h3>
-                    <div class="register-row">
-                        <input type="text" id="reg-name" placeholder="Nickname eingeben" class="input-field">
-                        <button onclick="registerPlayer()" class="btn btn-accent">HINZUFÜGEN</button>
-                    </div>
-                </div>
-
-                <div class="divider"></div>
-
-                <!-- Leaderboard -->
-                <div>
-                    <h3 class="section-label">FlightClub Mitglieder</h3>
-                    <div id="player-list-box" class="player-list">
-                        <p class="muted-text">Lade Mitglieder...</p>
-                    </div>
-                </div>
-
-            </div>
-        </div>
-
-        <!-- ══════════════════════════════════════
-             PAGE: PLAYER PROFILE
-        ══════════════════════════════════════ -->
-        <div id="player-profile-view" class="page">
-            <div class="card">
-
-                <!-- Profile Header -->
-                <div class="profile-header">
-                    <button onclick="showPage('stats-page')" class="btn btn-ghost">← Zurück</button>
-                    <h2 id="profile-name" class="profile-name-title">Player Name</h2>
-                    <div style="width:80px;"></div>
-                </div>
-
-                <!-- Key Stats Grid -->
-                <div id="profile-stats-summary" class="stats-grid"></div>
-
-                <!-- Advanced Analytics -->
-                <h3 class="subsection-title">Advanced Analytics</h3>
-                <div id="profile-advanced-stats" class="advanced-grid"></div>
-
-                <!-- Match History -->
-                <h3 class="subsection-title">Recent Match History</h3>
-                <div id="profile-history-list"></div>
-
-                <!-- Danger Zone -->
-                <div class="danger-zone">
-                    <button id="delete-player-btn" class="btn btn-danger-outline">
-                        DELETE PLAYER PROFILE
-                    </button>
-                </div>
-
-            </div>
-        </div>
-
-    </div><!-- /app-wrapper -->
-
-    <script src="database.js"></script>
-    <script src="game-logic.js"></script>
-    <script src="ui-manager.js"></script>
+    </div>
 
     <script>
-        // ── SPLASH SCREEN LOGIC ──
-        // Change this to your club's password:
-        const CLUB_PASSWORD = "1902";
-        const SESSION_KEY   = "fc47_auth";
+        const SUPABASE_URL = 'https://daejfzypbnwtucwftkzn.supabase.co';
+        const SUPABASE_KEY = 'sb_publishable_xajv6XFl28cNrdMSohDhjg_aDyMT3Bl';
+        const supa = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        const SESSION_KEY = "fc47_user";
 
-        function checkPassword() {
-            const input = document.getElementById('splash-password').value;
-            const errEl = document.getElementById('splash-error');
+        // ── LOGIN ──
+        async function checkLogin() {
+            const username = document.getElementById('splash-username').value.trim();
+            const password = document.getElementById('splash-password').value;
+            const errEl    = document.getElementById('splash-error');
+            const btn      = document.getElementById('splash-btn');
 
-            if (input === CLUB_PASSWORD) {
-                sessionStorage.setItem(SESSION_KEY, '1');
-                unlockApp();
-            } else {
-                errEl.textContent = "Falsches Passwort. Versuch es nochmal.";
+            if (!username || !password) {
+                errEl.textContent = "Bitte Username und Passwort eingeben.";
+                return;
+            }
+
+            btn.textContent = '...';
+            btn.disabled = true;
+
+            const { data, error } = await supa
+                .from('app_users')
+                .select('*')
+                .eq('username', username)
+                .eq('password', password)
+                .single();
+
+            btn.textContent = 'EINLOGGEN';
+            btn.disabled = false;
+
+            if (error || !data) {
+                errEl.textContent = "Falscher Username oder Passwort.";
                 document.getElementById('splash-password').value = '';
+                document.getElementById('splash-username').classList.add('splash-input--error');
                 document.getElementById('splash-password').classList.add('splash-input--error');
                 setTimeout(() => {
+                    document.getElementById('splash-username').classList.remove('splash-input--error');
                     document.getElementById('splash-password').classList.remove('splash-input--error');
                     errEl.textContent = '';
                 }, 1800);
+                return;
             }
+
+            // Store user in sessionStorage
+            sessionStorage.setItem(SESSION_KEY, JSON.stringify({
+                id:        data.id,
+                username:  data.username,
+                role:      data.role,
+                player_id: data.player_id
+            }));
+
+            unlockApp(data);
         }
 
-        function unlockApp() {
+        function unlockApp(user) {
             const splash = document.getElementById('splash-screen');
             splash.classList.add('splash-fade-out');
             setTimeout(() => {
                 splash.style.display = 'none';
-                document.getElementById('nav-default').style.display = 'flex';
-                document.getElementById('app-wrapper').style.display = 'block';
+                showMenu(user);
             }, 600);
         }
 
-        // Auto-unlock if already authenticated this session
-        if (sessionStorage.getItem(SESSION_KEY) === '1') {
+        function showMenu(user) {
+            document.getElementById('menu-page').style.display = 'block';
+            document.getElementById('menu-user-display').textContent = user.username.toUpperCase();
+
+            // ipad role: only show "Neues Spiel"
+            if (user.role === 'ipad') {
+                document.getElementById('dashboard-card').style.display = 'none';
+                return;
+            }
+
+            // admin: add admin card
+            if (user.role === 'admin') {
+                const cards = document.getElementById('menu-cards');
+                const adminCard = document.createElement('a');
+                adminCard.href = 'admin.html';
+                adminCard.className = 'menu-card menu-card--admin';
+                adminCard.innerHTML = `
+                    <div class="menu-card-icon">⚙️</div>
+                    <div class="menu-card-body">
+                        <div class="menu-card-title">ADMIN</div>
+                        <div class="menu-card-sub">Benutzer · Rollen · Verwaltung</div>
+                    </div>
+                    <div class="menu-card-arrow">→</div>
+                `;
+                cards.appendChild(adminCard);
+            }
+        }
+
+        function logOut() {
+            sessionStorage.removeItem(SESSION_KEY);
+            window.location.reload();
+        }
+
+        // ── AUTH HELPER (used by other pages) ──
+        function getCurrentUser() {
+            const raw = sessionStorage.getItem(SESSION_KEY);
+            return raw ? JSON.parse(raw) : null;
+        }
+
+        // Auto-login if session exists
+        const existingUser = getCurrentUser();
+        if (existingUser) {
             document.getElementById('splash-screen').style.display = 'none';
-            document.getElementById('nav-default').style.display = 'flex';
-            document.getElementById('app-wrapper').style.display = 'block';
+            showMenu(existingUser);
+        }
+    </script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js');
         }
     </script>
 </body>

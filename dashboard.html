@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlightClub · Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0d0d0f">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="Logo.png">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+    <!-- ── NAV ── -->
+    <nav id="nav-dashboard">
+        <div class="nav-inner nav-inner--default">
+            <span class="nav-brand">FLIGHTCLUB</span>
+            <div class="nav-links">
+                <a href="index.html" class="nav-btn">← Menü</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="app-wrapper">
+
+        <!-- LEADERBOARD PAGE -->
+        <div id="stats-page" class="page active">
+            <div class="card">
+                <div class="register-section">
+                    <h3 class="section-label">Neuen Spieler hinzufügen</h3>
+                    <div class="register-row">
+                        <input type="text" id="reg-name" placeholder="Nickname eingeben" class="input-field">
+                        <button onclick="registerPlayer()" class="btn btn-accent">HINZUFÜGEN</button>
+                    </div>
+                </div>
+                <div class="divider"></div>
+                <div>
+                    <h3 class="section-label">FlightClub Mitglieder</h3>
+                    <div id="player-list-box" class="player-list">
+                        <p class="muted-text">Lade Mitglieder...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- PLAYER PROFILE PAGE -->
+        <div id="player-profile-view" class="page">
+            <div class="card">
+                <div class="profile-header">
+                    <button onclick="showPage('stats-page')" class="btn btn-ghost">← Zurück</button>
+                    <h2 id="profile-name" class="profile-name-title">Player Name</h2>
+                    <div style="width:80px;"></div>
+                </div>
+                <div id="profile-stats-summary" class="stats-grid"></div>
+                <h3 class="subsection-title">Advanced Analytics</h3>
+                <div id="profile-advanced-stats" class="advanced-grid"></div>
+                <h3 class="subsection-title">Recent Match History</h3>
+                <div id="profile-history-list"></div>
+                <div class="danger-zone">
+                    <button id="delete-player-btn" class="btn btn-danger-outline">DELETE PLAYER PROFILE</button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script src="database.js"></script>
+    <script src="ui-manager-dashboard.js"></script>
+
+    <script>
+        // Auth guard
+        const SESSION_KEY = "fc47_user";
+        // guard handled above
+    </script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js');
+        }
+    </script>
+</body>
+</html>

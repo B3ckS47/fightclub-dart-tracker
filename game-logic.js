@@ -75,7 +75,7 @@ function startGame() {
     gameState.mode          = mode;
     gameState.logs          = [];
 
-    document.getElementById('nav-default').style.display      = 'none';
+    document.getElementById('nav-setup').style.display        = 'none';
     document.getElementById('nav-game-active').style.display  = 'block';
     document.getElementById('setup-view').style.display        = 'none';
     document.getElementById('active-game-view').style.display  = '';
@@ -101,7 +101,10 @@ async function submitTurn() {
     const pts = parseInt(gameState.input) || 0;
     if (pts > 180) return alert("Max is 180!");
 
-    gameState.logs.push(JSON.parse(JSON.stringify(gameState)));
+    // Snapshot for undo — explicitly exclude logs to prevent exponential growth
+    const { logs: _ignored, ...snapshot } = gameState;
+    gameState.logs.push(JSON.parse(JSON.stringify(snapshot)));
+    if (gameState.logs.length > 10) gameState.logs.shift();
 
     const teamIdx          = gameState.currentIdx;
     const playerWithinTeam = gameState.teamPlayerIdx[teamIdx];
@@ -155,6 +158,9 @@ async function submitTurn() {
         gameState.history[teamIdx].push(pts);
     }
 
+    // Cap history to last 20 entries — only last 4 are displayed anyway
+    if (gameState.history[teamIdx].length > 20) gameState.history[teamIdx].shift();
+
     if (gameState.gameType === 'doubles') {
         gameState.teamPlayerIdx[teamIdx] = (playerWithinTeam + 1) % 2;
     }
@@ -165,8 +171,10 @@ async function submitTurn() {
 
 function undoMove() {
     if (gameState.logs.length === 0) return;
-    const lastState = gameState.logs.pop();
-    Object.assign(gameState, lastState);
+    const lastSnapshot = gameState.logs.pop();
+    const currentLogs  = gameState.logs; // keep the remaining logs
+    Object.assign(gameState, lastSnapshot);
+    gameState.logs = currentLogs; // restore logs, not the snapshotted ones
     refreshDisplay();
     clearInput();
 }

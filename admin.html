@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlightClub · Admin</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0d0d0f">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="Logo.png">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+    <nav id="nav-admin">
+        <div class="nav-inner nav-inner--default">
+            <span class="nav-brand">FLIGHTCLUB</span>
+            <div class="nav-links">
+                <a href="index.html" class="nav-btn">← Menü</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="app-wrapper">
+        <div class="card">
+
+            <h2 class="card-title">ADMIN</h2>
+            <div class="divider"></div>
+
+            <!-- Add User -->
+            <div class="register-section">
+                <h3 class="section-label">Neuen Benutzer hinzufügen</h3>
+                <div class="admin-form">
+                    <input type="text" id="new-username" placeholder="Username" class="input-field">
+                    <input type="password" id="new-password" placeholder="Passwort" class="input-field">
+                    <select id="new-role" class="select-field">
+                        <option value="member">Member</option>
+                        <option value="admin">Admin</option>
+                    </select>
+                    <button onclick="addUser()" class="btn btn-accent">HINZUFÜGEN</button>
+                </div>
+                <p id="admin-msg" class="admin-msg"></p>
+            </div>
+
+            <div class="divider"></div>
+
+            <!-- User List -->
+            <div>
+                <h3 class="section-label">Alle Benutzer</h3>
+                <div id="user-list">
+                    <p class="muted-text">Lade Benutzer...</p>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        const SUPABASE_URL = 'https://daejfzypbnwtucwftkzn.supabase.co';
+        const SUPABASE_KEY = 'sb_publishable_xajv6XFl28cNrdMSohDhjg_aDyMT3Bl';
+        const supa = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        const SESSION_KEY = "fc47_user";
+
+        // Auth guard — admin only
+        const raw = sessionStorage.getItem(SESSION_KEY);
+        const currentUser = raw ? JSON.parse(raw) : null;
+        if (!currentUser || currentUser.role !== 'admin') {
+            window.location.href = 'index.html';
+        }
+
+        // ── LOAD USERS ──
+        async function loadUsers() {
+            const { data, error } = await supa
+                .from('app_users')
+                .select('*')
+                .order('username');
+
+            if (error || !data) {
+                document.getElementById('user-list').innerHTML = '<p class="muted-text">Fehler beim Laden.</p>';
+                return;
+            }
+
+            document.getElementById('user-list').innerHTML = data.map(u => `
+<div class="admin-user-row">
+    <div class="admin-user-info">
+        <div class="admin-user-name">${u.username}</div>
+        <div class="admin-user-role role-badge role-badge--${u.role}">${u.role.toUpperCase()}</div>
+    </div>
+    <div class="admin-user-actions">
+        <select onchange="changeRole('${u.id}', this.value)" class="select-field select-role">
+            <option value="member" ${u.role === 'member' ? 'selected' : ''}>Member</option>
+            <option value="admin"  ${u.role === 'admin'  ? 'selected' : ''}>Admin</option>
+        </select>
+        ${u.id !== currentUser.id ? `<button onclick="deleteUser('${u.id}', '${u.username}')" class="btn btn-danger-outline btn-sm">Löschen</button>` : '<div class="admin-you-badge">DU</div>'}
+    </div>
+</div>`).join('');
+        }
+
+        // ── ADD USER ──
+        async function addUser() {
+            const username = document.getElementById('new-username').value.trim();
+            const password = document.getElementById('new-password').value;
+            const role     = document.getElementById('new-role').value;
+            const msgEl    = document.getElementById('admin-msg');
+
+            if (!username || !password) {
+                msgEl.textContent = 'Bitte alle Felder ausfüllen.';
+                msgEl.style.color = 'var(--red)';
+                return;
+            }
+
+            const { error } = await supa.from('app_users').insert([{ username, password, role }]);
+
+            if (error) {
+                msgEl.textContent = error.message.includes('unique') ? 'Username bereits vergeben.' : error.message;
+                msgEl.style.color = 'var(--red)';
+            } else {
+                msgEl.textContent = `${username} wurde hinzugefügt!`;
+                msgEl.style.color = 'var(--green)';
+                document.getElementById('new-username').value = '';
+                document.getElementById('new-password').value = '';
+                loadUsers();
+            }
+            setTimeout(() => msgEl.textContent = '', 3000);
+        }
+
+        // ── CHANGE ROLE ──
+        async function changeRole(userId, newRole) {
+            const { error } = await supa
+                .from('app_users')
+                .update({ role: newRole })
+                .eq('id', userId);
+            if (error) alert('Fehler: ' + error.message);
+            else loadUsers();
+        }
+
+        // ── DELETE USER ──
+        async function deleteUser(userId, username) {
+            if (!confirm(`Benutzer "${username}" wirklich löschen?`)) return;
+            const { error } = await supa.from('app_users').delete().eq('id', userId);
+            if (error) alert('Fehler: ' + error.message);
+            else loadUsers();
+        }
+
+        // Load on start
+        loadUsers();
+    </script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js');
+        }
+    </script>
+</body>
+</html>

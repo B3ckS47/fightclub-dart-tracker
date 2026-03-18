@@ -1323,3 +1323,255 @@ body {
     /* Card general */
     .card { padding: 32px 36px; }
 }
+
+/* ============================================================
+   MENU PAGE
+   ============================================================ */
+
+.menu-nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    height: var(--nav-height);
+    background: rgba(13, 13, 15, 0.92);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+}
+
+.menu-wrapper {
+    max-width: 700px;
+    margin: 0 auto;
+    padding: 40px 20px 60px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 40px;
+}
+
+/* Club logo + title */
+.menu-logo-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+}
+
+.menu-logo {
+    width: min(160px, 40vw);
+    height: auto;
+    filter: drop-shadow(0 0 24px rgba(60, 120, 255, 0.5));
+    animation: logoPulse 3s ease-in-out infinite;
+}
+
+.menu-welcome {
+    font-family: var(--font-display);
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 4px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+}
+
+/* Feature cards */
+.menu-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    width: 100%;
+}
+
+.menu-card {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 24px 28px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    text-decoration: none;
+    color: var(--text-primary);
+    transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+    box-shadow: var(--shadow-card);
+}
+
+.menu-card:hover {
+    transform: translateY(-2px);
+    border-color: var(--border-light);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+}
+
+.menu-card--game    { border-top: 3px solid var(--accent); }
+.menu-card--dashboard { border-top: 3px solid var(--green); }
+
+.menu-card--game:hover    { border-color: var(--accent); box-shadow: 0 8px 32px var(--accent-glow); }
+.menu-card--dashboard:hover { border-color: var(--green); box-shadow: 0 8px 32px rgba(41,216,124,0.25); }
+
+.menu-card-icon {
+    font-size: 2.4rem;
+    flex-shrink: 0;
+}
+
+.menu-card-body { flex: 1; }
+
+.menu-card-title {
+    font-family: var(--font-display);
+    font-size: 1.5rem;
+    font-weight: 800;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+
+.menu-card-sub {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    letter-spacing: 0.5px;
+}
+
+.menu-card-arrow {
+    font-size: 1.4rem;
+    color: var(--text-muted);
+    transition: transform 0.15s, color 0.15s;
+}
+
+.menu-card:hover .menu-card-arrow {
+    transform: translateX(4px);
+    color: var(--text-primary);
+}
+
+/* Tablet menu layout */
+@media (min-width: 768px) {
+    .menu-wrapper { max-width: 900px; padding: 60px 32px; gap: 50px; }
+    .menu-logo    { width: 200px; }
+    .menu-cards   { flex-direction: row; gap: 24px; }
+    .menu-card    { flex-direction: column; align-items: flex-start; flex: 1; padding: 36px 32px; gap: 16px; }
+    .menu-card-icon  { font-size: 3rem; }
+    .menu-card-title { font-size: 1.8rem; }
+    .menu-card-sub   { font-size: 0.88rem; }
+    .menu-card-arrow { align-self: flex-end; font-size: 1.6rem; }
+}
+
+
+/* ── LOGIN FORM (splash) ── */
+.splash-form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+}
+
+.splash-form .splash-input {
+    text-align: left;
+    letter-spacing: 0;
+}
+
+/* ── MENU USER BADGE ── */
+.menu-user-badge {
+    font-family: var(--font-display);
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: var(--accent);
+    padding: 6px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--accent-dim);
+}
+
+/* ── ADMIN CARD ── */
+.menu-card--admin { border-top: 3px solid #a855f7; }
+.menu-card--admin:hover {
+    border-color: #a855f7;
+    box-shadow: 0 8px 32px rgba(168, 85, 247, 0.25);
+}
+
+/* ── ADMIN PAGE ── */
+.admin-form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.admin-msg {
+    font-size: 0.85rem;
+    min-height: 20px;
+    margin-top: 8px;
+}
+
+.admin-user-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--bg-element);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 14px 16px;
+    margin-bottom: 8px;
+    gap: 12px;
+}
+
+.admin-user-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+}
+
+.admin-user-name {
+    font-family: var(--font-display);
+    font-size: 1.1rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: var(--text-primary);
+}
+
+.role-badge {
+    font-family: var(--font-display);
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 2px;
+    padding: 3px 8px;
+    border-radius: 20px;
+    text-transform: uppercase;
+}
+
+.role-badge--admin  { background: rgba(168,85,247,0.15); color: #a855f7; }
+.role-badge--member { background: var(--green-dim); color: var(--green); }
+
+.admin-user-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.select-role {
+    width: auto;
+    padding: 7px 10px;
+    font-size: 0.85rem;
+}
+
+.btn-sm {
+    padding: 7px 12px !important;
+    font-size: 0.75rem !important;
+}
+
+.admin-you-badge {
+    font-family: var(--font-display);
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: var(--text-muted);
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+}
+
+@media (min-width: 768px) {
+    .admin-form {
+        display: grid;
+        grid-template-columns: 1fr 1fr auto auto;
+        align-items: end;
+        gap: 12px;
+    }
+}
