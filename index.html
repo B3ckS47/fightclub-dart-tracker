@@ -44,6 +44,11 @@
                 <button onclick="checkLogin()" class="splash-btn" id="splash-btn">EINLOGGEN</button>
             </div>
             <p id="splash-error" class="splash-error"></p>
+
+            <!-- PWA install button — shown only when install prompt is available -->
+            <button id="pwa-install-btn" class="pwa-install-btn" style="display:none;" onclick="installPWA()">
+                ↓ App installieren
+            </button>
         </div>
     </div>
 
@@ -201,6 +206,30 @@
         }
     </script>
     <script>
+        // ── PWA INSTALL PROMPT ──
+        let deferredPrompt = null;
+
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            document.getElementById('pwa-install-btn').style.display = 'inline-flex';
+        });
+
+        async function installPWA() {
+            if (!deferredPrompt) return;
+            deferredPrompt.prompt();
+            const { outcome } = await deferredPrompt.userChoice;
+            deferredPrompt = null;
+            if (outcome === 'accepted') {
+                document.getElementById('pwa-install-btn').style.display = 'none';
+            }
+        }
+
+        // Hide install button if already running as PWA
+        if (window.matchMedia('(display-mode: standalone)').matches) {
+            document.getElementById('pwa-install-btn').style.display = 'none';
+        }
+
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('/fightclub-dart-tracker/sw.js');
         }
