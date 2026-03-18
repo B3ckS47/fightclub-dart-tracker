@@ -62,9 +62,9 @@ async function fetchPlayers() {
         return b.stats.avgGame - a.stats.avgGame;
     });
 
-    // Update the UI
-    updateDropdowns(); // Helper to keep game setup in sync
-    updateStatsUI();
+    // Update the UI — functions may not exist on every page
+    if (typeof updateDropdowns === 'function') updateDropdowns();
+    if (typeof updateStatsUI === 'function') updateStatsUI();
 }
 
 // Add new Members to the Club

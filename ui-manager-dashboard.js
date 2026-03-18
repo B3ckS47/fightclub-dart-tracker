@@ -9,7 +9,7 @@ function showPage(id) {
     document.getElementById(id).classList.add('active');
 }
 
-function updateDropdowns() {} // Not needed on dashboard
+function updateDropdowns() { /* dashboard does not use dropdowns */ }
 function updateStatsUI() {
     const box = document.getElementById('player-list-box');
     if (!box) return;

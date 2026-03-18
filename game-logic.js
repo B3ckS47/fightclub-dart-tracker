@@ -30,7 +30,7 @@ let gameState = {
 };
 
 window.addEventListener('DOMContentLoaded', () => {
-    fetchPlayers();
+    // fetchPlayers is called by ui-manager-game.js
 });
 
 function setGameType(type) {

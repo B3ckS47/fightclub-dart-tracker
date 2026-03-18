@@ -74,12 +74,29 @@
     <script src="ui-manager-dashboard.js"></script>
 
     <script>
-        // Auth guard — no const to avoid conflicts with other scripts
+        // Auth guard
         (function() {
             var raw = sessionStorage.getItem('fc47_user');
             if (!raw) { window.location.href = 'index.html'; return; }
             var u = JSON.parse(raw);
             if (u.role === 'ipad') window.location.href = 'game.html';
+        })();
+    </script>
+
+    <script>
+        // Show delete button only for admins
+        // Runs after every profile open via MutationObserver on the profile page
+        (function() {
+            var raw = sessionStorage.getItem('fc47_user');
+            var role = raw ? JSON.parse(raw).role : '';
+
+            var profilePage = document.getElementById('player-profile-view');
+            var observer = new MutationObserver(function() {
+                var dz = document.getElementById('danger-zone');
+                if (!dz) return;
+                dz.style.display = role === 'admin' ? 'block' : 'none';
+            });
+            observer.observe(profilePage, { attributes: true, attributeFilter: ['class'] });
         })();
     </script>
     <script>

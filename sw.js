@@ -1,4 +1,4 @@
-const CACHE_NAME = 'flightclub-v1';
+const CACHE_NAME = 'flightclub-v3';
 const BASE = '/fightclub-dart-tracker';
 const ASSETS = [
     BASE + '/index.html',
