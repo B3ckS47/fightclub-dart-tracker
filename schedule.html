@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlightClub · Termine</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0d0d0f">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+    <nav id="nav-schedule">
+        <div class="nav-inner nav-inner--default">
+            <span class="nav-brand">FLIGHTCLUB</span>
+            <div class="nav-links">
+                <a href="index.html" class="nav-btn">← Menü</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="app-wrapper">
+
+        <!-- ADMIN: Create Appointment -->
+        <div class="card" id="admin-create-section" style="display:none;">
+            <h2 class="card-title">NEUER TERMIN</h2>
+            <div class="divider"></div>
+            <div class="schedule-form">
+                <input type="text" id="appt-title" placeholder="Bezeichnung" class="input-field">
+                <select id="appt-type" class="select-field">
+                    <option value="Training">Training</option>
+                    <option value="Tournament">Turnier</option>
+                    <option value="Event">Event</option>
+                </select>
+                <input type="datetime-local" id="appt-date" class="input-field">
+                <input type="text" id="appt-place" placeholder="Ort" class="input-field">
+                <button onclick="createAppointment()" class="btn btn-accent">HINZUFÜGEN</button>
+            </div>
+            <p id="schedule-msg" class="admin-msg"></p>
+        </div>
+
+        <!-- UPCOMING -->
+        <div class="card">
+            <h2 class="card-title">TERMINE</h2>
+            <div class="divider"></div>
+            <div id="upcoming-list">
+                <p class="muted-text">Lade Termine...</p>
+            </div>
+        </div>
+
+        <!-- PAST -->
+        <div class="card">
+            <div class="past-header" onclick="togglePast()">
+                <h2 class="card-title" style="margin:0;">VERGANGENE TERMINE</h2>
+                <span id="past-toggle-icon" class="past-toggle-icon">▼</span>
+            </div>
+            <div id="past-section" style="display:none;">
+                <div class="divider"></div>
+                <div id="past-list">
+                    <p class="muted-text">Lade vergangene Termine...</p>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script src="schedule.js"></script>
+
+    <script>
+        (function() {
+            var raw = sessionStorage.getItem('fc47_user');
+            if (!raw) { window.location.href = 'index.html'; return; }
+            var u = JSON.parse(raw);
+            if (u.role === 'ipad') window.location.href = 'index.html';
+        })();
+    </script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/fightclub-dart-tracker/sw.js')
+                .catch(() => {});
+        }
+    </script>
+</body>
+</html>

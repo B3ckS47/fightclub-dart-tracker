@@ -60,6 +60,13 @@
                 <div id="profile-stats-summary" class="stats-grid"></div>
                 <h3 class="subsection-title">Advanced Analytics</h3>
                 <div id="profile-advanced-stats" class="advanced-grid"></div>
+
+                <!-- Performance Chart -->
+                <div id="profile-chart-section" style="display:none;">
+                    <h3 class="subsection-title">Performance · Last 5 Games</h3>
+                    <div id="profile-chart" class="profile-chart-box"></div>
+                </div>
+
                 <h3 class="subsection-title">Recent Match History</h3>
                 <div id="profile-history-list"></div>
                 <div class="danger-zone" id="danger-zone" style="display:none;">
@@ -74,7 +81,7 @@
     <script src="ui-manager-dashboard.js"></script>
 
     <script>
-        // Auth guard
+        // Auth guard — no const to avoid conflicts with other scripts
         (function() {
             var raw = sessionStorage.getItem('fc47_user');
             if (!raw) { window.location.href = 'index.html'; return; }
@@ -85,11 +92,9 @@
 
     <script>
         // Show delete button only for admins
-        // Runs after every profile open via MutationObserver on the profile page
         (function() {
             var raw = sessionStorage.getItem('fc47_user');
             var role = raw ? JSON.parse(raw).role : '';
-
             var profilePage = document.getElementById('player-profile-view');
             var observer = new MutationObserver(function() {
                 var dz = document.getElementById('danger-zone');

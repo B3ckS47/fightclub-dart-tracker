@@ -9,7 +9,7 @@ function showPage(id) {
     document.getElementById(id).classList.add('active');
 }
 
-function updateDropdowns() { /* dashboard does not use dropdowns */ }
+function updateDropdowns() {} // Not needed on dashboard
 function updateStatsUI() {
     const box = document.getElementById('player-list-box');
     if (!box) return;
@@ -78,6 +78,8 @@ async function openPlayerProfile(playerId) {
     const bestGameAvg = Math.max(...history.map(h => h.avg_game || 0)).toFixed(2);
     const totalClosingDarts = history.reduce((sum, h) => sum + (h.closing_darts || 0), 0);
     const avgVisitsToClose  = (totalClosingDarts / totalGames / 3).toFixed(1);
+    const totalHighFinishes = history.reduce((sum, h) => sum + (h.high_finishes || 0), 0);
+    const highestFinish     = Math.max(0, ...history.map(h => h.highest_finish || 0));
 
     summaryBox.innerHTML = `
 <div class="stat-box stat-box--accent">
@@ -103,9 +105,11 @@ async function openPlayerProfile(playerId) {
 <div class="adv-box"><div class="adv-label">Total Legs</div><div class="adv-value">${totalLegsPlayed}</div></div>
 <div class="adv-box"><div class="adv-label">Legs (W / L)</div><div class="adv-value">${totalLegsWon} / ${totalLegsLost}</div></div>
 <div class="adv-box"><div class="adv-label">Avg to 170</div><div class="adv-value">${avgTo170}</div></div>
-<div class="adv-box"><div class="adv-label">Visits to Close</div><div class="adv-value">${avgVisitsToClose}</div></div>`;
+<div class="adv-box"><div class="adv-label">Visits to Close</div><div class="adv-value">${avgVisitsToClose}</div></div>
+<div class="adv-box"><div class="adv-label">High Finishes</div><div class="adv-value" style="color:var(--accent)">🎯 ${totalHighFinishes}</div></div>
+<div class="adv-box"><div class="adv-label">Highest Finish</div><div class="adv-value" style="color:var(--accent)">${highestFinish > 0 ? '🏆 ' + highestFinish : '–'}</div></div>`;
 
-    historyBox.innerHTML = history.map(h => `
+    historyBox.innerHTML = history.slice(0, 5).map(h => `
 <div class="match-row ${h.is_win ? 'match-row--win' : 'match-row--loss'}">
     <div>
         <div class="match-result ${h.is_win ? 'match-result--win' : 'match-result--loss'}">
@@ -121,4 +125,63 @@ async function openPlayerProfile(playerId) {
         <button class="match-delete-btn" onclick="deleteMatch('${h.id}', '${player.id}')">Löschen</button>
     </div>
 </div>`).join('');
+
+    // ── PERFORMANCE CHART ──
+    const chartSection = document.getElementById('profile-chart-section');
+    const chartBox     = document.getElementById('profile-chart');
+    if (!chartBox) return;
+
+    const chartData = history.slice(0, 5).reverse();
+    if (chartData.length < 2) {
+        chartSection.style.display = 'none';
+        return;
+    }
+    chartSection.style.display = 'block';
+
+    const avgs   = chartData.map(h => parseFloat(h.avg_game) || 0);
+    const labels = chartData.map((h, i) => 'G' + (i + 1));
+    const minVal = Math.max(0, Math.floor(Math.min(...avgs) - 10));
+    const maxVal = Math.ceil(Math.max(...avgs) + 10);
+    const W = 500, H = 180, padL = 40, padR = 16, padT = 16, padB = 32;
+    const innerW = W - padL - padR;
+    const innerH = H - padT - padB;
+
+    const xPos = i => padL + (i / (avgs.length - 1)) * innerW;
+    const yPos = v => padT + innerH - ((v - minVal) / (maxVal - minVal)) * innerH;
+
+    const points   = avgs.map((v, i) => `${xPos(i)},${yPos(v)}`).join(' ');
+    const areaPath = `M${xPos(0)},${yPos(avgs[0])} ` +
+        avgs.map((v, i) => `L${xPos(i)},${yPos(v)}`).join(' ') +
+        ` L${xPos(avgs.length-1)},${padT + innerH} L${xPos(0)},${padT + innerH} Z`;
+
+    const gridLines = [0, 0.25, 0.5, 0.75, 1].map(t => {
+        const v = minVal + t * (maxVal - minVal);
+        const y = yPos(v);
+        return `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" stroke="#2e2e38" stroke-width="1"/>
+                <text x="${padL - 6}" y="${y + 4}" text-anchor="end" fill="#55555f" font-size="10">${Math.round(v)}</text>`;
+    }).join('');
+
+    const xLabels = labels.map((lbl, i) =>
+        `<text x="${xPos(i)}" y="${H - 6}" text-anchor="middle" fill="#55555f" font-size="11">${lbl}</text>`
+    ).join('');
+
+    const dots = avgs.map((v, i) => `
+        <circle cx="${xPos(i)}" cy="${yPos(v)}" r="4" fill="#f5a623" stroke="#0d0d0f" stroke-width="2"/>
+        <text x="${xPos(i)}" y="${yPos(v) - 10}" text-anchor="middle" fill="#f0f0f5" font-size="10" font-weight="bold">${v.toFixed(1)}</text>
+    `).join('');
+
+    chartBox.innerHTML = `
+<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;">
+    <defs>
+        <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#f5a623" stop-opacity="0.25"/>
+            <stop offset="100%" stop-color="#f5a623" stop-opacity="0"/>
+        </linearGradient>
+    </defs>
+    ${gridLines}
+    ${xLabels}
+    <path d="${areaPath}" fill="url(#areaGrad)"/>
+    <polyline points="${points}" fill="none" stroke="#f5a623" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+    ${dots}
+</svg>`;
 }

@@ -10,6 +10,9 @@ function updateDropdowns() {
         const el = document.getElementById(id);
         if (el) el.innerHTML = options;
     });
+    // Default p2 to second player to avoid same player selected
+    const p2 = document.getElementById('p2-select');
+    if (p2 && players.length > 1) p2.selectedIndex = 1;
 }
 
 function refreshDisplay() {
@@ -130,3 +133,10 @@ function exitGame(isFinished = false) {
 }
 
 window.exitGame = exitGame;
+
+function toggleGameMode() {
+    const track = document.getElementById('game-mode-track');
+    const label = document.getElementById('game-mode-label');
+    const isOn  = track.classList.toggle('game-mode-track--on');
+    label.textContent = isOn ? '🏆 Offizielles Spiel' : '🎉 Spaßspiel';
+}

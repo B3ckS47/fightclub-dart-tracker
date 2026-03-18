@@ -66,6 +66,25 @@
         </nav>
 
         <div class="menu-wrapper">
+            <!-- Next Appointment Teaser -->
+            <a href="schedule.html" id="next-appt-card" class="next-appt-card" style="display:none;">
+                <div class="next-appt-left">
+                    <span id="next-appt-type" class="appt-type-badge"></span>
+                    <div id="next-appt-title" class="next-appt-title"></div>
+                </div>
+                <div class="next-appt-center">
+                    <div id="next-appt-date" class="next-appt-date"></div>
+                    <div id="next-appt-time" class="next-appt-time"></div>
+                </div>
+                <div class="next-appt-right">
+                    <div class="next-appt-votes">
+                        <span>✅ <strong id="next-appt-yes">0</strong></span>
+                        <span>❌ <strong id="next-appt-no">0</strong></span>
+                    </div>
+                    <div class="next-appt-arrow">→</div>
+                </div>
+            </a>
+
             <div class="menu-logo-wrap">
                 <img src="Logo.png" alt="DC Flight Club 47" class="menu-logo">
                 <div class="menu-welcome">DC FLIGHT CLUB 47</div>
@@ -169,6 +188,9 @@
                 return;
             }
 
+            // Load next appointment teaser for member + admin
+            loadNextAppointment();
+
             // admin: add admin card
             if (user.role === 'admin') {
                 const cards = document.getElementById('menu-cards');
@@ -185,6 +207,48 @@
                 `;
                 cards.appendChild(adminCard);
             }
+        }
+
+        async function loadNextAppointment() {
+            const TYPE_COLORS = {
+                Training:   { bg: 'rgba(59,130,246,0.15)',  color: '#60a5fa', label: 'TRAINING' },
+                Tournament: { bg: 'rgba(245,166,35,0.15)',  color: '#f5a623', label: 'TURNIER'  },
+                Event:      { bg: 'rgba(168,85,247,0.15)',  color: '#a855f7', label: 'EVENT'    }
+            };
+
+            const { data: appointments } = await supa
+                .from('appointments')
+                .select('*')
+                .gte('date', new Date().toISOString())
+                .order('date', { ascending: true })
+                .limit(1);
+
+            if (!appointments || appointments.length === 0) return;
+            const appt = appointments[0];
+
+            const { data: votes } = await supa
+                .from('appointment_votes')
+                .select('*')
+                .eq('appointment_id', appt.id);
+
+            const allVotes = votes || [];
+            const yes = allVotes.filter(v => v.vote === 'yes').length;
+            const no  = allVotes.filter(v => v.vote === 'no').length;
+
+            const typeStyle = TYPE_COLORS[appt.type] || TYPE_COLORS.Event;
+            const dateObj   = new Date(appt.date);
+            const dateStr   = dateObj.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' });
+            const timeStr   = dateObj.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+
+            document.getElementById('next-appt-type').textContent        = typeStyle.label;
+            document.getElementById('next-appt-type').style.background   = typeStyle.bg;
+            document.getElementById('next-appt-type').style.color        = typeStyle.color;
+            document.getElementById('next-appt-title').textContent       = appt.title;
+            document.getElementById('next-appt-date').textContent        = dateStr;
+            document.getElementById('next-appt-time').textContent        = timeStr + ' Uhr';
+            document.getElementById('next-appt-yes').textContent         = yes;
+            document.getElementById('next-appt-no').textContent          = no;
+            document.getElementById('next-appt-card').style.display      = 'flex';
         }
 
         function logOut() {

@@ -14,6 +14,7 @@ function makePlayerStats() {
 
 let gameState = {
     gameType: 'singles',
+    isOfficial: true,
     pNames: ["P1", "P2"],
     scores: [501, 501],
     history: [[], []],
@@ -73,6 +74,7 @@ function startGame() {
     gameState.currentIdx    = 0;
     gameState.teamPlayerIdx = [0, 0];
     gameState.mode          = mode;
+    gameState.isOfficial    = document.getElementById('game-mode-track').classList.contains('game-mode-track--on');
     gameState.logs          = [];
 
     document.getElementById('nav-setup').style.display        = 'none';
@@ -135,7 +137,7 @@ async function submitTurn() {
         if (gameState.legScore[teamIdx] >= gameState.targetLegs) {
             setTimeout(async () => {
                 alert("MATCH OVER! " + gameState.pNames[teamIdx] + " wins!");
-                if (gameState.gameType === 'singles') {
+                if (gameState.gameType === 'singles' && gameState.isOfficial) {
                     try { await saveMatchToSupabase(); } catch(e) { console.error(e); }
                 }
                 const startVal = parseInt(document.getElementById('start-score-select').value);

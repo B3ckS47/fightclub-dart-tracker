@@ -159,6 +159,8 @@ async function saveMatchToSupabase() {
             avg_pre_170: parseFloat(pre170Avg),
             one_eighties: pStats.oneEighties,
             twenty_sixes: pStats.twentySixes,
+            high_finishes: pStats.highFinishes,
+            highest_finish: pStats.highestFinish,
             closing_darts: pStats.dartsToClose
         };
 
