@@ -57,6 +57,22 @@
                 </div>
             </div>
 
+            <div class="divider"></div>
+
+            <!-- Fines Reasons -->
+            <div>
+                <h3 class="section-label">Strafengründe</h3>
+                <div class="admin-form" style="margin-bottom:12px;">
+                    <input type="text"   id="new-reason-name"   placeholder="Bezeichnung" class="input-field">
+                    <input type="number" id="new-reason-amount" placeholder="Betrag (€)" min="0.01" step="0.01" class="input-field">
+                    <button onclick="addReason()" class="btn btn-accent">HINZUFÜGEN</button>
+                </div>
+                <p id="reasons-msg" class="admin-msg"></p>
+                <div id="reasons-list">
+                    <p class="muted-text">Lade Gründe...</p>
+                </div>
+            </div>
+
         </div>
     </div>
 
@@ -149,6 +165,86 @@
 
         // Load on start
         loadUsers();
+        loadReasons();
+
+        // ── LOAD REASONS ──
+        async function loadReasons() {
+            const { data, error } = await supa
+                .from('fines_reasons')
+                .select('*')
+                .order('sort_order')
+                .order('created_at');
+
+            const listEl = document.getElementById('reasons-list');
+            if (error || !data) {
+                listEl.innerHTML = '<p class="muted-text">Fehler beim Laden.</p>';
+                return;
+            }
+            if (data.length === 0) {
+                listEl.innerHTML = '<p class="muted-text">Noch keine Gründe vorhanden.</p>';
+                return;
+            }
+
+            listEl.innerHTML = data.map(r => `
+<div class="admin-user-row">
+    <div class="admin-user-info" style="flex:1;">
+        <div class="admin-user-name">${r.name}</div>
+    </div>
+    <div class="admin-user-actions">
+        <input type="number" value="${r.amount}" min="0.01" step="0.01"
+            class="input-field select-role"
+            style="width:100px; text-align:right;"
+            onchange="updateReasonAmount('${r.id}', this.value)">
+        <span class="admin-user-name" style="color:var(--text-muted); font-size:0.9rem;">€</span>
+        <button onclick="deleteReason('${r.id}', '${r.name.replace(/'/g, "\\'")}')" class="btn btn-danger-outline btn-sm">Löschen</button>
+    </div>
+</div>`).join('');
+        }
+
+        // ── ADD REASON ──
+        async function addReason() {
+            const name   = document.getElementById('new-reason-name').value.trim();
+            const amount = parseFloat(document.getElementById('new-reason-amount').value);
+            const msgEl  = document.getElementById('reasons-msg');
+
+            const showMsg = (text, color) => {
+                msgEl.textContent = text;
+                msgEl.style.color = color;
+                setTimeout(() => msgEl.textContent = '', 3000);
+            };
+
+            if (!name)              return showMsg('Bitte eine Bezeichnung eingeben.', 'var(--red)');
+            if (!amount || amount <= 0) return showMsg('Bitte einen gültigen Betrag eingeben.', 'var(--red)');
+
+            const { error } = await supa.from('fines_reasons').insert([{ name, amount }]);
+            if (error) {
+                showMsg('Fehler: ' + error.message, 'var(--red)');
+            } else {
+                document.getElementById('new-reason-name').value   = '';
+                document.getElementById('new-reason-amount').value = '';
+                showMsg('Grund hinzugefügt!', 'var(--green)');
+                loadReasons();
+            }
+        }
+
+        // ── UPDATE REASON AMOUNT ──
+        async function updateReasonAmount(id, newAmount) {
+            const amount = parseFloat(newAmount);
+            if (!amount || amount <= 0) { loadReasons(); return; }
+            const { error } = await supa
+                .from('fines_reasons')
+                .update({ amount })
+                .eq('id', id);
+            if (error) alert('Fehler: ' + error.message);
+        }
+
+        // ── DELETE REASON ──
+        async function deleteReason(id, name) {
+            if (!confirm(`Grund "${name}" wirklich löschen?`)) return;
+            const { error } = await supa.from('fines_reasons').delete().eq('id', id);
+            if (error) alert('Fehler: ' + error.message);
+            else loadReasons();
+        }
     </script>
     <script>
         if ('serviceWorker' in navigator) {

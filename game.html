@@ -208,6 +208,18 @@
         </div>
     </div>
 
+    <!-- ── AUSBULLEN MODAL ── -->
+    <div id="ausbullen-overlay" class="ausbullen-overlay" style="display:none;">
+        <div class="ausbullen-modal">
+            <div class="ausbullen-title">AUSBULLEN</div>
+            <p class="ausbullen-subtitle">20 Aufnahmen erreicht — wer gewinnt das Leg?</p>
+            <div class="ausbullen-buttons">
+                <button class="ausbullen-btn ausbullen-btn--p1" onclick="selectAusbullenWinner(0)" id="ausbullen-p1">Player 1</button>
+                <button class="ausbullen-btn ausbullen-btn--p2" onclick="selectAusbullenWinner(1)" id="ausbullen-p2">Player 2</button>
+            </div>
+        </div>
+    </div>
+
     <script src="database.js"></script>
     <script src="game-logic.js"></script>
     <script src="ui-manager-game.js"></script>

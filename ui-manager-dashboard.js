@@ -56,6 +56,17 @@ async function openPlayerProfile(playerId) {
     attendList.innerHTML  = '<p class="muted-text">Lade Termine…</p>';
     attendCard.style.display = 'none';
 
+    // ── RESET ALL FOLD STATES ──
+    ['fold-advanced', 'fold-chart', 'fold-history', 'fold-attendance'].forEach(id => {
+        const body = document.getElementById(id);
+        const icon = document.getElementById(id + '-icon');
+        if (body) body.style.display = 'none';
+        if (icon) icon.textContent = '▶';
+    });
+    // Hide chart section wrapper until we know there's data
+    const chartSection = document.getElementById('profile-chart-section');
+    if (chartSection) chartSection.style.display = 'none';
+
     // ── FETCH ALL DATA IN PARALLEL ──
     const [histRes, userRes] = await Promise.all([
         supa.from('game_history').select('*')
@@ -187,8 +198,7 @@ async function openPlayerProfile(playerId) {
 </div>`).join('');
 
     // ── PERFORMANCE CHART ──
-    const chartSection = document.getElementById('profile-chart-section');
-    const chartBox     = document.getElementById('profile-chart');
+    const chartBox = document.getElementById('profile-chart');
     if (!chartBox) return;
 
     const chartData = history.slice(0, 5).reverse();

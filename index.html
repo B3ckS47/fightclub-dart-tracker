@@ -191,6 +191,21 @@
             // Load next appointment teaser for member + admin
             loadNextAppointment();
 
+            // fines card — member + admin
+            const cards     = document.getElementById('menu-cards');
+            const finesCard = document.createElement('a');
+            finesCard.href      = 'fines.html';
+            finesCard.className = 'menu-card menu-card--fines';
+            finesCard.innerHTML = `
+                <div class="menu-card-icon">💸</div>
+                <div class="menu-card-body">
+                    <div class="menu-card-title">STRAFEN</div>
+                    <div class="menu-card-sub">Übersicht · Verlauf · Saldo</div>
+                </div>
+                <div class="menu-card-arrow">»</div>
+            `;
+            cards.appendChild(finesCard);
+
             // admin: add admin card
             if (user.role === 'admin') {
                 const cards = document.getElementById('menu-cards');

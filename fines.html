@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlightClub · Strafen</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0d0d0f">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+    <!-- ── NAV: OVERVIEW ── -->
+    <nav id="nav-fines-overview">
+        <div class="nav-inner nav-inner--default">
+            <span class="nav-brand">FLIGHTCLUB</span>
+            <div class="nav-links">
+                <a href="index.html" class="nav-btn">« Menü</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- ── NAV: DETAIL ── -->
+    <nav id="nav-fines-detail" style="display:none;">
+        <div class="nav-inner nav-inner--default">
+            <span class="nav-brand">FLIGHTCLUB</span>
+            <div class="nav-links">
+                <button onclick="showOverview()" class="nav-btn">« Zurück</button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="app-wrapper">
+
+        <!-- ══ OVERVIEW VIEW ══ -->
+        <div id="fines-overview">
+            <div class="card">
+                <h2 class="card-title">STRAFEN</h2>
+                <div class="divider"></div>
+
+                <!-- Members & Admins -->
+                <h3 class="section-label">Mitglieder</h3>
+                <div id="fines-members-list">
+                    <p class="muted-text">Lade Mitglieder…</p>
+                </div>
+
+                <!-- Guests (only shown if any have balance > 0) -->
+                <div id="fines-guests-section" style="display:none;">
+                    <div class="divider"></div>
+                    <h3 class="section-label">Gäste</h3>
+                    <div id="fines-guests-list"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ══ DETAIL VIEW ══ -->
+        <div id="fines-detail" style="display:none;">
+
+            <!-- Header card -->
+            <div class="card fines-detail-header-card">
+                <div class="fines-detail-top">
+                    <div>
+                        <div class="fines-detail-name" id="detail-player-name">–</div>
+                        <div class="fines-detail-label">Aktueller Saldo</div>
+                    </div>
+                    <div class="fines-detail-balance" id="detail-balance">0,00 €</div>
+                </div>
+            </div>
+
+            <!-- Admin: add fine / payment -->
+            <div class="card" id="fines-add-card" style="display:none;">
+                <h2 class="card-title">EINTRAG HINZUFÜGEN</h2>
+                <div class="divider"></div>
+                <div class="fines-add-form">
+                    <div class="fines-add-row">
+                        <select id="fine-type" class="select-field">
+                            <option value="fine">💸 Strafe</option>
+                            <option value="payment">✅ Zahlung</option>
+                        </select>
+                        <input type="number" id="fine-amount" placeholder="Betrag (€)" min="0.01" step="0.01" class="input-field fines-amount-input">
+                    </div>
+                    <select id="fine-reason" class="select-field" onchange="prefillAmount()">
+                        <option value="" data-amount="">Lade Gründe…</option>
+                    </select>
+                    <input type="text" id="fine-note" placeholder="Zusätzliche Notiz (optional)" class="input-field">
+                    <button onclick="addEntry()" class="btn btn-primary btn-full">HINZUFÜGEN</button>
+                </div>
+                <p id="fines-add-msg" class="settings-msg"></p>
+            </div>
+
+            <!-- Ledger -->
+            <div class="card">
+                <h2 class="card-title">VERLAUF</h2>
+                <div class="divider"></div>
+                <div id="fines-ledger-list">
+                    <p class="muted-text">Lade Einträge…</p>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        const SUPABASE_URL = 'https://daejfzypbnwtucwftkzn.supabase.co';
+        const SUPABASE_KEY = 'sb_publishable_xajv6XFl28cNrdMSohDhjg_aDyMT3Bl';
+        const supa         = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        const SESSION_KEY  = 'fc47_user';
+
+        // ── AUTH GUARD ──
+        const raw         = sessionStorage.getItem(SESSION_KEY);
+        const currentUser = raw ? JSON.parse(raw) : null;
+        if (!currentUser || currentUser.role === 'ipad') {
+            window.location.href = 'index.html';
+        }
+
+        const isAdmin = currentUser && currentUser.role === 'admin';
+
+        // Currently open player in detail view
+        let detailPlayerId   = null;
+        let detailPlayerName = null;
+
+        // ── OVERVIEW ──
+        async function loadOverview() {
+            const [playersRes, usersRes, ledgerRes] = await Promise.all([
+                supa.from('players').select('id, name').order('name'),
+                supa.from('app_users').select('id, player_id, role').in('role', ['member', 'admin']),
+                supa.from('fines_ledger').select('player_id, amount')
+            ]);
+
+            const players  = playersRes.data  || [];
+            const users    = usersRes.data     || [];
+            const ledger   = ledgerRes.data    || [];
+
+            // Build balance map: player_id → total
+            const balanceMap = {};
+            ledger.forEach(row => {
+                balanceMap[row.player_id] = (balanceMap[row.player_id] || 0) + parseFloat(row.amount);
+            });
+
+            // Member/admin players = players linked to an app_user with role member/admin
+            const memberPlayerIds = new Set(users.map(u => u.player_id).filter(Boolean));
+            const memberPlayers   = players.filter(p => memberPlayerIds.has(p.id));
+            const guestPlayers    = players.filter(p => !memberPlayerIds.has(p.id));
+
+            // Render members
+            const membersEl = document.getElementById('fines-members-list');
+            if (memberPlayers.length === 0) {
+                membersEl.innerHTML = '<p class="muted-text">Keine Mitglieder gefunden.</p>';
+            } else {
+                membersEl.innerHTML = memberPlayers.map(p => renderOverviewRow(p, balanceMap[p.id] || 0)).join('');
+            }
+
+            // Render guests (always shown, regardless of balance)
+            const guestSection = document.getElementById('fines-guests-section');
+            if (guestPlayers.length > 0) {
+                guestSection.style.display = 'block';
+                document.getElementById('fines-guests-list').innerHTML =
+                    guestPlayers.map(p => renderOverviewRow(p, balanceMap[p.id] || 0)).join('');
+            } else {
+                guestSection.style.display = 'none';
+            }
+        }
+
+        function renderOverviewRow(player, balance) {
+            const isZero    = balance <= 0;
+            const formatted = formatEur(balance);
+            return `
+<div class="fines-row" onclick="openDetail('${player.id}', '${escHtml(player.name)}')">
+    <div class="fines-row-name">${escHtml(player.name)}</div>
+    <div class="fines-row-amount ${isZero ? 'fines-amount--zero' : 'fines-amount--debt'}">${formatted}</div>
+</div>`;
+        }
+
+        // ── DETAIL VIEW ──
+        async function openDetail(playerId, playerName) {
+            detailPlayerId   = playerId;
+            detailPlayerName = playerName;
+
+            document.getElementById('fines-overview').style.display         = 'none';
+            document.getElementById('nav-fines-overview').style.display     = 'none';
+            document.getElementById('fines-detail').style.display           = 'block';
+            document.getElementById('nav-fines-detail').style.display       = 'block';
+            document.getElementById('detail-player-name').textContent       = playerName;
+            document.getElementById('fines-add-card').style.display         = isAdmin ? 'block' : 'none';
+            document.getElementById('fines-ledger-list').innerHTML          = '<p class="muted-text">Lade Einträge…</p>';
+
+            await loadLedger();
+        }
+
+        async function loadLedger() {
+            const { data, error } = await supa
+                .from('fines_ledger')
+                .select('*')
+                .eq('player_id', detailPlayerId)
+                .order('created_at', { ascending: false });
+
+            const entries  = data || [];
+            const balance  = entries.reduce((sum, e) => sum + parseFloat(e.amount), 0);
+            const isZero   = balance <= 0;
+
+            document.getElementById('detail-balance').textContent   = formatEur(balance);
+            document.getElementById('detail-balance').className     =
+                'fines-detail-balance ' + (isZero ? 'fines-amount--zero' : 'fines-amount--debt');
+
+            const listEl = document.getElementById('fines-ledger-list');
+
+            if (error) {
+                listEl.innerHTML = '<p class="muted-text">Fehler beim Laden.</p>';
+                return;
+            }
+            if (entries.length === 0) {
+                listEl.innerHTML = '<p class="muted-text">Noch keine Einträge.</p>';
+                return;
+            }
+
+            listEl.innerHTML = `
+<div class="fines-table">
+    <div class="fines-table-header">
+        <span>Datum</span>
+        <span>Typ</span>
+        <span>Grund</span>
+        <span>Von</span>
+        <span class="fines-col-amount">Betrag</span>
+    </div>
+    ${entries.map(e => {
+        const isFine   = e.type === 'fine';
+        const dateStr  = new Date(e.created_at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        const reason   = [e.reason, e.note].filter(Boolean).join(' · ') || '–';
+        return `
+<div class="fines-table-row">
+    <span class="fines-col-date">${dateStr}</span>
+    <span class="fines-col-type ${isFine ? 'fines-type--fine' : 'fines-type--payment'}">${isFine ? '💸 Strafe' : '✅ Zahlung'}</span>
+    <span class="fines-col-reason">${escHtml(reason)}</span>
+    <span class="fines-col-by">${escHtml(e.created_by)}</span>
+    <span class="fines-col-amount ${isFine ? 'fines-amount--debt' : 'fines-amount--zero'}">${isFine ? '+' : '–'}${formatEur(Math.abs(e.amount))}</span>
+</div>`;
+    }).join('')}
+</div>`;
+        }
+
+        // ── LOAD REASONS INTO DROPDOWN ──
+        async function loadReasons() {
+            const { data } = await supa
+                .from('fines_reasons')
+                .select('*')
+                .order('sort_order')
+                .order('created_at');
+
+            const select = document.getElementById('fine-reason');
+            if (!select) return;
+
+            const reasons = data || [];
+            select.innerHTML =
+                '<option value="" data-amount="">Grund auswählen…</option>' +
+                reasons.map(r =>
+                    `<option value="${escHtml(r.name)}" data-amount="${r.amount}">` +
+                    `${escHtml(r.name)} — ${parseFloat(r.amount).toLocaleString('de-DE', { minimumFractionDigits: 2 })} €` +
+                    `</option>`
+                ).join('') +
+                '<option value="Sonstiges" data-amount="">Sonstiges</option>';
+        }
+
+        // ── PREFILL AMOUNT FROM REASON ──
+        function prefillAmount() {
+            const select = document.getElementById('fine-reason');
+            const amount = select.options[select.selectedIndex].dataset.amount;
+            if (amount) document.getElementById('fine-amount').value = amount;
+        }
+
+        // ── ADD ENTRY (admin only) ──
+        async function addEntry() {
+            const type   = document.getElementById('fine-type').value;
+            const amount = parseFloat(document.getElementById('fine-amount').value);
+            const reason = document.getElementById('fine-reason').value;
+            const note   = document.getElementById('fine-note').value.trim();
+            const msgEl  = document.getElementById('fines-add-msg');
+
+            const showMsg = (text, color) => {
+                msgEl.textContent = text;
+                msgEl.style.color = color;
+                setTimeout(() => msgEl.textContent = '', 3500);
+            };
+
+            if (!amount || amount <= 0) return showMsg('Bitte einen gültigen Betrag eingeben.', 'var(--red)');
+            if (!reason)               return showMsg('Bitte einen Grund auswählen.',            'var(--red)');
+
+            // Payments are stored as negative amounts
+            const storedAmount = type === 'payment' ? -Math.abs(amount) : Math.abs(amount);
+
+            const { error } = await supa.from('fines_ledger').insert([{
+                player_id:  detailPlayerId,
+                amount:     storedAmount,
+                type,
+                reason,
+                note:       note || null,
+                created_by: currentUser.username
+            }]);
+
+            if (error) return showMsg('Fehler: ' + error.message, 'var(--red)');
+
+            // Reset form
+            document.getElementById('fine-amount').value = '';
+            document.getElementById('fine-reason').value = '';
+            document.getElementById('fine-note').value   = '';
+
+            showMsg('Eintrag gespeichert!', 'var(--green)');
+            await loadLedger();
+        }
+
+        // ── BACK TO OVERVIEW ──
+        function showOverview() {
+            document.getElementById('fines-detail').style.display       = 'none';
+            document.getElementById('nav-fines-detail').style.display   = 'none';
+            document.getElementById('fines-overview').style.display     = 'block';
+            document.getElementById('nav-fines-overview').style.display = 'block';
+            loadOverview(); // refresh balances
+        }
+
+        // ── HELPERS ──
+        function formatEur(amount) {
+            return Math.abs(amount).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+        }
+
+        function escHtml(str) {
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        // ── INIT ──
+        loadOverview();
+        loadReasons();
+    </script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/fightclub-dart-tracker/sw.js')
+                .catch(() => {});
+        }
+    </script>
+</body>
+</html>

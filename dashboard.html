@@ -91,9 +91,6 @@
                         <div id="profile-history-list"></div>
                     </div>
                 </div>
-                <div class="danger-zone" id="danger-zone" style="display:none;">
-                    <button id="delete-player-btn" class="btn btn-danger-outline">DELETE PLAYER PROFILE</button>
-                </div>
             </div>
 
             <!-- ATTENDANCE CARD -->
@@ -108,6 +105,14 @@
                         <div id="profile-attendance-list"></div>
                     </div>
                 </div>
+            </div>
+
+            <!-- ADMIN ONLY: DELETE CARD -->
+            <div class="card" id="danger-zone" style="display:none;">
+                <h2 class="card-title" style="color:var(--red);">GEFAHRENZONE</h2>
+                <div class="divider"></div>
+                <p class="muted-text" style="margin-bottom:16px; font-size:0.85rem;">Das Löschen eines Spielers entfernt auch alle Spieldaten unwiderruflich.</p>
+                <button id="delete-player-btn" class="btn btn-danger-outline">DELETE PLAYER PROFILE</button>
             </div>
 
         </div>
@@ -125,27 +130,13 @@
     <script src="ui-manager-dashboard.js"></script>
 
     <script>
-        // Auth guard — no const to avoid conflicts with other scripts
+        // Auth guard + show danger zone for admins only
         (function() {
             var raw = sessionStorage.getItem('fc47_user');
             if (!raw) { window.location.href = 'index.html'; return; }
             var u = JSON.parse(raw);
             if (u.role === 'ipad') window.location.href = 'game.html';
-        })();
-    </script>
-
-    <script>
-        // Show delete button only for admins
-        (function() {
-            var raw = sessionStorage.getItem('fc47_user');
-            var role = raw ? JSON.parse(raw).role : '';
-            var profilePage = document.getElementById('player-profile-view');
-            var observer = new MutationObserver(function() {
-                var dz = document.getElementById('danger-zone');
-                if (!dz) return;
-                dz.style.display = role === 'admin' ? 'block' : 'none';
-            });
-            observer.observe(profilePage, { attributes: true, attributeFilter: ['class'] });
+            if (u.role === 'admin') document.getElementById('danger-zone').style.display = 'block';
         })();
     </script>
     <script>
