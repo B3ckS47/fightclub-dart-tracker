@@ -226,9 +226,10 @@
 
         async function loadNextAppointment() {
             const TYPE_COLORS = {
-                Training:   { bg: 'rgba(59,130,246,0.15)',  color: '#60a5fa', label: 'TRAINING' },
-                Tournament: { bg: 'rgba(245,166,35,0.15)',  color: '#f5a623', label: 'TURNIER'  },
-                Event:      { bg: 'rgba(168,85,247,0.15)',  color: '#a855f7', label: 'EVENT'    }
+                Training:   { bg: 'rgba(59,130,246,0.15)',  color: '#60a5fa', label: 'TRAINING'  },
+                Tournament: { bg: 'rgba(245,166,35,0.15)',  color: '#f5a623', label: 'TURNIER'   },
+                Event:      { bg: 'rgba(168,85,247,0.15)',  color: '#a855f7', label: 'EVENT'     },
+                Gameday:    { bg: 'rgba(255,68,85,0.15)',   color: '#ff4455', label: 'SPIELTAG'  }
             };
 
             const { data: appointments } = await supa
