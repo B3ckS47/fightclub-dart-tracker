@@ -201,23 +201,31 @@
                 .eq('player_id', detailPlayerId)
                 .order('created_at', { ascending: false });
 
-            const entries  = data || [];
-            const balance  = entries.reduce((sum, e) => sum + parseFloat(e.amount), 0);
-            const isZero   = balance <= 0;
+            const entries = data || [];
+            const balance = entries.reduce((sum, e) => sum + parseFloat(e.amount), 0);
+            const isZero  = balance <= 0;
 
-            document.getElementById('detail-balance').textContent   = formatEur(balance);
-            document.getElementById('detail-balance').className     =
+            document.getElementById('detail-balance').textContent = formatEur(balance);
+            document.getElementById('detail-balance').className   =
                 'fines-detail-balance ' + (isZero ? 'fines-amount--zero' : 'fines-amount--debt');
 
             const listEl = document.getElementById('fines-ledger-list');
 
-            if (error) {
-                listEl.innerHTML = '<p class="muted-text">Fehler beim Laden.</p>';
-                return;
-            }
-            if (entries.length === 0) {
-                listEl.innerHTML = '<p class="muted-text">Noch keine Einträge.</p>';
-                return;
+            if (error) { listEl.innerHTML = '<p class="muted-text">Fehler beim Laden.</p>'; return; }
+            if (entries.length === 0) { listEl.innerHTML = '<p class="muted-text">Noch keine Einträge.</p>'; return; }
+
+            // Resolve appt:{uuid} notes to appointment titles in one batch fetch
+            const apptIds = [...new Set(
+                entries.map(e => e.note).filter(n => n && n.startsWith('appt:')).map(n => n.replace('appt:', ''))
+            )];
+
+            const apptTitleMap = {};
+            if (apptIds.length > 0) {
+                const { data: appts } = await supa
+                    .from('appointments')
+                    .select('id, title')
+                    .in('id', apptIds);
+                (appts || []).forEach(a => apptTitleMap[a.id] = a.title);
             }
 
             listEl.innerHTML = `
@@ -230,9 +238,19 @@
         <span class="fines-col-amount">Betrag</span>
     </div>
     ${entries.map(e => {
-        const isFine   = e.type === 'fine';
-        const dateStr  = new Date(e.created_at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
-        const reason   = [e.reason, e.note].filter(Boolean).join(' · ') || '–';
+        const isFine  = e.type === 'fine';
+        const dateStr = new Date(e.created_at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+        // Resolve note: replace appt:{uuid} with appointment title, hide otherwise
+        let noteDisplay = '';
+        if (e.note && e.note.startsWith('appt:')) {
+            const apptId = e.note.replace('appt:', '');
+            noteDisplay  = apptTitleMap[apptId] ? `(${apptTitleMap[apptId]})` : '';
+        } else if (e.note) {
+            noteDisplay = e.note;
+        }
+
+        const reason = [e.reason, noteDisplay].filter(Boolean).join(' · ') || '–';
         return `
 <div class="fines-table-row">
     <span class="fines-col-date">${dateStr}</span>
