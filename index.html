@@ -68,20 +68,22 @@
         <div class="menu-wrapper">
             <!-- Next Appointment Teaser -->
             <a href="schedule.html" id="next-appt-card" class="next-appt-card" style="display:none;">
-                <div class="next-appt-left">
-                    <span id="next-appt-type" class="appt-type-badge"></span>
-                    <div id="next-appt-title" class="next-appt-title"></div>
-                </div>
-                <div class="next-appt-center">
-                    <div id="next-appt-date" class="next-appt-date"></div>
-                    <div id="next-appt-time" class="next-appt-time"></div>
-                </div>
-                <div class="next-appt-right">
-                    <div class="next-appt-votes">
-                        <span>✅ <strong id="next-appt-yes">0</strong></span>
-                        <span>❌ <strong id="next-appt-no">0</strong></span>
+                <div class="next-appt-row">
+                    <div class="next-appt-left">
+                        <span id="next-appt-type" class="appt-type-badge"></span>
+                        <div id="next-appt-title" class="next-appt-title"></div>
                     </div>
-                    <div class="next-appt-arrow">»</div>
+                    <div class="next-appt-center">
+                        <div id="next-appt-date" class="next-appt-date"></div>
+                        <div id="next-appt-time" class="next-appt-time"></div>
+                    </div>
+                    <div class="next-appt-right">
+                        <div class="next-appt-votes">
+                            <span>✅ <strong id="next-appt-yes">0</strong></span>
+                            <span>❌ <strong id="next-appt-no">0</strong></span>
+                        </div>
+                        <div class="next-appt-arrow">»</div>
+                    </div>
                 </div>
             </a>
 
@@ -194,17 +196,32 @@
             // fines card — member + admin
             const cards     = document.getElementById('menu-cards');
             const finesCard = document.createElement('a');
+            finesCard.id        = 'fines-menu-card';
             finesCard.href      = 'fines.html';
             finesCard.className = 'menu-card menu-card--fines';
             finesCard.innerHTML = `
                 <div class="menu-card-icon">💸</div>
                 <div class="menu-card-body">
                     <div class="menu-card-title">STRAFEN</div>
-                    <div class="menu-card-sub">Übersicht · Verlauf · Saldo</div>
+                    <div class="menu-card-sub" id="fines-card-sub">Übersicht · Verlauf · Saldo</div>
                 </div>
                 <div class="menu-card-arrow">»</div>
             `;
             cards.appendChild(finesCard);
+
+            // Load personal fines balance into subtitle
+            if (user.player_id) {
+                supa.from('fines_ledger')
+                    .select('amount')
+                    .eq('player_id', user.player_id)
+                    .then(({ data }) => {
+                        const balance = (data || []).reduce((s, r) => s + parseFloat(r.amount), 0);
+                        const sub     = document.getElementById('fines-card-sub');
+                        if (!sub) return;
+                        const fmt = balance.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+                        sub.innerHTML = `Übersicht · Verlauf · <span style="color:${balance > 0 ? 'var(--red)' : 'var(--green)'}; font-weight:700;">${fmt}</span>`;
+                    });
+            }
 
             // admin: add admin card
             if (user.role === 'admin') {
@@ -251,6 +268,12 @@
             const yes = allVotes.filter(v => v.vote === 'yes').length;
             const no  = allVotes.filter(v => v.vote === 'no').length;
 
+            // Check if current user has voted
+            const currentUser  = getCurrentUser();
+            const myVote       = currentUser
+                ? allVotes.find(v => v.user_id === currentUser.id)
+                : true; // ipad / unknown — don't show warning
+
             const typeStyle = TYPE_COLORS[appt.type] || TYPE_COLORS.Event;
             const dateObj   = new Date(appt.date);
             const dateStr   = dateObj.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -264,7 +287,18 @@
             document.getElementById('next-appt-time').textContent        = timeStr + ' Uhr';
             document.getElementById('next-appt-yes').textContent         = yes;
             document.getElementById('next-appt-no').textContent          = no;
-            document.getElementById('next-appt-card').style.display      = 'flex';
+
+            const card = document.getElementById('next-appt-card');
+            card.style.display = 'flex';
+
+            // Vote reminder — highlight card and add full-width bottom bar
+            if (!myVote) {
+                card.classList.add('next-appt-card--unvoted');
+                const badge = document.createElement('div');
+                badge.className   = 'next-appt-vote-badge';
+                badge.innerHTML   = '⚠️ Noch nicht abgestimmt!';
+                card.appendChild(badge);
+            }
         }
 
         function logOut() {

@@ -3,7 +3,51 @@ const SUPABASE_URL = 'https://daejfzypbnwtucwftkzn.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_xajv6XFl28cNrdMSohDhjg_aDyMT3Bl';
 const supa = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-let players = [];
+let players    = [];
+let rawHistory = [];   // full unfiltered history — used by time filter
+
+// ── COMPUTE STATS FOR A PLAYER GIVEN A HISTORY SUBSET ──
+function computeStats(history) {
+    const totalGames = history.length;
+    const gamesWon   = history.filter(h => h.is_win).length;
+    const total180s  = history.reduce((sum, h) => sum + (h.one_eighties || 0), 0);
+    const total26s   = history.reduce((sum, h) => sum + (h.twenty_sixes  || 0), 0);
+    const avgGame    = totalGames > 0
+        ? (history.reduce((sum, h) => sum + h.avg_game,    0) / totalGames).toFixed(2)
+        : '0.00';
+    const avgPre170  = totalGames > 0
+        ? (history.reduce((sum, h) => sum + h.avg_pre_170, 0) / totalGames).toFixed(2)
+        : '0.00';
+    return {
+        totalGames,
+        gamesWon,
+        gamesLost: totalGames - gamesWon,
+        winRatio:  totalGames > 0 ? ((gamesWon / totalGames) * 100).toFixed(0) : 0,
+        total180s,
+        total26s,
+        avgGame,
+        avgPre170
+    };
+}
+
+// ── APPLY A TIME FILTER AND RE-RENDER LEADERBOARD ──
+function applyFilter(fromDate) {
+    const filtered = fromDate
+        ? rawHistory.filter(h => new Date(h.created_at) >= fromDate)
+        : rawHistory;
+
+    players = players.map(player => ({
+        ...player,
+        stats: computeStats(filtered.filter(h => h.player_id === player.id))
+    }));
+
+    players.sort((a, b) => {
+        if (b.stats.winRatio !== a.stats.winRatio) return b.stats.winRatio - a.stats.winRatio;
+        return b.stats.avgGame - a.stats.avgGame;
+    });
+
+    if (typeof updateStatsUI === 'function') updateStatsUI();
+}
 
 // --- DB ACTIONS ---
 async function fetchPlayers() {
@@ -19,39 +63,13 @@ async function fetchPlayers() {
     }
 
     const rawPlayers = pRes.data || [];
-    const rawHistory = hRes.data || [];
+    rawHistory       = hRes.data || [];
 
     // 2. Attach stats to each player object
-    players = rawPlayers.map(player => {
-        const history = rawHistory.filter(h => h.player_id === player.id);
-        const totalGames = history.length;
-        const gamesWon = history.filter(h => h.is_win).length;
-        const total180s = history.reduce((sum, h) => sum + (h.one_eighties || 0), 0);
-        const total26s = history.reduce((sum, h) => sum + (h.twenty_sixes || 0), 0);
-
-        // Calculate Lifetime Averages
-        const avgGame = totalGames > 0
-            ? (history.reduce((sum, h) => sum + h.avg_game, 0) / totalGames).toFixed(2)
-            : "0.00";
-
-        const avgPre170 = totalGames > 0
-            ? (history.reduce((sum, h) => sum + h.avg_pre_170, 0) / totalGames).toFixed(2)
-            : "0.00";
-
-        return {
-            ...player,
-            stats: {
-                totalGames,
-                gamesWon,
-                gamesLost: totalGames - gamesWon,
-                winRatio: totalGames > 0 ? ((gamesWon / totalGames) * 100).toFixed(0) : 0,
-                total180s,
-                total26s,
-                avgGame,
-                avgPre170
-            }
-        };
-    });
+    players = rawPlayers.map(player => ({
+        ...player,
+        stats: computeStats(rawHistory.filter(h => h.player_id === player.id))
+    }));
 
     players.sort((a, b) => {
         // 1. Primary Sort: Win Rate (Highest first)

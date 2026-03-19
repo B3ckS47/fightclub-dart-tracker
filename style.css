@@ -1513,13 +1513,6 @@ body {
     color: var(--green);
 }
 
-/* ── FINES MENU CARD ── */
-.menu-card--fines { border-top: 3px solid #ff4455; }
-.menu-card--fines:hover {
-    border-color: #ff4455;
-    box-shadow: 0 8px 32px rgba(255, 68, 85, 0.25);
-}
-
 /* ── FINES OVERVIEW ROWS ── */
 .fines-row {
     display: flex;
@@ -1860,6 +1853,8 @@ body {
 
 .menu-card--game:hover    { border-color: var(--accent); box-shadow: 0 8px 32px var(--accent-glow); }
 .menu-card--dashboard:hover { border-color: var(--green); box-shadow: 0 8px 32px rgba(41,216,124,0.25); }
+.menu-card--fines { border-top: 3px solid #ff4455; }
+.menu-card--fines:hover { border-color: #ff4455; box-shadow: 0 8px 32px rgba(255,68,85,0.25); }
 
 .menu-card-icon {
     font-size: 2.4rem;
@@ -2150,6 +2145,71 @@ body {
     color: #6a9fff;
 }
 
+/* ── LEADERBOARD FILTER BAR ── */
+.filter-bar {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.filter-btn {
+    font-family: var(--font-display);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    padding: 6px 14px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: var(--bg-element);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.filter-btn:hover {
+    border-color: var(--border-light);
+    color: var(--text-secondary);
+}
+
+.filter-btn--active {
+    background: var(--accent-dim);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+/* ── NEXT APPOINTMENT VOTE REMINDER ── */
+.next-appt-card--unvoted {
+    border-color: var(--red) !important;
+    box-shadow: 0 0 0 1px rgba(255,68,85,0.25), 0 4px 16px rgba(255,68,85,0.15);
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 0 !important;
+    padding-bottom: 0 !important;
+}
+
+.next-appt-card--unvoted .next-appt-left,
+.next-appt-card--unvoted .next-appt-center,
+.next-appt-card--unvoted .next-appt-right {
+    padding-bottom: 12px;
+}
+
+.next-appt-vote-badge {
+    width: 100%;
+    font-family: var(--font-display);
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-align: center;
+    color: var(--red);
+    background: rgba(255,68,85,0.1);
+    border-top: 1px solid rgba(255,68,85,0.3);
+    padding: 8px 16px;
+    margin: 0 -16px;
+    width: calc(100% + 32px);
+    border-radius: 0 0 var(--radius-md) var(--radius-md);
+}
+
 /* ── NEXT APPOINTMENT TEASER ── */
 .next-appt-card {
     display: flex;
@@ -2170,6 +2230,13 @@ body {
 .next-appt-card:hover {
     border-color: #60a5fa;
     box-shadow: 0 4px 16px rgba(96,165,250,0.15);
+}
+
+.next-appt-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    width: 100%;
 }
 
 .next-appt-left {

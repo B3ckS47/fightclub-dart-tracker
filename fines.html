@@ -80,7 +80,7 @@
                 <div class="divider"></div>
                 <div class="fines-add-form">
                     <div class="fines-add-row">
-                        <select id="fine-type" class="select-field">
+                        <select id="fine-type" class="select-field" onchange="onTypeChange()">
                             <option value="fine">💸 Strafe</option>
                             <option value="payment">✅ Zahlung</option>
                         </select>
@@ -267,6 +267,19 @@
                 '<option value="Sonstiges" data-amount="">Sonstiges</option>';
         }
 
+        // ── TOGGLE REASON FIELD BASED ON TYPE ──
+        function onTypeChange() {
+            const type      = document.getElementById('fine-type').value;
+            const reasonSel = document.getElementById('fine-reason');
+            const isPayment = type === 'payment';
+            reasonSel.disabled = isPayment;
+            reasonSel.style.opacity = isPayment ? '0.4' : '1';
+            if (isPayment) {
+                reasonSel.value = '';
+                document.getElementById('fine-amount').value = '';
+            }
+        }
+
         // ── PREFILL AMOUNT FROM REASON ──
         function prefillAmount() {
             const select = document.getElementById('fine-reason');
@@ -289,7 +302,7 @@
             };
 
             if (!amount || amount <= 0) return showMsg('Bitte einen gültigen Betrag eingeben.', 'var(--red)');
-            if (!reason)               return showMsg('Bitte einen Grund auswählen.',            'var(--red)');
+            if (type === 'fine' && !reason) return showMsg('Bitte einen Grund auswählen.', 'var(--red)');
 
             // Payments are stored as negative amounts
             const storedAmount = type === 'payment' ? -Math.abs(amount) : Math.abs(amount);

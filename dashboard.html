@@ -41,7 +41,13 @@
                 </div>
                 <div class="divider"></div>
                 <div>
-                    <h3 class="section-label">FlightClub Mitglieder</h3>
+                    <div class="filter-bar">
+                        <button class="filter-btn filter-btn--active" onclick="setFilter('all',    this)">Gesamt</button>
+                        <button class="filter-btn"                    onclick="setFilter('season', this)">Saison</button>
+                        <button class="filter-btn"                    onclick="setFilter('3m',     this)">3 Monate</button>
+                        <button class="filter-btn"                    onclick="setFilter('30d',    this)">30 Tage</button>
+                    </div>
+                    <h3 class="section-label" style="margin-top:14px;">FlightClub Mitglieder</h3>
                     <div id="player-list-box" class="player-list">
                         <p class="muted-text">Lade Mitglieder...</p>
                     </div>
@@ -124,6 +130,30 @@
             const isOpen = body.style.display !== 'none';
             body.style.display = isOpen ? 'none' : 'block';
             icon.textContent   = isOpen ? '▶' : '▼';
+        }
+
+        function setFilter(range, btn) {
+            // Update active button
+            document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('filter-btn--active'));
+            btn.classList.add('filter-btn--active');
+
+            const now = new Date();
+            let fromDate = null;
+
+            if (range === '30d') {
+                fromDate = new Date(now);
+                fromDate.setDate(fromDate.getDate() - 30);
+            } else if (range === '3m') {
+                fromDate = new Date(now);
+                fromDate.setMonth(fromDate.getMonth() - 3);
+            } else if (range === 'season') {
+                // Season runs Sept 1 → May 31; pick the right year
+                const sept = new Date(now.getFullYear(), 8, 1); // Sept 1 this year
+                fromDate   = now >= sept ? sept : new Date(now.getFullYear() - 1, 8, 1);
+            }
+            // 'all' → fromDate stays null
+
+            applyFilter(fromDate);
         }
     </script>
     <script src="database.js"></script>

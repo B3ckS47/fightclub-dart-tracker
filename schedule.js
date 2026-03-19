@@ -24,13 +24,19 @@ document.addEventListener('DOMContentLoaded', () => {
     loadAppointments();
 });
 
+// ── ABSENCE FINE CONSTANTS ──
+const ABSENCE_FINES = {
+    Training: { id: 'b9c3c0aa-fc23-4106-b6b5-574bcd098450', name: 'Nicht An- oder Abmelden: Training', amount: 5.00  },
+    Gameday:  { id: 'ce73932c-fbc0-4edc-b5fc-ea3327124d77', name: 'Nicht An- oder Abmelden: Spiel',    amount: 20.00 }
+};
+
 // ── LOAD ALL APPOINTMENTS ──
 async function loadAppointments() {
     const [apptRes, votesRes, playersRes, usersRes] = await Promise.all([
         supa.from('appointments').select('*').order('date', { ascending: true }),
         supa.from('appointment_votes').select('*'),
         supa.from('players').select('id, name').order('name'),
-        supa.from('app_users').select('player_id')
+        supa.from('app_users').select('id, player_id, role')
     ]);
 
     if (apptRes.error) {
@@ -40,7 +46,8 @@ async function loadAppointments() {
 
     // Identify guests: players whose id is NOT linked to any app_user
     allPlayers = playersRes.data || [];
-    const linkedIds = (usersRes.data || []).map(u => u.player_id).filter(Boolean);
+    const allUsers  = usersRes.data || [];
+    const linkedIds = allUsers.map(u => u.player_id).filter(Boolean);
     memberPlayerIds = new Set(linkedIds);
 
     const allVotes = votesRes.data || [];
@@ -50,6 +57,63 @@ async function loadAppointments() {
 
     renderAppointments(upcoming, allVotes, 'upcoming-list', false);
     renderAppointments(past,     allVotes, 'past-list',     true);
+
+    // Check for absence fines on past Training / Gameday appointments
+    await checkAbsenceFines(past, allVotes, allUsers);
+}
+
+// ── CHECK & INSERT ABSENCE FINES ──
+async function checkAbsenceFines(pastAppointments, allVotes, allUsers) {
+    // Only relevant appointment types
+    const relevant = pastAppointments.filter(a => a.type === 'Training' || a.type === 'Gameday');
+    if (relevant.length === 0) return;
+
+    // Only members and admins with a linked player_id
+    const eligibleUsers = allUsers.filter(u =>
+        (u.role === 'member' || u.role === 'admin') && u.player_id
+    );
+    if (eligibleUsers.length === 0) return;
+
+    // Fetch existing absence fines — identified by note containing 'appt:{id}'
+    const { data: existingFines } = await supa
+        .from('fines_ledger')
+        .select('player_id, note')
+        .in('reason', [ABSENCE_FINES.Training.name, ABSENCE_FINES.Gameday.name]);
+
+    // Build a Set of 'player_id:appt_id' already fined — for O(1) lookup
+    const alreadyFined = new Set(
+        (existingFines || [])
+            .filter(f => f.note && f.note.startsWith('appt:'))
+            .map(f => `${f.player_id}:${f.note.replace('appt:', '')}`)
+    );
+
+    // Build a Set of 'user_id:appt_id' that have a vote (yes or no)
+    const votedSet = new Set(allVotes.map(v => `${v.user_id}:${v.appointment_id}`));
+
+    const rowsToInsert = [];
+
+    for (const appt of relevant) {
+        const fine = ABSENCE_FINES[appt.type];
+        for (const user of eligibleUsers) {
+            const hasVoted  = votedSet.has(`${user.id}:${appt.id}`);
+            const hasFinedKey = `${user.player_id}:${appt.id}`;
+            if (!hasVoted && !alreadyFined.has(hasFinedKey)) {
+                rowsToInsert.push({
+                    player_id:  user.player_id,
+                    amount:     fine.amount,
+                    type:       'fine',
+                    reason:     fine.name,
+                    note:       `appt:${appt.id}`,
+                    created_by: 'system'
+                });
+            }
+        }
+    }
+
+    if (rowsToInsert.length === 0) return;
+
+    const { error } = await supa.from('fines_ledger').insert(rowsToInsert);
+    if (error) console.error('Absence fine insert error:', error.message);
 }
 
 // ── RENDER APPOINTMENT CARDS ──
