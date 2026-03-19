@@ -13,6 +13,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <script src="config.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -49,27 +50,37 @@
 
             <div class="divider"></div>
 
-            <!-- User List -->
-            <div>
-                <h3 class="section-label">Alle Benutzer</h3>
-                <div id="user-list">
-                    <p class="muted-text">Lade Benutzer...</p>
+            <!-- User List (collapsible) -->
+            <div class="fold-section" style="border-top:none;">
+                <div class="fold-header" onclick="toggleAdminFold('admin-users', 'icon-users')">
+                    <h3 class="section-label" style="margin:0;">Alle Benutzer</h3>
+                    <span class="fold-icon" id="icon-users">▶</span>
+                </div>
+                <div id="admin-users" class="fold-body" style="display:none;">
+                    <div id="user-list" style="margin-top:10px;">
+                        <p class="muted-text">Lade Benutzer...</p>
+                    </div>
                 </div>
             </div>
 
             <div class="divider"></div>
 
-            <!-- Fines Reasons -->
-            <div>
-                <h3 class="section-label">Strafengründe</h3>
-                <div class="admin-form" style="margin-bottom:12px;">
-                    <input type="text"   id="new-reason-name"   placeholder="Bezeichnung" class="input-field">
-                    <input type="number" id="new-reason-amount" placeholder="Betrag (€)" min="0.01" step="0.01" class="input-field">
-                    <button onclick="addReason()" class="btn btn-accent">HINZUFÜGEN</button>
+            <!-- Fines Reasons (collapsible) -->
+            <div class="fold-section" style="border-top:none;">
+                <div class="fold-header" onclick="toggleAdminFold('admin-reasons', 'icon-reasons')">
+                    <h3 class="section-label" style="margin:0;">Strafengründe</h3>
+                    <span class="fold-icon" id="icon-reasons">▶</span>
                 </div>
-                <p id="reasons-msg" class="admin-msg"></p>
-                <div id="reasons-list">
-                    <p class="muted-text">Lade Gründe...</p>
+                <div id="admin-reasons" class="fold-body" style="display:none;">
+                    <div class="admin-form" style="margin:10px 0 12px;">
+                        <input type="text"   id="new-reason-name"   placeholder="Bezeichnung" class="input-field">
+                        <input type="number" id="new-reason-amount" placeholder="Betrag (€)" min="0.01" step="0.01" class="input-field">
+                        <button onclick="addReason()" class="btn btn-accent">HINZUFÜGEN</button>
+                    </div>
+                    <p id="reasons-msg" class="admin-msg"></p>
+                    <div id="reasons-list">
+                        <p class="muted-text">Lade Gründe...</p>
+                    </div>
                 </div>
             </div>
 
@@ -77,8 +88,8 @@
     </div>
 
     <script>
-        const SUPABASE_URL = 'https://daejfzypbnwtucwftkzn.supabase.co';
-        const SUPABASE_KEY = 'sb_publishable_xajv6XFl28cNrdMSohDhjg_aDyMT3Bl';
+        const SUPABASE_URL = window.SUPABASE_URL;
+        const SUPABASE_KEY = window.SUPABASE_KEY;
         const supa = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         const SESSION_KEY = "fc47_user";
 
@@ -87,6 +98,14 @@
         const currentUser = raw ? JSON.parse(raw) : null;
         if (!currentUser || currentUser.role !== 'admin') {
             window.location.href = 'index.html';
+        }
+
+        function toggleAdminFold(bodyId, iconId) {
+            const body   = document.getElementById(bodyId);
+            const icon   = document.getElementById(iconId);
+            const isOpen = body.style.display !== 'none';
+            body.style.display = isOpen ? 'none' : 'block';
+            icon.textContent   = isOpen ? '▶' : '▼';
         }
 
         // ── LOAD USERS ──
@@ -101,7 +120,13 @@
                 return;
             }
 
-            document.getElementById('user-list').innerHTML = data.map(u => `
+            // Sort: admins first, then members, alphabetically within each group
+            const sorted = [...data].sort((a, b) => {
+                if (a.role !== b.role) return a.role === 'admin' ? -1 : 1;
+                return a.username.localeCompare(b.username);
+            });
+
+            document.getElementById('user-list').innerHTML = sorted.map(u => `
 <div class="admin-user-row">
     <div class="admin-user-info">
         <div class="admin-user-name">${u.username}</div>
