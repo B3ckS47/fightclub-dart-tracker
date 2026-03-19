@@ -59,7 +59,7 @@
             <div class="nav-inner nav-inner--default">
                 <span class="nav-brand">FLIGHTCLUB</span>
                 <div class="nav-links">
-                    <span id="menu-user-display" class="menu-user-badge"></span>
+                    <a href="settings.html" id="menu-user-display" class="menu-user-badge menu-user-badge--link"></a>
                     <button onclick="logOut()" class="nav-btn">Logout</button>
                 </div>
             </div>
@@ -81,7 +81,7 @@
                         <span>✅ <strong id="next-appt-yes">0</strong></span>
                         <span>❌ <strong id="next-appt-no">0</strong></span>
                     </div>
-                    <div class="next-appt-arrow">→</div>
+                    <div class="next-appt-arrow">»</div>
                 </div>
             </a>
 
@@ -97,7 +97,7 @@
                         <div class="menu-card-title">NEUES SPIEL</div>
                         <div class="menu-card-sub">501 · 301 · Einzel · Doppel</div>
                     </div>
-                    <div class="menu-card-arrow">→</div>
+                    <div class="menu-card-arrow">»</div>
                 </a>
 
                 <a href="dashboard.html" class="menu-card menu-card--dashboard" id="dashboard-card">
@@ -106,7 +106,7 @@
                         <div class="menu-card-title">DASHBOARD</div>
                         <div class="menu-card-sub">Statistiken · Leaderboard · Profile</div>
                     </div>
-                    <div class="menu-card-arrow">→</div>
+                    <div class="menu-card-arrow">»</div>
                 </a>
 
                 <!-- Admin card — injected by JS if role === admin -->
@@ -203,7 +203,7 @@
                         <div class="menu-card-title">ADMIN</div>
                         <div class="menu-card-sub">Benutzer · Rollen · Verwaltung</div>
                     </div>
-                    <div class="menu-card-arrow">→</div>
+                    <div class="menu-card-arrow">»</div>
                 `;
                 cards.appendChild(adminCard);
             }

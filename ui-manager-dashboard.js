@@ -41,24 +41,84 @@ async function openPlayerProfile(playerId) {
     const player = players.find(p => p.id === playerId);
     if (!player) return;
 
-    const summaryBox  = document.getElementById('profile-stats-summary');
-    const historyBox  = document.getElementById('profile-history-list');
-    const advancedBox = document.getElementById('profile-advanced-stats');
+    const summaryBox    = document.getElementById('profile-stats-summary');
+    const historyBox    = document.getElementById('profile-history-list');
+    const advancedBox   = document.getElementById('profile-advanced-stats');
+    const attendCard    = document.getElementById('profile-attendance-card');
+    const attendList    = document.getElementById('profile-attendance-list');
 
     document.getElementById('profile-name').innerText = player.name;
     const delBtn = document.getElementById('delete-player-btn');
     if (delBtn) delBtn.onclick = () => deletePlayer(playerId, player.name);
 
     showPage('player-profile-view');
-    historyBox.innerHTML = '<p class="muted-text" style="padding:10px 0;">Lade Matches…</p>';
+    historyBox.innerHTML  = '<p class="muted-text" style="padding:10px 0;">Lade Matches…</p>';
+    attendList.innerHTML  = '<p class="muted-text">Lade Termine…</p>';
+    attendCard.style.display = 'none';
 
-    const { data: history, error } = await supa
-        .from('game_history').select('*')
-        .eq('player_id', playerId)
-        .order('created_at', { ascending: false })
-        .limit(10);
+    // ── FETCH ALL DATA IN PARALLEL ──
+    const [histRes, userRes] = await Promise.all([
+        supa.from('game_history').select('*')
+            .eq('player_id', playerId)
+            .order('created_at', { ascending: false })
+            .limit(10),
+        supa.from('app_users').select('id')
+            .eq('player_id', playerId)
+            .maybeSingle()
+    ]);
 
-    if (error || !history || history.length === 0) {
+    const history = histRes.data || [];
+
+    // ── ATTENDANCE ──
+    // A member votes with their app_users.id; a guest votes with their players.id
+    const voteUserId = userRes.data ? userRes.data.id : playerId;
+
+    const [votesRes, apptRes] = await Promise.all([
+        supa.from('appointment_votes').select('appointment_id')
+            .eq('user_id', voteUserId)
+            .eq('vote', 'yes'),
+        supa.from('appointments').select('*')
+            .lt('date', new Date().toISOString())
+            .order('date', { ascending: false })
+            .limit(20)
+    ]);
+
+    const confirmedIds  = new Set((votesRes.data || []).map(v => v.appointment_id));
+    const pastAppts     = apptRes.data || [];
+    const attended      = pastAppts.filter(a => confirmedIds.has(a.id)).slice(0, 5);
+
+    if (attended.length > 0) {
+        const TYPE_COLORS = {
+            Training:   { bg: 'rgba(59,130,246,0.15)', color: '#60a5fa', label: 'TRAINING' },
+            Tournament: { bg: 'rgba(245,166,35,0.15)',  color: '#f5a623', label: 'TURNIER'  },
+            Event:      { bg: 'rgba(168,85,247,0.15)',  color: '#a855f7', label: 'EVENT'    }
+        };
+        attendCard.style.display = 'block';
+        attendList.innerHTML = attended.map(a => {
+            const ts   = TYPE_COLORS[a.type] || TYPE_COLORS.Event;
+            const d    = new Date(a.date);
+            const date = d.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' });
+            const time = d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+            return `
+<div class="attend-row">
+    <span class="attend-type-badge" style="background:${ts.bg};color:${ts.color};">${ts.label}</span>
+    <div class="attend-info">
+        <div class="attend-title">${a.title}</div>
+        ${a.place ? `<div class="attend-place">📍 ${a.place}</div>` : ''}
+    </div>
+    <div class="attend-date">
+        <div class="attend-date-str">${date}</div>
+        <div class="attend-time-str">${time} Uhr</div>
+    </div>
+</div>`;
+        }).join('');
+    } else {
+        attendCard.style.display = 'block';
+        attendList.innerHTML = '<p class="muted-text">Keine bestätigten Termine gefunden.</p>';
+    }
+
+    // ── GAME HISTORY ──
+    if (histRes.error || history.length === 0) {
         summaryBox.innerHTML = '<p class="muted-text">Noch keine Statistiken.</p>';
         historyBox.innerHTML = '<p class="muted-text" style="padding:20px 0;">Keine Matches gefunden.</p>';
         return;
@@ -106,8 +166,8 @@ async function openPlayerProfile(playerId) {
 <div class="adv-box"><div class="adv-label">Legs (W / L)</div><div class="adv-value">${totalLegsWon} / ${totalLegsLost}</div></div>
 <div class="adv-box"><div class="adv-label">Avg to 170</div><div class="adv-value">${avgTo170}</div></div>
 <div class="adv-box"><div class="adv-label">Visits to Close</div><div class="adv-value">${avgVisitsToClose}</div></div>
-<div class="adv-box"><div class="adv-label">High Finishes</div><div class="adv-value" style="color:var(--accent)">🎯 ${totalHighFinishes}</div></div>
-<div class="adv-box"><div class="adv-label">Highest Finish</div><div class="adv-value" style="color:var(--accent)">${highestFinish > 0 ? '🏆 ' + highestFinish : '–'}</div></div>`;
+<div class="adv-box"><div class="adv-label">High Finishes</div><div class="adv-value" style="color:var(--accent)">${totalHighFinishes}</div></div>
+<div class="adv-box"><div class="adv-label">Highest Finish</div><div class="adv-value" style="color:var(--accent)">${highestFinish > 0 ? ' ' + highestFinish : '–'}</div></div>`;
 
     historyBox.innerHTML = history.slice(0, 5).map(h => `
 <div class="match-row ${h.is_win ? 'match-row--win' : 'match-row--loss'}">

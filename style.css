@@ -149,6 +149,7 @@ body {
     color: var(--text-secondary);
     cursor: pointer;
     transition: all 0.18s ease;
+    text-decoration: none;
 }
 
 .nav-btn:hover {
@@ -243,6 +244,63 @@ body {
     font-weight: 800;
     letter-spacing: 4px;
     color: var(--text-muted);
+}
+
+/* ── GAME MODE TOGGLE (Official / Fun) ── */
+.game-mode-toggle {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    justify-content: center;
+    padding: 14px 0 6px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.game-mode-track {
+    position: relative;
+    width: 48px;
+    height: 26px;
+    border-radius: 13px;
+    background: var(--bg-element);
+    border: 1px solid var(--border);
+    transition: background 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+    flex-shrink: 0;
+}
+
+.game-mode-track--on {
+    background: var(--accent);
+    border-color: var(--accent);
+    box-shadow: 0 0 10px var(--accent-glow);
+}
+
+.game-mode-thumb {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    transition: transform 0.25s ease, background 0.25s ease;
+}
+
+.game-mode-track--on .game-mode-thumb {
+    transform: translateX(22px);
+    background: #000;
+}
+
+.game-mode-label {
+    font-family: var(--font-display);
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    color: var(--text-secondary);
+    transition: color 0.25s ease;
+}
+
+.game-mode-toggle:has(.game-mode-track--on) .game-mode-label {
+    color: var(--accent);
 }
 
 /* ── OPTIONS ROW ── */
@@ -1125,6 +1183,13 @@ body {
         padding: 13px 16px;
     }
 
+    /* Game mode toggle — left column */
+    .game-mode-toggle {
+        grid-column: 1;
+        justify-content: flex-start;
+        padding: 8px 0 4px;
+    }
+
     /* Start button — right column bottom */
     #setup-view .btn-primary {
         grid-column: 2;
@@ -1328,6 +1393,117 @@ body {
     .card { padding: 32px 36px; }
 }
 
+/* ── ATTENDANCE CARD ── */
+.attend-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 14px;
+    background: var(--bg-element);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    margin-bottom: 8px;
+}
+
+.attend-type-badge {
+    font-family: var(--font-display);
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    padding: 3px 8px;
+    border-radius: 20px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.attend-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.attend-title {
+    font-family: var(--font-display);
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.attend-place {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+.attend-date {
+    text-align: right;
+    flex-shrink: 0;
+}
+
+.attend-date-str {
+    font-family: var(--font-display);
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    letter-spacing: 0.3px;
+}
+
+.attend-time-str {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-top: 1px;
+}
+
+/* ── FOLDABLE SECTIONS (player profile) ── */
+.fold-section {
+    border-top: 1px solid var(--border);
+    margin-bottom: 4px;
+}
+
+.fold-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 13px 0;
+    cursor: pointer;
+    user-select: none;
+}
+
+.fold-header:hover .subsection-title--fold {
+    color: var(--text-secondary);
+}
+
+.subsection-title--fold {
+    font-family: var(--font-display);
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin: 0;
+    border: none;
+    padding: 0;
+    transition: color 0.15s;
+}
+
+.fold-icon {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    transition: color 0.15s;
+    flex-shrink: 0;
+}
+
+.fold-header:hover .fold-icon {
+    color: var(--text-secondary);
+}
+
+.fold-body {
+    padding-bottom: 14px;
+}
+
 /* ── PERFORMANCE CHART ── */
 .profile-chart-box {
     background: var(--bg-surface);
@@ -1490,6 +1666,99 @@ body {
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     background: var(--accent-dim);
+}
+
+.menu-user-badge--link {
+    text-decoration: none;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+}
+
+.menu-user-badge--link:hover {
+    border-color: var(--accent);
+    background: rgba(105, 105, 105, 0.2);
+}
+
+/* ── SETTINGS PAGE ── */
+#nav-settings {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    height: var(--nav-height);
+    background: rgba(13, 13, 15, 0.92);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+}
+
+.settings-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 20px 4px 8px;
+    margin-bottom: 4px;
+}
+
+.settings-avatar {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    background: var(--accent-dim);
+    border: 2px solid var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-display);
+    font-size: 1.2rem;
+    font-weight: 800;
+    color: var(--accent);
+    flex-shrink: 0;
+    letter-spacing: 1px;
+}
+
+.settings-user-info {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.settings-username {
+    font-family: var(--font-display);
+    font-size: 1.4rem;
+    font-weight: 800;
+    letter-spacing: 2px;
+    color: var(--text-primary);
+}
+
+.settings-role-badge {
+    width: fit-content;
+}
+
+.settings-form {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.settings-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.settings-label {
+    font-family: var(--font-display);
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.settings-msg {
+    font-size: 0.85rem;
+    min-height: 20px;
+    margin-top: 10px;
+    text-align: center;
 }
 
 /* ── ADMIN CARD ── */
@@ -1789,45 +2058,135 @@ body {
 /* ── VOTE DISPLAY ── */
 .appt-votes {
     display: flex;
-    gap: 20px;
+    flex-direction: row;
+    gap: 0;
     margin-bottom: 14px;
-    padding: 10px 14px;
     background: var(--bg-card);
     border-radius: var(--radius-sm);
     border: 1px solid var(--border);
+    overflow: hidden;
 }
 
-.vote-group {
+.vote-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 14px;
+}
+
+.vote-col--yes { border-right: 1px solid var(--border); }
+
+.vote-col-header {
     display: flex;
     align-items: center;
     gap: 6px;
-    flex-wrap: wrap;
 }
 
-.vote-icon { font-size: 0.9rem; }
+.vote-icon { font-size: 0.85rem; }
 
 .vote-count {
     font-family: var(--font-display);
-    font-size: 1rem;
-    font-weight: 700;
-    color: var(--text-primary);
+    font-size: 1.1rem;
+    font-weight: 800;
     min-width: 16px;
 }
 
-.vote-names {
+.vote-count--yes { color: var(--green); }
+.vote-count--no  { color: var(--red); }
+
+.vote-names--col {
     display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
+    flex-direction: column;
+    gap: 5px;
 }
 
 .vote-name {
-    font-size: 0.72rem;
-    color: var(--text-muted);
-    background: var(--bg-element);
-    padding: 2px 7px;
-    border-radius: 10px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: var(--radius-sm);
     border: 1px solid var(--border);
+    text-align: center;
 }
+
+.vote-name--yes {
+    color: var(--green);
+    background: var(--green-dim);
+    border-color: rgba(41, 216, 124, 0.3);
+}
+
+.vote-name--no {
+    color: var(--red);
+    background: var(--red-dim);
+    border-color: rgba(255, 68, 85, 0.3);
+}
+
+.vote-none {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.vote-divider { display: none; }
+
+/* ── GUEST VOTE ROW ── */
+.guest-vote-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-top: 8px;
+}
+
+.select-guest {
+    flex: 1;
+    padding: 9px 12px;
+    font-size: 0.85rem;
+}
+
+.btn-vote--guest {
+    flex-shrink: 0;
+    padding: 9px 16px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-light);
+    background: var(--bg-element);
+    color: var(--text-secondary);
+    font-family: var(--font-display);
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+}
+
+.btn-vote--guest:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+    border-color: var(--accent);
+}
+
+/* Guest name pill extras */
+.vote-name--guest {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+}
+
+.vote-guest-remove {
+    background: none;
+    border: none;
+    color: var(--green);
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 0 0 2px;
+    opacity: 0.6;
+    transition: opacity 0.15s;
+    flex-shrink: 0;
+}
+
+.vote-guest-remove:hover { opacity: 1; }
 
 /* ── VOTE BUTTONS ── */
 .appt-actions {
@@ -1874,15 +2233,18 @@ body {
 
 /* ── PAST SECTION HEADER ── */
 .past-header {
+    position: relative;
     display: flex;
-    justify-content: space-between;
     align-items: center;
+    justify-content: center;
     cursor: pointer;
     padding: 4px 0;
     user-select: none;
 }
 
 .past-toggle-icon {
+    position: absolute;
+    right: 0;
     font-size: 0.8rem;
     color: var(--text-muted);
 }

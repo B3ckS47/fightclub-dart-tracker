@@ -22,7 +22,7 @@
         <div class="nav-inner nav-inner--default">
             <span class="nav-brand">FLIGHTCLUB</span>
             <div class="nav-links">
-                <a href="index.html" class="nav-btn">← Menü</a>
+                <a href="index.html" class="nav-btn">« Menü</a>
             </div>
         </div>
     </nav>
@@ -53,30 +53,74 @@
         <div id="player-profile-view" class="page">
             <div class="card">
                 <div class="profile-header">
-                    <button onclick="showPage('stats-page')" class="btn btn-ghost">← Zurück</button>
+                    <button onclick="showPage('stats-page')" class="btn btn-ghost">« Zurück</button>
                     <h2 id="profile-name" class="profile-name-title">Player Name</h2>
                     <div style="width:80px;"></div>
                 </div>
                 <div id="profile-stats-summary" class="stats-grid"></div>
-                <h3 class="subsection-title">Advanced Analytics</h3>
-                <div id="profile-advanced-stats" class="advanced-grid"></div>
 
-                <!-- Performance Chart -->
-                <div id="profile-chart-section" style="display:none;">
-                    <h3 class="subsection-title">Performance · Last 5 Games</h3>
-                    <div id="profile-chart" class="profile-chart-box"></div>
+                <!-- Advanced Analytics (foldable) -->
+                <div class="fold-section">
+                    <div class="fold-header" onclick="toggleFold('fold-advanced')">
+                        <h3 class="subsection-title subsection-title--fold">Advanced Analytics</h3>
+                        <span class="fold-icon" id="fold-advanced-icon">▶</span>
+                    </div>
+                    <div id="fold-advanced" class="fold-body" style="display:none;">
+                        <div id="profile-advanced-stats" class="advanced-grid"></div>
+                    </div>
                 </div>
 
-                <h3 class="subsection-title">Recent Match History</h3>
-                <div id="profile-history-list"></div>
+                <!-- Performance Chart (foldable) -->
+                <div class="fold-section" id="profile-chart-section" style="display:none;">
+                    <div class="fold-header" onclick="toggleFold('fold-chart')">
+                        <h3 class="subsection-title subsection-title--fold">Performance · Last 5 Games</h3>
+                        <span class="fold-icon" id="fold-chart-icon">▶</span>
+                    </div>
+                    <div id="fold-chart" class="fold-body" style="display:none;">
+                        <div id="profile-chart" class="profile-chart-box"></div>
+                    </div>
+                </div>
+
+                <!-- Match History (foldable) -->
+                <div class="fold-section">
+                    <div class="fold-header" onclick="toggleFold('fold-history')">
+                        <h3 class="subsection-title subsection-title--fold">Recent Match History</h3>
+                        <span class="fold-icon" id="fold-history-icon">▶</span>
+                    </div>
+                    <div id="fold-history" class="fold-body" style="display:none;">
+                        <div id="profile-history-list"></div>
+                    </div>
+                </div>
                 <div class="danger-zone" id="danger-zone" style="display:none;">
                     <button id="delete-player-btn" class="btn btn-danger-outline">DELETE PLAYER PROFILE</button>
                 </div>
             </div>
+
+            <!-- ATTENDANCE CARD -->
+            <div class="card" id="profile-attendance-card" style="display:none;">
+                <div class="fold-section" style="border-top:none;">
+                    <div class="fold-header" onclick="toggleFold('fold-attendance')">
+                        <h2 class="card-title" style="margin:0;">ANWESENHEIT</h2>
+                        <span class="fold-icon" id="fold-attendance-icon">▶</span>
+                    </div>
+                    <div id="fold-attendance" class="fold-body" style="display:none;">
+                        <div class="divider" style="margin-top:0;"></div>
+                        <div id="profile-attendance-list"></div>
+                    </div>
+                </div>
+            </div>
+
         </div>
 
-    </div>
-
+    <script>
+        function toggleFold(id) {
+            const body = document.getElementById(id);
+            const icon = document.getElementById(id + '-icon');
+            const isOpen = body.style.display !== 'none';
+            body.style.display = isOpen ? 'none' : 'block';
+            icon.textContent   = isOpen ? '▶' : '▼';
+        }
+    </script>
     <script src="database.js"></script>
     <script src="ui-manager-dashboard.js"></script>
 

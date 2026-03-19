@@ -11,8 +11,12 @@ const TYPE_COLORS = {
     Event:      { bg: 'rgba(168,85,247,0.15)',  color: '#a855f7', label: 'EVENT'    }
 };
 
+// All players from the players table
+let allPlayers = [];
+// IDs of players that have a linked app_user (i.e. NOT guests)
+let memberPlayerIds = new Set();
+
 document.addEventListener('DOMContentLoaded', () => {
-    // Show create form for admins
     if (currentUser && currentUser.role === 'admin') {
         document.getElementById('admin-create-section').style.display = 'block';
     }
@@ -21,22 +25,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ── LOAD ALL APPOINTMENTS ──
 async function loadAppointments() {
-    const { data: appointments, error } = await supa
-        .from('appointments')
-        .select('*')
-        .order('date', { ascending: true });
+    const [apptRes, votesRes, playersRes, usersRes] = await Promise.all([
+        supa.from('appointments').select('*').order('date', { ascending: true }),
+        supa.from('appointment_votes').select('*'),
+        supa.from('players').select('id, name').order('name'),
+        supa.from('app_users').select('player_id')
+    ]);
 
-    if (error) {
+    if (apptRes.error) {
         document.getElementById('upcoming-list').innerHTML = '<p class="muted-text">Fehler beim Laden.</p>';
         return;
     }
 
-    const { data: votes } = await supa.from('appointment_votes').select('*');
-    const allVotes = votes || [];
+    // Identify guests: players whose id is NOT linked to any app_user
+    allPlayers = playersRes.data || [];
+    const linkedIds = (usersRes.data || []).map(u => u.player_id).filter(Boolean);
+    memberPlayerIds = new Set(linkedIds);
 
+    const allVotes = votesRes.data || [];
     const now      = new Date();
-    const upcoming = appointments.filter(a => new Date(a.date) >= now);
-    const past     = appointments.filter(a => new Date(a.date) <  now).reverse();
+    const upcoming = apptRes.data.filter(a => new Date(a.date) >= now);
+    const past     = apptRes.data.filter(a => new Date(a.date) <  now).reverse();
 
     renderAppointments(upcoming, allVotes, 'upcoming-list', false);
     renderAppointments(past,     allVotes, 'past-list',     true);
@@ -51,16 +60,23 @@ function renderAppointments(appointments, allVotes, containerId, isPast) {
         return;
     }
 
+    // All guests = players with no linked app_user
+    const guests = allPlayers.filter(p => !memberPlayerIds.has(p.id));
+
     container.innerHTML = appointments.map(appt => {
-        const votes      = allVotes.filter(v => v.appointment_id === appt.id);
-        const attending  = votes.filter(v => v.vote === 'yes');
-        const declining  = votes.filter(v => v.vote === 'no');
-        const myVote     = currentUser ? votes.find(v => v.user_id === currentUser.id) : null;
-        const typeStyle  = TYPE_COLORS[appt.type] || TYPE_COLORS.Event;
-        const dateObj    = new Date(appt.date);
-        const dateStr    = dateObj.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' });
-        const timeStr    = dateObj.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-        const canVote    = !isPast && currentUser && (currentUser.role === 'admin' || currentUser.role === 'member');
+        const votes     = allVotes.filter(v => v.appointment_id === appt.id);
+        const attending = votes.filter(v => v.vote === 'yes');
+        const declining = votes.filter(v => v.vote === 'no');
+        const myVote    = currentUser ? votes.find(v => v.user_id === currentUser.id) : null;
+        const typeStyle = TYPE_COLORS[appt.type] || TYPE_COLORS.Event;
+        const dateObj   = new Date(appt.date);
+        const dateStr   = dateObj.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' });
+        const timeStr   = dateObj.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+        const canVote   = !isPast && currentUser && (currentUser.role === 'admin' || currentUser.role === 'member');
+
+        // Guests already added to this appointment
+        const guestVotedIds    = new Set(votes.filter(v => v.is_guest).map(v => v.user_id));
+        const availableGuests  = guests.filter(g => !guestVotedIds.has(g.id));
 
         return `
 <div class="appt-card ${isPast ? 'appt-card--past' : ''}">
@@ -77,15 +93,32 @@ function renderAppointments(appointments, allVotes, containerId, isPast) {
     </div>
 
     <div class="appt-votes">
-        <div class="vote-group">
-            <span class="vote-icon">✅</span>
-            <span class="vote-count">${attending.length}</span>
-            <div class="vote-names">${attending.map(v => `<span class="vote-name">${v.username}</span>`).join('')}</div>
+        <div class="vote-col vote-col--yes">
+            <div class="vote-col-header">
+                <span class="vote-icon">✅</span>
+                <span class="vote-count vote-count--yes">${attending.length}</span>
+            </div>
+            <div class="vote-names vote-names--col">
+                ${attending.length > 0
+                    ? attending.map(v => `
+                        <span class="vote-name vote-name--yes${v.is_guest ? ' vote-name--guest' : ''}">
+                            ${v.is_guest ? '👤 ' : ''}${v.username}${canVote && v.is_guest
+                                ? `<button class="vote-guest-remove" onclick="removeGuestVote('${appt.id}', '${v.user_id}')" title="Entfernen">×</button>`
+                                : ''}
+                        </span>`).join('')
+                    : '<span class="vote-none">–</span>'}
+            </div>
         </div>
-        <div class="vote-group">
-            <span class="vote-icon">❌</span>
-            <span class="vote-count">${declining.length}</span>
-            <div class="vote-names">${declining.map(v => `<span class="vote-name">${v.username}</span>`).join('')}</div>
+        <div class="vote-col vote-col--no">
+            <div class="vote-col-header">
+                <span class="vote-icon">❌</span>
+                <span class="vote-count vote-count--no">${declining.length}</span>
+            </div>
+            <div class="vote-names vote-names--col">
+                ${declining.length > 0
+                    ? declining.map(v => `<span class="vote-name vote-name--no">${v.username}</span>`).join('')
+                    : '<span class="vote-none">–</span>'}
+            </div>
         </div>
     </div>
 
@@ -99,7 +132,17 @@ function renderAppointments(appointments, allVotes, containerId, isPast) {
             class="btn-vote btn-vote--no ${myVote && myVote.vote === 'no' ? 'btn-vote--active-no' : ''}">
             ❌ Absage
         </button>
-    </div>` : ''}
+    </div>
+    ${availableGuests.length > 0 ? `
+    <div class="guest-vote-row">
+        <select id="guest-select-${appt.id}" class="select-field select-guest">
+            <option value="">👤 Gast auswählen…</option>
+            ${availableGuests.map(g => `<option value="${g.id}">${g.name}</option>`).join('')}
+        </select>
+        <button onclick="addGuestVote('${appt.id}')" class="btn-vote btn-vote--guest">
+            + Gast
+        </button>
+    </div>` : ''}` : ''}
 
     ${currentUser && currentUser.role === 'admin' ? `
     <div class="appt-admin-actions">
@@ -109,17 +152,54 @@ function renderAppointments(appointments, allVotes, containerId, isPast) {
     }).join('');
 }
 
-// ── CAST VOTE ──
+// ── CAST VOTE (member / admin voting for themselves) ──
 async function castVote(appointmentId, vote) {
     if (!currentUser) return;
 
-    // Upsert — update if exists, insert if not
     const { error } = await supa.from('appointment_votes').upsert({
         appointment_id: appointmentId,
         user_id:        currentUser.id,
         username:       currentUser.username,
-        vote:           vote
+        vote:           vote,
+        is_guest:       false
     }, { onConflict: 'appointment_id,user_id' });
+
+    if (error) { alert('Fehler: ' + error.message); return; }
+    loadAppointments();
+}
+
+// ── ADD GUEST VOTE ──
+async function addGuestVote(appointmentId) {
+    if (!currentUser) return;
+
+    const select  = document.getElementById(`guest-select-${appointmentId}`);
+    const guestId = select ? select.value : '';
+    if (!guestId) return;
+
+    const guest = allPlayers.find(p => p.id === guestId);
+    if (!guest) return;
+
+    const { error } = await supa.from('appointment_votes').upsert({
+        appointment_id: appointmentId,
+        user_id:        guest.id,    // player UUID used as unique key
+        username:       guest.name,
+        vote:           'yes',
+        is_guest:       true
+    }, { onConflict: 'appointment_id,user_id' });
+
+    if (error) { alert('Fehler: ' + error.message); return; }
+    loadAppointments();
+}
+
+// ── REMOVE GUEST VOTE (members + admins can remove) ──
+async function removeGuestVote(appointmentId, guestId) {
+    if (!currentUser) return;
+
+    const { error } = await supa
+        .from('appointment_votes')
+        .delete()
+        .eq('appointment_id', appointmentId)
+        .eq('user_id', guestId);
 
     if (error) { alert('Fehler: ' + error.message); return; }
     loadAppointments();

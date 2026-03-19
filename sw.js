@@ -13,6 +13,7 @@ const ASSETS = [
     BASE + '/checkout.js',
     BASE + '/Logo.png',
     BASE + '/manifest.json',
+    BASE + '/settings.html',
     BASE + '/schedule.html',
     BASE + '/schedule.js',
     BASE + '/icon-192.png',

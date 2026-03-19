@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlightClub · Einstellungen</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0d0d0f">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+    <nav id="nav-settings">
+        <div class="nav-inner nav-inner--default">
+            <span class="nav-brand">FLIGHTCLUB</span>
+            <div class="nav-links">
+                <a href="index.html" class="nav-btn">« Menü</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="app-wrapper">
+
+        <!-- PROFILE HEADER -->
+        <div class="settings-header">
+            <div class="settings-avatar" id="settings-avatar"></div>
+            <div class="settings-user-info">
+                <div class="settings-username" id="settings-username"></div>
+                <div class="settings-role-badge" id="settings-role-badge"></div>
+            </div>
+        </div>
+
+        <!-- CHANGE PASSWORD -->
+        <div class="card">
+            <h2 class="card-title">EINSTELLUNGEN</h2>
+            <div class="divider"></div>
+
+            <h3 class="section-label">Passwort ändern</h3>
+            <div class="settings-form">
+                <div class="settings-field">
+                    <label class="settings-label">Aktuelles Passwort</label>
+                    <input type="password" id="current-password" placeholder="Aktuelles Passwort" class="input-field" autocomplete="current-password">
+                </div>
+                <div class="settings-field">
+                    <label class="settings-label">Neues Passwort</label>
+                    <input type="password" id="new-password" placeholder="Neues Passwort" class="input-field" autocomplete="new-password">
+                </div>
+                <div class="settings-field">
+                    <label class="settings-label">Passwort bestätigen</label>
+                    <input type="password" id="confirm-password" placeholder="Passwort wiederholen" class="input-field" autocomplete="new-password">
+                </div>
+                <button onclick="changePassword()" class="btn btn-primary btn-full">PASSWORT ÄNDERN</button>
+            </div>
+            <p id="settings-msg" class="settings-msg"></p>
+        </div>
+
+    </div>
+
+    <script>
+        const SUPABASE_URL = 'https://daejfzypbnwtucwftkzn.supabase.co';
+        const SUPABASE_KEY = 'sb_publishable_xajv6XFl28cNrdMSohDhjg_aDyMT3Bl';
+        const supa = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        const SESSION_KEY = 'fc47_user';
+
+        // ── AUTH GUARD ──
+        const raw = sessionStorage.getItem(SESSION_KEY);
+        const currentUser = raw ? JSON.parse(raw) : null;
+        if (!currentUser) window.location.href = 'index.html';
+
+        // ── POPULATE HEADER ──
+        const initials = currentUser.username.slice(0, 2).toUpperCase();
+        document.getElementById('settings-avatar').textContent   = initials;
+        document.getElementById('settings-username').textContent = currentUser.username.toUpperCase();
+
+        const roleBadge = document.getElementById('settings-role-badge');
+        roleBadge.textContent = currentUser.role.toUpperCase();
+        roleBadge.classList.add('role-badge', `role-badge--${currentUser.role}`);
+
+        // ── CHANGE PASSWORD ──
+        async function changePassword() {
+            const currentPw  = document.getElementById('current-password').value;
+            const newPw      = document.getElementById('new-password').value;
+            const confirmPw  = document.getElementById('confirm-password').value;
+            const msgEl      = document.getElementById('settings-msg');
+
+            const showMsg = (text, color) => {
+                msgEl.textContent  = text;
+                msgEl.style.color  = color;
+                setTimeout(() => msgEl.textContent = '', 4000);
+            };
+
+            if (!currentPw || !newPw || !confirmPw) {
+                return showMsg('Bitte alle Felder ausfüllen.', 'var(--red)');
+            }
+            if (newPw.length < 4) {
+                return showMsg('Neues Passwort muss mindestens 4 Zeichen haben.', 'var(--red)');
+            }
+            if (newPw !== confirmPw) {
+                return showMsg('Neue Passwörter stimmen nicht überein.', 'var(--red)');
+            }
+
+            // 1. Verify current password
+            const { data: user, error: verifyError } = await supa
+                .from('app_users')
+                .select('id')
+                .eq('id', currentUser.id)
+                .eq('password', currentPw)
+                .single();
+
+            if (verifyError || !user) {
+                return showMsg('Aktuelles Passwort ist falsch.', 'var(--red)');
+            }
+
+            // 2. Update to new password
+            const { error: updateError } = await supa
+                .from('app_users')
+                .update({ password: newPw })
+                .eq('id', currentUser.id);
+
+            if (updateError) {
+                return showMsg('Fehler: ' + updateError.message, 'var(--red)');
+            }
+
+            // 3. Clear fields
+            document.getElementById('current-password').value = '';
+            document.getElementById('new-password').value     = '';
+            document.getElementById('confirm-password').value = '';
+
+            showMsg('Passwort erfolgreich geändert!', 'var(--green)');
+        }
+    </script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/fightclub-dart-tracker/sw.js')
+                .catch(() => {});
+        }
+    </script>
+</body>
+</html>
