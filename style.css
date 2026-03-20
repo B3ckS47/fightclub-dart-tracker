@@ -1979,7 +1979,7 @@ body {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 40px;
+    gap: 8px;
 }
 
 /* Club logo + title */
@@ -1988,6 +1988,7 @@ body {
     flex-direction: column;
     align-items: center;
     gap: 14px;
+    margin-top: 32px;
 }
 
 .menu-logo {
@@ -2012,6 +2013,7 @@ body {
     flex-direction: column;
     gap: 16px;
     width: 100%;
+    margin-top: 32px;
 }
 
 .menu-card {
@@ -2046,7 +2048,7 @@ body {
 .live-game-card {
     border-left: 3px solid var(--green) !important;
     animation: livePulse 2s ease-in-out infinite;
-    margin-bottom: 4px !important;
+    margin-bottom: 8px !important;
 }
 
 .live-game-card:hover,
@@ -2264,7 +2266,7 @@ body {
 
 /* Tablet menu layout */
 @media (min-width: 768px) {
-    .menu-wrapper { max-width: 900px; padding: 60px 32px; gap: 50px; }
+    .menu-wrapper { max-width: 900px; padding: 60px 32px; gap: 8px; }
     .menu-logo    { width: 200px; }
     .menu-cards   { flex-direction: row; gap: 24px; }
     .menu-card    { flex-direction: column; align-items: flex-start; flex: 1; padding: 36px 32px; gap: 16px; }
