@@ -16,6 +16,19 @@ const TYPE_COLORS = {
 let allPlayers = [];
 // IDs of players that have a linked app_user (i.e. NOT guests)
 let memberPlayerIds = new Set();
+// Raw appointment data for client-side filtering
+let _upcomingRaw = [];
+let _pastRaw     = [];
+let _allVotesRaw = [];
+let _scheduleFilter = '';
+
+function setScheduleFilter(type) {
+    _scheduleFilter = type;
+    const filtered  = _upcomingRaw.filter(a => !type || a.type === type);
+    const filteredP = _pastRaw.filter(a => !type || a.type === type);
+    renderAppointments(filtered,  _allVotesRaw, 'upcoming-list', false);
+    renderAppointments(filteredP, _allVotesRaw, 'past-list',     true);
+}
 
 document.addEventListener('DOMContentLoaded', () => {
     if (currentUser && currentUser.role === 'admin') {
@@ -54,6 +67,11 @@ async function loadAppointments() {
     const now      = new Date();
     const upcoming = apptRes.data.filter(a => new Date(a.date) >= now);
     const past     = apptRes.data.filter(a => new Date(a.date) <  now).reverse();
+
+    // Store raw for client-side filtering
+    _upcomingRaw = upcoming;
+    _pastRaw     = past;
+    _allVotesRaw = allVotes;
 
     renderAppointments(upcoming, allVotes, 'upcoming-list', false);
     renderAppointments(past,     allVotes, 'past-list',     true);

@@ -165,6 +165,13 @@ function cancelExit() {
 }
 
 function doExitGame() {
+    if (typeof clearLiveState === 'function') clearLiveState();
+    // If launched from a tournament, go back to the tournament view
+    const tournId = new URLSearchParams(window.location.search).get('tournament_id');
+    if (tournId) {
+        window.location.href = `tournament-view.html?id=${tournId}`;
+        return;
+    }
     document.getElementById('nav-setup').style.display = 'block';
     document.getElementById('nav-game-active').style.display = 'none';
     document.getElementById('setup-view').style.display = 'block';
@@ -172,7 +179,6 @@ function doExitGame() {
     document.getElementById('active-game-view').style.display = 'none';
     gameState.input = "";
     document.getElementById('input-preview').innerText = "0";
-    if (typeof clearLiveState === 'function') clearLiveState();
 }
 
 window.exitGame = exitGame;

@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlightClub · Turnier erstellen</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0d0d0f">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <script src="config.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <nav id="nav-tournament-create">
+        <div class="nav-inner nav-inner--default">
+            <span class="nav-brand">FLIGHTCLUB</span>
+            <div class="nav-links">
+                <a href="tournaments.html" class="nav-btn">« Turniere</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="app-wrapper">
+
+        <!-- Setup -->
+        <div class="card">
+            <h2 class="card-title">TURNIER SETUP</h2>
+            <div class="divider"></div>
+
+            <div class="settings-form">
+
+                <div class="settings-field">
+                    <label class="settings-label">NAME</label>
+                    <input id="tourn-name" class="select-field" type="text" placeholder="z.B. FC47 Herbstturnier" maxlength="60" style="font-family:var(--font-body);">
+                </div>
+
+                <div class="settings-field">
+                    <label class="settings-label">TURNIERMODUS</label>
+                    <select id="mode-select" class="select-field" onchange="setMode(this.value)">
+                        <option value="ko" selected>K.O. – Verlierer scheidet aus</option>
+                        <option value="swiss">Swiss – Verlierer-Bracket</option>
+                    </select>
+                </div>
+
+                <div class="settings-field">
+                    <label class="settings-label">SPIELMODUS</label>
+                    <select id="type-select" class="select-field" onchange="setType(this.value)">
+                        <option value="singles" selected>Einzel</option>
+                        <option value="doubles">Doppel</option>
+                    </select>
+                </div>
+
+                <div class="tourn-form-row">
+                    <div class="settings-field">
+                        <label class="settings-label">START</label>
+                        <select id="tourn-score" class="select-field">
+                            <option value="501" selected>501</option>
+                            <option value="301">301</option>
+                        </select>
+                    </div>
+                    <div class="settings-field">
+                        <label class="settings-label">CHECKOUT</label>
+                        <select id="tourn-checkout" class="select-field">
+                            <option value="double" selected>Double Out</option>
+                            <option value="single">Single Out</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="settings-field">
+                    <label class="settings-label">LEGS</label>
+                    <select id="tourn-legs" class="select-field">
+                        <option value="1">First to 1 Leg</option>
+                        <option value="2" selected>First to 2 Legs</option>
+                        <option value="3">First to 3 Legs</option>
+                        <option value="5">First to 5 Legs</option>
+                    </select>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Participants -->
+        <div class="card">
+            <h2 class="card-title">TEILNEHMER</h2>
+            <div class="divider"></div>
+
+            <div class="settings-form">
+
+                <!-- Pre-fill from appointment -->
+                <div class="settings-field">
+                    <label class="settings-label">AUS TERMIN LADEN (optional)</label>
+                    <select id="appt-select" class="select-field" onchange="loadFromAppt()">
+                        <option value="">– Termin wählen –</option>
+                    </select>
+                </div>
+
+                <!-- Player search -->
+                <div class="settings-field">
+                    <label class="settings-label">SPIELER HINZUFÜGEN</label>
+                    <div class="tourn-player-add">
+                        <select id="player-search" class="select-field">
+                            <option value="">– Spieler wählen –</option>
+                        </select>
+                        <button class="btn btn-primary" onclick="addSelectedPlayer()">+</button>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Participant list -->
+            <div id="participant-list" class="participant-list" style="margin-top:12px;"></div>
+            <p id="participant-count" class="tourn-hint" style="margin-top:8px;"></p>
+
+        </div>
+
+        <!-- Error -->
+        <div id="create-error" class="tourn-error" style="display:none;"></div>
+
+        <!-- Submit -->
+        <button class="btn btn-primary btn-full btn-lg" onclick="createTournament()">TURNIER ERSTELLEN</button>
+
+    </div>
+
+    <script>
+        const supa = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
+        const raw  = sessionStorage.getItem('fc47_user');
+        if (!raw) window.location.href = 'index.html';
+        const user = JSON.parse(raw);
+        if (user.role === 'ipad') window.location.href = 'tournaments.html';
+
+        let mode       = 'ko';
+        let gameType   = 'singles';
+        let allPlayers = [];
+        let participants = []; // { name, player_id, is_guest }
+
+        function setMode(m) {
+            mode = m;
+        }
+
+        function setType(t) {
+            gameType = t;
+        }
+
+        async function init() {
+            // Load players (admin + member)
+            const { data: users } = await supa
+                .from('app_users')
+                .select('player_id, username, role')
+                .in('role', ['admin', 'member']);
+
+            const { data: players } = await supa
+                .from('players')
+                .select('id, name')
+                .order('name');
+
+            allPlayers = (players || []);
+
+            // Player select — only those with app_users entry or all players
+            const playerUserIds = new Set((users || []).map(u => u.player_id).filter(Boolean));
+            const sel = document.getElementById('player-search');
+            allPlayers.forEach(p => {
+                const o = document.createElement('option');
+                o.value = p.id;
+                o.textContent = p.name;
+                sel.appendChild(o);
+            });
+
+            // Load appointments (Training + Tournament type, future or recent)
+            const { data: appts } = await supa
+                .from('appointments')
+                .select('id, title, type, date')
+                .in('type', ['Training', 'Tournament'])
+                .order('date', { ascending: false })
+                .limit(10);
+
+            const apptSel = document.getElementById('appt-select');
+            (appts || []).forEach(a => {
+                const o = document.createElement('option');
+                o.value = a.id;
+                o.textContent = `${a.title} (${new Date(a.date).toLocaleDateString('de-DE')})`;
+                apptSel.appendChild(o);
+            });
+        }
+
+        async function loadFromAppt() {
+            const apptId = document.getElementById('appt-select').value;
+            if (!apptId) return;
+
+            const { data: votes } = await supa
+                .from('appointment_votes')
+                .select('user_id, username, vote, is_guest')
+                .eq('appointment_id', apptId)
+                .eq('vote', 'yes');
+
+            if (!votes || votes.length === 0) {
+                showError('Keine Zusagen für diesen Termin gefunden.');
+                return;
+            }
+
+            votes.forEach(v => {
+                const name = v.username;
+                if (participants.find(p => p.name === name)) return;
+                // Find player_id by matching app_users
+                const player = allPlayers.find(p => p.name === name);
+                participants.push({ name, player_id: player ? player.id : null, is_guest: v.is_guest || false });
+            });
+            renderParticipants();
+        }
+
+        function addSelectedPlayer() {
+            const sel = document.getElementById('player-search');
+            const pid = sel.value;
+            if (!pid) return;
+            const player = allPlayers.find(p => p.id === pid);
+            if (!player) return;
+            if (participants.find(p => p.player_id === pid)) { showError(`${player.name} ist bereits in der Liste.`); return; }
+            participants.push({ name: player.name, player_id: player.id, is_guest: false });
+            sel.value = '';
+            renderParticipants();
+        }
+
+        function removeParticipant(idx) {
+            participants.splice(idx, 1);
+            renderParticipants();
+        }
+
+        function renderParticipants() {
+            const el = document.getElementById('participant-list');
+            if (participants.length === 0) {
+                el.innerHTML = '<p class="muted-text">Noch keine Teilnehmer.</p>';
+                document.getElementById('participant-count').textContent = '';
+                return;
+            }
+            el.innerHTML = participants.map((p, i) => `
+                <div class="participant-row">
+                    <span class="participant-name">${p.name}${p.is_guest ? ' <span class="tourn-tag">Gast</span>' : ''}</span>
+                    <button class="participant-remove" onclick="removeParticipant(${i})">✕</button>
+                </div>
+            `).join('');
+            const n = participants.length;
+            const nextPow2 = Math.pow(2, Math.ceil(Math.log2(n)));
+            const byes = nextPow2 - n;
+            document.getElementById('participant-count').textContent =
+                `${n} Teilnehmer${byes > 0 ? ` · ${byes} Freilos${byes > 1 ? 'e' : ''}` : ''}`;
+        }
+
+        function showError(msg) {
+            const el = document.getElementById('create-error');
+            el.textContent = msg;
+            el.style.display = 'block';
+            setTimeout(() => el.style.display = 'none', 4000);
+        }
+
+        // ── BRACKET GENERATION ──
+
+        function shuffle(arr) {
+            for (let i = arr.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [arr[i], arr[j]] = [arr[j], arr[i]];
+            }
+            return arr;
+        }
+
+        async function generateKOBracket(tournId, partIds) {
+            // partIds: array of participant UUIDs (already shuffled, with byes at end)
+            const n        = partIds.length;
+            const rounds   = Math.ceil(Math.log2(n));
+            const total    = Math.pow(2, rounds);
+            const seeded   = [...partIds];
+            // Pad with null (bye) to next power of 2
+            while (seeded.length < total) seeded.push(null);
+
+            // Build matches round by round
+            // Round 1: pair seeded[0] vs seeded[total-1], seeded[1] vs seeded[total-2], etc.
+            let matchRows = [];
+            let round = 1;
+            const r1count = total / 2;
+
+            for (let i = 0; i < r1count; i++) {
+                matchRows.push({
+                    tournament_id: tournId,
+                    round:         1,
+                    match_number:  i + 1,
+                    bracket:       'winners',
+                    p1_id:         seeded[i],
+                    p2_id:         seeded[total - 1 - i],
+                    status:        'pending'
+                });
+            }
+
+            // Insert round 1 and get IDs back
+            const { data: r1data } = await supa
+                .from('tournament_matches')
+                .insert(matchRows)
+                .select('id, match_number, p1_id, p2_id');
+
+            // For byes: auto-resolve (where p2_id is null, winner = p1_id, status = done)
+            let prevRound = r1data;
+            for (const m of prevRound) {
+                if (m.p2_id === null) {
+                    await supa.from('tournament_matches').update({
+                        winner_id: m.p1_id,
+                        status:    'done'
+                    }).eq('id', m.id);
+                }
+            }
+
+            // Build subsequent rounds and wire next_match_id
+            let currentRound = r1data;
+            for (let r = 2; r <= rounds; r++) {
+                const matchCount = total / Math.pow(2, r);
+                const nextRows = [];
+                for (let i = 0; i < matchCount; i++) {
+                    nextRows.push({
+                        tournament_id: tournId,
+                        round:         r,
+                        match_number:  i + 1,
+                        bracket:       r === rounds ? 'final' : 'winners',
+                        p1_id:         null,
+                        p2_id:         null,
+                        status:        'pending'
+                    });
+                }
+                const { data: nextData } = await supa
+                    .from('tournament_matches')
+                    .insert(nextRows)
+                    .select('id, match_number');
+
+                // Wire: pair current round matches to next round
+                for (let i = 0; i < currentRound.length; i++) {
+                    const nextMatch = nextData[Math.floor(i / 2)];
+                    await supa.from('tournament_matches')
+                        .update({ next_match_id: nextMatch.id })
+                        .eq('id', currentRound[i].id);
+                }
+
+                // Advance bye winners into next round immediately
+                for (let i = 0; i < currentRound.length; i++) {
+                    const m = currentRound[i];
+                    if (m.p2_id === null) {
+                        const nextMatch = nextData[Math.floor(i / 2)];
+                        const field = i % 2 === 0 ? 'p1_id' : 'p2_id';
+                        await supa.from('tournament_matches')
+                            .update({ [field]: m.p1_id })
+                            .eq('id', nextMatch.id);
+                    }
+                }
+
+                currentRound = nextData;
+            }
+        }
+
+        async function generateSwissBracket(tournId, partIds) {
+            const shuffled = [...partIds];
+            const n        = shuffled.length;
+            const pairs    = Math.floor(n / 2);
+            const hasBye   = n % 2 !== 0;
+
+            const matchRows = [];
+            for (let i = 0; i < pairs; i++) {
+                matchRows.push({
+                    tournament_id: tournId,
+                    round:         1,
+                    match_number:  i + 1,
+                    bracket:       'winners',
+                    p1_id:         shuffled[i * 2],
+                    p2_id:         shuffled[i * 2 + 1],
+                    status:        'pending'
+                });
+            }
+
+            // Odd player gets a bye — auto-advances to round 2 winners
+            if (hasBye) {
+                matchRows.push({
+                    tournament_id: tournId,
+                    round:         1,
+                    match_number:  pairs + 1,
+                    bracket:       'winners',
+                    p1_id:         shuffled[n - 1],
+                    p2_id:         null,
+                    winner_id:     shuffled[n - 1],
+                    status:        'done'
+                });
+            }
+
+            await supa.from('tournament_matches').insert(matchRows);
+            // Loser bracket matches and future winner bracket rounds are created
+            // dynamically by saveTournamentResult as results come in
+        }
+
+        // ── CREATE ──
+
+        async function createTournament() {
+            const name = document.getElementById('tourn-name').value.trim();
+            if (!name) { showError('Bitte einen Turniernamen eingeben.'); return; }
+
+            const minPlayers = gameType === 'doubles' ? 4 : 2;
+            if (participants.length < minPlayers) {
+                showError(`Mindestens ${minPlayers} Teilnehmer benötigt.`);
+                return;
+            }
+            if (gameType === 'doubles' && participants.length % 2 !== 0) {
+                showError('Für Doppel wird eine gerade Anzahl an Spielern benötigt.');
+                return;
+            }
+
+            const score    = parseInt(document.getElementById('tourn-score').value);
+            const checkout = document.getElementById('tourn-checkout').value;
+            const legs     = parseInt(document.getElementById('tourn-legs').value);
+
+            // Create tournament
+            const { data: tourn, error: tErr } = await supa
+                .from('tournaments')
+                .insert([{
+                    name,
+                    mode:       mode,
+                    game_type:  gameType,
+                    start_score: score,
+                    checkout,
+                    legs,
+                    status:     'active',
+                    created_by: user.username
+                }])
+                .select('id')
+                .single();
+
+            if (tErr || !tourn) { showError('Fehler beim Erstellen des Turniers.'); return; }
+
+            const tournId = tourn.id;
+
+            // Shuffle participants and insert
+            const shuffled = shuffle([...participants]);
+            const partRows = shuffled.map((p, i) => ({
+                tournament_id: tournId,
+                player_id:     p.player_id || null,
+                name:          p.name,
+                seed:          i + 1,
+                is_bye:        false
+            }));
+
+            const { data: partData, error: pErr } = await supa
+                .from('tournament_participants')
+                .insert(partRows)
+                .select('id, name, seed');
+
+            if (pErr || !partData) { showError('Fehler beim Speichern der Teilnehmer.'); return; }
+
+            // Sort by seed and get IDs
+            const sortedIds = partData.sort((a, b) => a.seed - b.seed).map(p => p.id);
+
+            // Generate bracket
+            if (mode === 'ko') {
+                await generateKOBracket(tournId, sortedIds);
+            } else {
+                await generateSwissBracket(tournId, sortedIds);
+            }
+
+            // Success — go to tournament view
+            window.location.href = `tournament-view.html?id=${tournId}`;
+        }
+
+        init();
+    </script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/fightclub-dart-tracker/sw.js').catch(() => {});
+        }
+    </script>
+</body>
+</html>

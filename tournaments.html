@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlightClub · Turniere</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0d0d0f">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <script src="config.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <nav id="nav-tournaments">
+        <div class="nav-inner nav-inner--default">
+            <span class="nav-brand">FLIGHTCLUB</span>
+            <div class="nav-links">
+                <a href="index.html" class="nav-btn">« Menü</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="app-wrapper">
+
+        <!-- Create button — member + admin only -->
+        <div id="create-btn-wrap" style="display:none; margin-bottom:16px;">
+            <a href="tournament-create.html" class="btn btn-primary btn-full">+ NEUES TURNIER</a>
+        </div>
+
+        <!-- Ongoing -->
+        <div class="card">
+            <h2 class="card-title">LAUFENDE TURNIERE</h2>
+            <div class="divider"></div>
+            <div id="ongoing-list"><p class="muted-text">Lade…</p></div>
+        </div>
+
+        <!-- Finished — hidden for ipad -->
+        <div class="card" id="finished-section" style="display:none;">
+            <h2 class="card-title">ABGESCHLOSSENE TURNIERE</h2>
+            <div class="divider"></div>
+            <div id="finished-list"><p class="muted-text">Lade…</p></div>
+        </div>
+
+    </div>
+
+    <script>
+        const supa = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
+        const raw  = sessionStorage.getItem('fc47_user');
+        if (!raw) window.location.href = 'index.html';
+        const user = JSON.parse(raw);
+
+        const MODE_LABEL  = { ko: 'K.O.', swiss: 'Swiss' };
+        const TYPE_LABEL  = { singles: 'Einzel', doubles: 'Doppel' };
+        const SCORE_LABEL = { 301: '301', 501: '501' };
+        const LEGS_LABEL  = l => `First to ${l} ${l === 1 ? 'Leg' : 'Legs'}`;
+        const OUT_LABEL   = { single: 'Single Out', double: 'Double Out' };
+
+        function setupCard(t) {
+            return `<span class="tourn-tag">${MODE_LABEL[t.mode]}</span>
+                    <span class="tourn-tag">${TYPE_LABEL[t.game_type]}</span>
+                    <span class="tourn-tag">${t.start_score}</span>
+                    <span class="tourn-tag">${OUT_LABEL[t.checkout]}</span>
+                    <span class="tourn-tag">${LEGS_LABEL(t.legs)}</span>`;
+        }
+
+        async function checkAndCloseTournaments(activeTournaments) {
+            if (activeTournaments.length === 0) return;
+
+            const ids = activeTournaments.map(t => t.id);
+            const { data: allMatches } = await supa
+                .from('tournament_matches')
+                .select('id, tournament_id, round, match_number, status, p1_id, p2_id, winner_id, loser_id, bracket')
+                .in('tournament_id', ids);
+
+            for (const t of activeTournaments) {
+                const matches = (allMatches || []).filter(m => m.tournament_id === t.id);
+                const open    = matches.filter(m => m.status === 'pending' && m.p1_id && m.p2_id);
+                if (open.length > 0) continue;
+
+                const done = matches.filter(m => m.status === 'done');
+                if (done.length === 0) continue;
+
+                const finalMatch = done.find(m => m.bracket === 'final')
+                    || done.reduce((a, b) => a.round > b.round ? a : b);
+                if (!finalMatch?.winner_id || !finalMatch?.loser_id) continue;
+
+                let thirdId = null;
+
+                await supa.from('tournaments').update({
+                    status:       'finished',
+                    winner_id:    finalMatch.winner_id,
+                    runner_up_id: finalMatch.loser_id,
+                    third_id:     thirdId,
+                    finished_at:  new Date().toISOString()
+                }).eq('id', t.id);
+
+                t.status       = 'finished';
+                t.winner_id    = finalMatch.winner_id;
+                t.runner_up_id = finalMatch.loser_id;
+                t.third_id     = thirdId;
+                t.finished_at  = new Date().toISOString();
+            }
+        }
+
+        async function load() {
+            // Show create button for member + admin
+            if (user.role !== 'ipad') {
+                document.getElementById('create-btn-wrap').style.display = 'block';
+                document.getElementById('finished-section').style.display = 'block';
+            }
+
+            const { data: all } = await supa
+                .from('tournaments')
+                .select('*')
+                .order('created_at', { ascending: false });
+
+            const ongoing  = (all || []).filter(t => t.status === 'active');
+            const finished = (all || []).filter(t => t.status === 'finished');
+
+            // Auto-close any active tournament with no open matches
+            await checkAndCloseTournaments(ongoing);
+
+            // Re-split after potential status changes
+            const nowOngoing  = ongoing.filter(t => t.status === 'active');
+            const nowFinished = [...finished, ...ongoing.filter(t => t.status === 'finished')]
+                .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+            // Ongoing
+            const onEl = document.getElementById('ongoing-list');
+            if (nowOngoing.length === 0) {
+                onEl.innerHTML = '<p class="muted-text">Keine laufenden Turniere.</p>';
+            } else {
+                onEl.innerHTML = nowOngoing.map(t => `
+                    <a href="tournament-view.html?id=${t.id}" class="tourn-row">
+                        <div class="tourn-row-top">
+                            <span class="tourn-name">${t.name}</span>
+                            <span class="tourn-status tourn-status--active">● AKTIV</span>
+                        </div>
+                        <div class="tourn-tags">${setupCard(t)}</div>
+                    </a>
+                `).join('');
+            }
+
+            // Finished (member + admin only)
+            if (user.role !== 'ipad') {
+                const finEl = document.getElementById('finished-list');
+                if (nowFinished.length === 0) {
+                    finEl.innerHTML = '<p class="muted-text">Noch keine abgeschlossenen Turniere.</p>';
+                } else {
+                    const tIds = nowFinished.map(t => t.id);
+                    const { data: parts } = await supa
+                        .from('tournament_participants')
+                        .select('id, tournament_id, name, is_bye')
+                        .in('tournament_id', tIds);
+
+                    finEl.innerHTML = nowFinished.map(t => {
+                        const tParts      = (parts || []).filter(p => p.tournament_id === t.id);
+                        const playerCount = tParts.filter(p => !p.is_bye).length;
+                        const winner      = tParts.find(p => p.id === t.winner_id);
+                        const runner      = tParts.find(p => p.id === t.runner_up_id);
+                        const dateStr     = t.finished_at
+                            ? new Date(t.finished_at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                            : '';
+                        const footer = t.closed_by
+                            ? `<div class="tourn-closed-by">Geschlossen von ${t.closed_by}${dateStr ? ` · ${dateStr}` : ''}</div>`
+                            : `<div class="tourn-podium">
+                                <span class="tourn-podium-item">🥇 ${winner ? winner.name : '–'}</span>
+                                <span class="tourn-podium-item">🥈 ${runner  ? runner.name  : '–'}</span>
+                                ${dateStr ? `<span class="tourn-podium-date">${dateStr}</span>` : ''}
+                               </div>`;
+                        return `
+                            <div class="tourn-row tourn-row--finished">
+                                <div class="tourn-row-top">
+                                    <span class="tourn-name">${t.name}</span>
+                                    <span class="tourn-tag">👥 ${playerCount}</span>
+                                </div>
+                                <div class="tourn-tags">${setupCard(t)}</div>
+                                ${footer}
+                            </div>
+                        `;
+                    }).join('');
+                }
+            }
+        }
+
+        load();
+    </script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/fightclub-dart-tracker/sw.js').catch(() => {});
+        }
+    </script>
+</body>
+</html>

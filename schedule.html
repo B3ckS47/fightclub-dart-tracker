@@ -47,6 +47,17 @@
             <p id="schedule-msg" class="admin-msg"></p>
         </div>
 
+        <!-- FILTER -->
+        <div class="schedule-filter-wrap">
+            <select class="select-field" onchange="setScheduleFilter(this.value)">
+                <option value="">Alle Termine</option>
+                <option value="Training">Training</option>
+                <option value="Tournament">Turnier</option>
+                <option value="Gameday">Spieltag</option>
+                <option value="Event">Event</option>
+            </select>
+        </div>
+
         <!-- UPCOMING -->
         <div class="card">
             <h2 class="card-title">TERMINE</h2>

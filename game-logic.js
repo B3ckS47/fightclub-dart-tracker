@@ -1,3 +1,189 @@
+// ── TOURNAMENT INTEGRATION ──
+const _urlParams    = new URLSearchParams(window.location.search);
+const _tournMatchId = _urlParams.get('tournament_match_id');
+const _tournId      = _urlParams.get('tournament_id');
+const _tournP1Id    = _urlParams.get('tournament_p1_id');
+const _tournP2Id    = _urlParams.get('tournament_p2_id');
+
+async function saveTournamentResult(winnerName) {
+    if (!_tournMatchId || !_tournP1Id || !_tournP2Id) return;
+    try {
+        const p1Name   = _urlParams.get('p1');
+        const winnerId = winnerName === p1Name ? _tournP1Id : _tournP2Id;
+        const loserId  = winnerName === p1Name ? _tournP2Id : _tournP1Id;
+
+        // Mark match done
+        await supa.from('tournament_matches').update({
+            winner_id: winnerId,
+            loser_id:  loserId,
+            status:    'done'
+        }).eq('id', _tournMatchId);
+
+        // Fetch tournament mode + this match details
+        const [{ data: tourn }, { data: thisMatch }] = await Promise.all([
+            supa.from('tournaments').select('mode').eq('id', _tournId).single(),
+            supa.from('tournament_matches')
+                .select('bracket, round, match_number')
+                .eq('id', _tournMatchId).single()
+        ]);
+        if (!tourn || !thisMatch) return;
+
+        if (tourn.mode === 'ko') {
+            await advanceKO(winnerId, thisMatch);
+        } else {
+            await advanceSwiss(winnerId, loserId, thisMatch);
+        }
+    } catch(e) { console.error('[Tournament] Error:', e); }
+}
+
+async function advanceKO(winnerId, thisMatch) {
+    const { data: nextMatches } = await supa
+        .from('tournament_matches')
+        .select('id, p1_id, p2_id')
+        .eq('tournament_id', _tournId)
+        .eq('round', thisMatch.round + 1)
+        .eq('bracket', 'winners');
+    if (!nextMatches || nextMatches.length === 0) return;
+    const nextMatch = nextMatches[Math.floor((thisMatch.match_number - 1) / 2)];
+    if (!nextMatch) return;
+    const field = nextMatch.p1_id ? 'p2_id' : 'p1_id';
+    await supa.from('tournament_matches').update({ [field]: winnerId }).eq('id', nextMatch.id);
+}
+
+async function advanceSwiss(winnerId, loserId, thisMatch) {
+    const { data: allMatches } = await supa
+        .from('tournament_matches')
+        .select('id, round, match_number, bracket, p1_id, p2_id, status, winner_id, loser_id')
+        .eq('tournament_id', _tournId);
+    if (!allMatches) return;
+
+    const winnerMs = allMatches.filter(m => m.bracket === 'winners');
+    const loserMs  = allMatches.filter(m => m.bracket === 'losers');
+    const finalMs  = allMatches.filter(m => m.bracket === 'final');
+    const round    = thisMatch.round;
+    const bracket  = thisMatch.bracket;
+
+    if (bracket === 'winners') {
+        // ── Check if all winners matches this round are now done ──
+        const thisRoundW = winnerMs.filter(m => m.round === round);
+        const allDone    = thisRoundW.every(m => m.status === 'done' || m.id === _tournMatchId);
+
+        // Collect all winners from this round (including the one just played)
+        const roundWinners = thisRoundW.map(m =>
+            m.id === _tournMatchId ? winnerId : m.winner_id
+        ).filter(Boolean);
+
+        // Collect all losers from this round
+        const roundLosers = thisRoundW.map(m =>
+            m.id === _tournMatchId ? loserId : m.loser_id
+        ).filter(Boolean);
+
+        if (allDone) {
+            // Only 1 winner left → they're the winners bracket champion
+            // Check if there's a losers bracket champion to face
+            const losersDoneMs = loserMs.filter(m => m.status === 'done');
+            const losersChamp  = losersDoneMs.length > 0
+                ? losersDoneMs[losersDoneMs.length - 1].winner_id : null;
+
+            if (roundWinners.length === 1) {
+                // Winners bracket champion determined
+                if (losersChamp && finalMs.length === 0) {
+                    // Create the final
+                    await supa.from('tournament_matches').insert([{
+                        tournament_id: _tournId,
+                        round:         round + 1,
+                        match_number:  1,
+                        bracket:       'final',
+                        p1_id:         roundWinners[0],
+                        p2_id:         losersChamp,
+                        status:        'pending'
+                    }]);
+                }
+                // If no losers champ yet, final will be created when losers bracket finishes
+            } else {
+                // Create next winners bracket round matches
+                const nextRound = round + 1;
+                for (let i = 0; i < Math.floor(roundWinners.length / 2); i++) {
+                    await supa.from('tournament_matches').insert([{
+                        tournament_id: _tournId,
+                        round:         nextRound,
+                        match_number:  i + 1,
+                        bracket:       'winners',
+                        p1_id:         roundWinners[i * 2],
+                        p2_id:         roundWinners[i * 2 + 1] || null,
+                        status:        'pending'
+                    }]);
+                }
+            }
+
+            // Create losers bracket matches for all losers this round
+            const existingLoserRounds = loserMs.length > 0
+                ? Math.max(...loserMs.map(m => m.round)) : 0;
+            const newLoserRound = existingLoserRounds + 1;
+            for (let i = 0; i < Math.floor(roundLosers.length / 2); i++) {
+                await supa.from('tournament_matches').insert([{
+                    tournament_id: _tournId,
+                    round:         newLoserRound,
+                    match_number:  i + 1,
+                    bracket:       'losers',
+                    p1_id:         roundLosers[i * 2],
+                    p2_id:         roundLosers[i * 2 + 1] || null,
+                    status:        'pending'
+                }]);
+            }
+        }
+        // If not all done yet, just wait — the last match of the round triggers creation
+
+    } else if (bracket === 'losers') {
+        // Winner stays in losers bracket next round, loser is eliminated
+        const thisRoundL = loserMs.filter(m => m.round === round);
+        const allDone    = thisRoundL.every(m => m.status === 'done' || m.id === _tournMatchId);
+
+        if (allDone) {
+            const roundWinners = thisRoundL.map(m =>
+                m.id === _tournMatchId ? winnerId : m.winner_id
+            ).filter(Boolean);
+
+            if (roundWinners.length === 1) {
+                // Losers bracket champion — check if winners champ is waiting
+                const winnersDoneMs = winnerMs.filter(m => m.status === 'done');
+                const winnersChamp  = winnersDoneMs.length > 0
+                    ? winnersDoneMs[winnersDoneMs.length - 1].winner_id : null;
+
+                if (winnersChamp && finalMs.length === 0) {
+                    await supa.from('tournament_matches').insert([{
+                        tournament_id: _tournId,
+                        round:         Math.max(...allMatches.map(m => m.round)) + 1,
+                        match_number:  1,
+                        bracket:       'final',
+                        p1_id:         winnersChamp,
+                        p2_id:         roundWinners[0],
+                        status:        'pending'
+                    }]);
+                }
+            } else {
+                // More losers bracket matches needed
+                const nextRound = round + 1;
+                for (let i = 0; i < Math.floor(roundWinners.length / 2); i++) {
+                    await supa.from('tournament_matches').insert([{
+                        tournament_id: _tournId,
+                        round:         nextRound,
+                        match_number:  i + 1,
+                        bracket:       'losers',
+                        p1_id:         roundWinners[i * 2],
+                        p2_id:         roundWinners[i * 2 + 1] || null,
+                        status:        'pending'
+                    }]);
+                }
+            }
+        }
+
+    } else if (bracket === 'final') {
+        // 1st: winnerId, 2nd: loserId (winners bracket finalist who lost final)
+        // 3rd: handled by checkAndCloseTournaments via losers bracket
+    }
+}
+
 // ── AUTO-FINE CONSTANTS (IDs from fines_reasons table) ──
 const FINE_REASONS = {
     twentySix:    { id: '5183d5de-bad5-4f7c-8703-b0bc89ae6818', name: '26',                 amount: 0.30 },
@@ -333,8 +519,10 @@ function dismissLegModal() {
 
 // ── MATCH MODAL ──
 let matchWinnerName = '';
+let matchLoserName  = '';
 function showMatchModal(winnerName) {
     matchWinnerName = winnerName;
+    matchLoserName  = gameState.pNames[0] === winnerName ? gameState.pNames[1] : gameState.pNames[0];
     document.getElementById('match-modal-subtitle').textContent = winnerName + ' gewinnt das Match!';
     document.getElementById('match-modal-overlay').style.display = 'flex';
 }
@@ -345,6 +533,10 @@ async function dismissMatchModal() {
     gameState.scores   = [startVal, startVal];
     gameState.legScore = [0, 0];
     await clearLiveState();
+    // Save tournament result if this was a tournament match
+    if (_tournMatchId) {
+        await saveTournamentResult(matchWinnerName);
+    }
     exitGame(true);
 }
 

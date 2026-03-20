@@ -185,14 +185,33 @@
             document.getElementById('menu-page').style.display = 'block';
             document.getElementById('menu-user-display').textContent = user.username.toUpperCase();
 
-            // ipad role: only show "Neues Spiel"
+            // ipad role: only show "Neues Spiel" + Turniere
             if (user.role === 'ipad') {
                 document.getElementById('dashboard-card').style.display = 'none';
+                const t = document.createElement('a');
+                t.href = 'tournaments.html';
+                t.className = 'menu-card menu-card--tournament';
+                t.innerHTML = `<div class="menu-card-icon">🏆</div><div class="menu-card-body"><div class="menu-card-title">TURNIERE</div><div class="menu-card-sub">K.O. · Swiss · Einzel · Doppel</div></div><div class="menu-card-arrow">»</div>`;
+                document.getElementById('menu-cards').appendChild(t);
                 return;
             }
 
             // Load next appointment teaser for member + admin
             loadNextAppointment();
+
+            // tournaments card — all roles
+            const tournCard = document.createElement('a');
+            tournCard.href      = 'tournaments.html';
+            tournCard.className = 'menu-card menu-card--tournament';
+            tournCard.innerHTML = `
+                <div class="menu-card-icon">🏆</div>
+                <div class="menu-card-body">
+                    <div class="menu-card-title">TURNIERE</div>
+                    <div class="menu-card-sub">K.O. · Swiss · Einzel · Doppel</div>
+                </div>
+                <div class="menu-card-arrow">»</div>
+            `;
+            document.getElementById('menu-cards').appendChild(tournCard);
 
             // Check for live game — injects card if one is active
             loadLiveGame();
