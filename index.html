@@ -309,6 +309,7 @@
             const { data } = await supa
                 .from('live_game')
                 .select('id, state')
+                .eq('role', 'ipad')
                 .not('state', 'is', null);
 
             const activeGames = (data || []).filter(r => r.state);

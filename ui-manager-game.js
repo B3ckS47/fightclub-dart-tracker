@@ -171,6 +171,7 @@ function doExitGame() {
     document.getElementById('active-game-view').style.display = 'none';
     gameState.input = "";
     document.getElementById('input-preview').innerText = "0";
+    if (typeof clearLiveState === 'function') clearLiveState();
 }
 
 window.exitGame = exitGame;

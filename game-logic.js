@@ -26,13 +26,15 @@ async function insertFine(playerName, reason) {
 
 // ── LIVE GAME STATE ──
 const _liveUser = JSON.parse(sessionStorage.getItem('fc47_user') || '{}');
-const _liveId   = _liveUser.id || 'current';
+const _liveId   = _liveUser.id   || 'current';
+const _liveRole = _liveUser.role || '';
 
 async function pushLiveState() {
     if (!gameState.isOfficial) return;
     try {
         await supa.from('live_game').upsert({
             id:         _liveId,
+            role:       _liveRole,
             state:      {
                 pNames:       gameState.pNames,
                 scores:       gameState.scores,
@@ -51,7 +53,7 @@ async function pushLiveState() {
 
 async function clearLiveState() {
     try {
-        await supa.from('live_game').upsert({ id: _liveId, state: null, updated_at: new Date().toISOString() });
+        await supa.from('live_game').upsert({ id: _liveId, role: _liveRole, state: null, updated_at: new Date().toISOString() });
     } catch(e) { console.error('Live state clear error:', e); }
 }
 

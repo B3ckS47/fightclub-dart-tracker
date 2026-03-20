@@ -2046,11 +2046,13 @@ body {
 .live-game-card {
     border-left: 3px solid var(--green) !important;
     animation: livePulse 2s ease-in-out infinite;
+    margin-bottom: 4px !important;
 }
 
-.live-game-card:hover {
-    border-color: var(--green);
-    box-shadow: 0 4px 16px rgba(41,216,124,0.2);
+.live-game-card:hover,
+.live-game-card:hover .next-appt-row {
+    border-color: var(--green) !important;
+    box-shadow: 0 4px 16px rgba(41,216,124,0.2) !important;
 }
 
 @keyframes livePulse {
