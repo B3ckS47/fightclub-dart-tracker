@@ -46,13 +46,14 @@ function refreshDisplay() {
         cp2.style.display = 'block';
         cp1.innerText = '🎯 ' + throwing1;
         cp2.innerText = '🎯 ' + throwing2;
-        if (t1) t1.textContent = '🎯 ' + throwing1;
-        if (t2) t2.textContent = '🎯 ' + throwing2;
+        if (t1) { t1.textContent = '🎯 ' + throwing1; t1.classList.remove('sc-throwing--dot'); }
+        if (t2) { t2.textContent = '🎯 ' + throwing2; t2.classList.remove('sc-throwing--dot'); }
     } else {
         cp1.style.display = 'none';
         cp2.style.display = 'none';
-        if (t1) t1.textContent = '';
-        if (t2) t2.textContent = '';
+        // Starter dot keeps left column occupied so name stays centered
+        if (t1) { t1.textContent = gameState.legStarter === 0 ? '●' : ''; t1.classList.toggle('sc-throwing--dot', gameState.legStarter === 0); }
+        if (t2) { t2.textContent = gameState.legStarter === 1 ? '●' : ''; t2.classList.toggle('sc-throwing--dot', gameState.legStarter === 1); }
     }
 
     // Active card highlight

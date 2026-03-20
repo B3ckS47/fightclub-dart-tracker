@@ -1305,12 +1305,19 @@ body {
     }
 
     #active-game-view .sc-throwing {
+        display: block;
         font-size: 0.85rem;
         font-weight: 700;
         letter-spacing: 1px;
         color: var(--accent);
         text-align: left;
         justify-self: start;
+    }
+
+    /* Singles starter dot — red */
+    #active-game-view .sc-throwing.sc-throwing--dot {
+        font-size: 1.1rem;
+        color: var(--red);
     }
 
     #active-game-view .player-name {
