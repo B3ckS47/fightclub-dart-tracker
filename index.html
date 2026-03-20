@@ -194,6 +194,9 @@
             // Load next appointment teaser for member + admin
             loadNextAppointment();
 
+            // Check for live game — injects card if one is active
+            loadLiveGame();
+
             // fines card — member + admin
             const cards     = document.getElementById('menu-cards');
             const finesCard = document.createElement('a');
@@ -300,6 +303,54 @@
                 badge.innerHTML   = '⚠️ Noch nicht abgestimmt!';
                 card.appendChild(badge);
             }
+        }
+
+        async function loadLiveGame() {
+            const { data } = await supa
+                .from('live_game')
+                .select('id, state')
+                .not('state', 'is', null);
+
+            const activeGames = (data || []).filter(r => r.state);
+
+            // Remove any previously injected live cards
+            document.querySelectorAll('.live-game-card').forEach(c => c.remove());
+
+            if (activeGames.length === 0) return;
+
+            const wrapper   = document.querySelector('.menu-wrapper');
+            const schedCard = document.getElementById('next-appt-card');
+
+            activeGames.forEach(row => {
+                const s    = row.state;
+                const dots = (idx) => Array.from({ length: s.targetLegs }, (_, j) =>
+                    `<span style="color:${j < s.legScore[idx] ? 'var(--green)' : 'var(--border-light)'}">${j < s.legScore[idx] ? '●' : '○'}</span>`
+                ).join(' ');
+
+                const card    = document.createElement('a');
+                card.href      = `spectator.html?id=${encodeURIComponent(row.id)}`;
+                card.className = 'next-appt-card live-game-card';
+                card.innerHTML = `
+                    <div class="next-appt-row">
+                        <div class="live-teaser-left">
+                            <span class="live-teaser-badge">● LIVE</span>
+                            <div class="live-teaser-names">${s.pNames[0]} <span class="live-teaser-vs">vs</span> ${s.pNames[1]}</div>
+                        </div>
+                        <div class="live-teaser-scores">
+                            <div class="live-teaser-row">
+                                <span class="live-teaser-score ${s.currentIdx === 0 ? 'live-teaser-score--active' : ''}">${s.scores[0]}</span>
+                                <span class="live-teaser-legs">${dots(0)}</span>
+                            </div>
+                            <div class="live-teaser-row">
+                                <span class="live-teaser-score ${s.currentIdx === 1 ? 'live-teaser-score--active' : ''}">${s.scores[1]}</span>
+                                <span class="live-teaser-legs">${dots(1)}</span>
+                            </div>
+                        </div>
+                        <div class="next-appt-arrow">»</div>
+                    </div>
+                `;
+                wrapper.insertBefore(card, schedCard);
+            });
         }
 
         function logOut() {

@@ -24,6 +24,37 @@ async function insertFine(playerName, reason) {
     } catch(e) { console.error('Fine insert error:', e); return null; }
 }
 
+// ── LIVE GAME STATE ──
+const _liveUser = JSON.parse(sessionStorage.getItem('fc47_user') || '{}');
+const _liveId   = _liveUser.id || 'current';
+
+async function pushLiveState() {
+    if (!gameState.isOfficial) return;
+    try {
+        await supa.from('live_game').upsert({
+            id:         _liveId,
+            state:      {
+                pNames:       gameState.pNames,
+                scores:       gameState.scores,
+                legScore:     gameState.legScore,
+                targetLegs:   gameState.targetLegs,
+                currentIdx:   gameState.currentIdx,
+                gameType:     gameState.gameType,
+                teamPlayers:  gameState.teamPlayers,
+                teamPlayerIdx: gameState.teamPlayerIdx,
+                history:      gameState.history
+            },
+            updated_at: new Date().toISOString()
+        });
+    } catch(e) { console.error('Live state push error:', e); }
+}
+
+async function clearLiveState() {
+    try {
+        await supa.from('live_game').upsert({ id: _liveId, state: null, updated_at: new Date().toISOString() });
+    } catch(e) { console.error('Live state clear error:', e); }
+}
+
 // ── TOAST ──
 let toastQueue = [];
 let toastRunning = false;
@@ -262,6 +293,9 @@ async function submitTurn() {
     if (gameState.isOfficial && turns0 >= 20 && turns1 >= 20 && gameState.scores[0] > 0 && gameState.scores[1] > 0) {
         showAusbullen();
     }
+
+    // Push live state after every official turn
+    if (gameState.isOfficial) pushLiveState();
 }
 
 function undoMove() {
@@ -292,6 +326,7 @@ function showLegModal(winnerName) {
 function dismissLegModal() {
     document.getElementById('leg-modal-overlay').style.display = 'none';
     resetForNextLeg();
+    if (gameState.isOfficial) pushLiveState();
 }
 
 // ── MATCH MODAL ──
@@ -307,6 +342,7 @@ async function dismissMatchModal() {
     const startVal = parseInt(document.getElementById('start-score-select').value);
     gameState.scores   = [startVal, startVal];
     gameState.legScore = [0, 0];
+    await clearLiveState();
     exitGame(true);
 }
 

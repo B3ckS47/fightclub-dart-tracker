@@ -566,7 +566,7 @@ body {
 
 .score-display {
     font-family: var(--font-display);
-    font-size: 2.6rem;
+    font-size: 5rem;
     font-weight: 800;
     line-height: 1;
     color: var(--text-primary);
@@ -577,7 +577,7 @@ body {
 
 .history-list {
     margin-top: 10px;
-    height: 110px;
+    height: 90px;
     overflow: hidden;
     display: flex;
     flex-direction: column;
@@ -602,13 +602,7 @@ body {
     gap: 2px;
     min-width: 0;
 }
-.sc-throwing {
-    font-family: var(--font-display);
-    font-size: 0.75rem;
-    font-weight: 700;
-    letter-spacing: 1px;
-    color: var(--accent);
-}
+.sc-throwing { display: none; }
 .sc-body { display: contents; }
 .sc-footer {
     display: flex;
@@ -649,8 +643,8 @@ body {
 
 /* ── CHECKOUT HELPER ── */
 .checkout-box {
-    background: rgba(245, 166, 35, 0.07);
-    border: 1px dashed var(--accent);
+    background: rgba(245, 166, 35, 0.04);
+    border: 1px solid var(--border);
     border-radius: var(--radius-md);
     padding: 10px 16px;
     display: flex;
@@ -660,20 +654,15 @@ body {
 }
 
 .checkout-label {
-    font-family: var(--font-display);
-    font-size: 0.7rem;
-    font-weight: 700;
-    letter-spacing: 2px;
-    color: var(--accent);
-    opacity: 0.7;
+    display: none;
 }
 
 .checkout-path {
     font-family: var(--font-display);
-    font-size: 1.3rem;
+    font-size: 1.8rem;
     font-weight: 700;
-    color: var(--accent);
-    letter-spacing: 2px;
+    color: #ffffff;
+    letter-spacing: 3px;
 }
 
 /* ── INPUT PAD ── */
@@ -2052,6 +2041,190 @@ body {
 .menu-card--dashboard:hover { border-color: var(--green); box-shadow: 0 8px 32px rgba(41,216,124,0.25); }
 .menu-card--fines { border-top: 3px solid #ff4455; }
 .menu-card--fines:hover { border-color: #ff4455; box-shadow: 0 8px 32px rgba(255,68,85,0.25); }
+
+/* ── LIVE GAME TEASER CARD ── */
+.live-game-card {
+    border-left: 3px solid var(--green) !important;
+    animation: livePulse 2s ease-in-out infinite;
+}
+
+.live-game-card:hover {
+    border-color: var(--green);
+    box-shadow: 0 4px 16px rgba(41,216,124,0.2);
+}
+
+@keyframes livePulse {
+    0%, 100% { box-shadow: var(--shadow-card); }
+    50%       { box-shadow: 0 4px 24px rgba(41,216,124,0.18); }
+}
+
+.live-teaser-left {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+    min-width: 0;
+}
+
+.live-teaser-badge {
+    font-family: var(--font-display);
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: var(--green);
+}
+
+.live-teaser-names {
+    font-family: var(--font-display);
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.live-teaser-vs {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
+
+.live-teaser-scores {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex-shrink: 0;
+    text-align: right;
+}
+
+.live-teaser-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+.live-teaser-score {
+    font-family: var(--font-display);
+    font-size: 1.3rem;
+    font-weight: 800;
+    color: var(--text-secondary);
+    letter-spacing: -0.5px;
+    min-width: 42px;
+    text-align: right;
+}
+
+.live-teaser-score--active { color: var(--text-primary); }
+
+.live-teaser-legs {
+    font-family: var(--font-display);
+    font-size: 0.75rem;
+    letter-spacing: 3px;
+}
+
+/* ── LIVE BADGE (nav) ── */
+.live-badge {
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: var(--green);
+    animation: livePulse 1.5s ease-in-out infinite;
+}
+
+/* ── SPECTATOR PAGE ── */
+#nav-spectator {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    height: var(--nav-height);
+    background: rgba(13, 13, 15, 0.92);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+}
+
+.spec-game-mode {
+    font-family: var(--font-display);
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    text-align: center;
+    padding: 20px 0 12px;
+}
+
+.spec-cards {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 0 8px 24px;
+}
+
+.spec-card {
+    flex: 1;
+    background: var(--bg-card);
+    border: 2px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 24px 20px;
+    text-align: center;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.spec-card--active {
+    border-color: var(--accent) !important;
+    box-shadow: 0 0 24px var(--accent-glow);
+}
+
+.spec-name {
+    font-family: var(--font-display);
+    font-size: 1.2rem;
+    font-weight: 800;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.spec-score {
+    font-family: var(--font-display);
+    font-size: 4.5rem;
+    font-weight: 800;
+    letter-spacing: -3px;
+    line-height: 1;
+    color: var(--text-primary);
+    margin-bottom: 16px;
+}
+
+.spec-card--active .spec-score { color: #ffffff; }
+.spec-card--active .spec-name  { color: var(--text-primary); }
+
+.spec-legs {
+    font-family: var(--font-display);
+    font-size: 1.4rem;
+    letter-spacing: 4px;
+    color: var(--accent);
+}
+
+.spec-vs {
+    font-family: var(--font-display);
+    font-size: 1.1rem;
+    font-weight: 800;
+    letter-spacing: 4px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.spec-updated {
+    text-align: center;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    letter-spacing: 0.5px;
+    padding-bottom: 24px;
+}
 
 .menu-card-icon {
     font-size: 2.4rem;

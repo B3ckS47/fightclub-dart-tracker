@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlightClub · Live</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0d0d0f">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <script src="config.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+    <nav id="nav-spectator">
+        <div class="nav-inner nav-inner--default">
+            <span class="nav-brand">FLIGHTCLUB <span class="live-badge">● LIVE</span></span>
+            <div class="nav-links">
+                <a href="index.html" class="nav-btn">« Menü</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="app-wrapper">
+
+        <!-- WAITING STATE -->
+        <div id="spectator-waiting" class="card" style="text-align:center; padding: 48px 24px;">
+            <div style="font-size:2rem; margin-bottom:16px;">🎯</div>
+            <h2 class="card-title">KEIN SPIEL AKTIV</h2>
+            <div class="divider"></div>
+            <p class="muted-text">Warte auf ein laufendes offizielles Spiel…</p>
+        </div>
+
+        <!-- LIVE GAME STATE -->
+        <div id="spectator-live" style="display:none;">
+            <div class="spec-game-mode" id="spec-game-mode">FIRST TO 1 LEG</div>
+
+            <div class="spec-cards">
+                <!-- Player 1 -->
+                <div class="spec-card" id="spec-card-0">
+                    <div class="spec-name" id="spec-name-0">–</div>
+                    <div class="spec-score" id="spec-score-0">501</div>
+                    <div class="spec-legs" id="spec-legs-0">○</div>
+                </div>
+
+                <!-- VS -->
+                <div class="spec-vs">VS</div>
+
+                <!-- Player 2 -->
+                <div class="spec-card spec-card--right" id="spec-card-1">
+                    <div class="spec-name" id="spec-name-1">–</div>
+                    <div class="spec-score" id="spec-score-1">501</div>
+                    <div class="spec-legs" id="spec-legs-1">○</div>
+                </div>
+            </div>
+
+            <p class="spec-updated" id="spec-updated"></p>
+        </div>
+
+    </div>
+
+    <script>
+        const SUPABASE_URL = window.SUPABASE_URL;
+        const SUPABASE_KEY = window.SUPABASE_KEY;
+        const supa = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        // Auth guard
+        const raw = sessionStorage.getItem('fc47_user');
+        if (!raw) window.location.href = 'index.html';
+
+        // Read game ID from URL — e.g. spectator.html?id=abc123
+        const params   = new URLSearchParams(window.location.search);
+        const gameId   = params.get('id');
+        if (!gameId) window.location.href = 'index.html';
+
+        function renderState(s) {
+            if (!s) {
+                document.getElementById('spectator-waiting').style.display = 'block';
+                document.getElementById('spectator-live').style.display    = 'none';
+                return;
+            }
+
+            document.getElementById('spectator-waiting').style.display = 'none';
+            document.getElementById('spectator-live').style.display    = 'block';
+
+            document.getElementById('spec-game-mode').textContent =
+                `FIRST TO ${s.targetLegs} ${s.targetLegs === 1 ? 'LEG' : 'LEGS'}`;
+
+            [0, 1].forEach(i => {
+                document.getElementById(`spec-name-${i}`).textContent  = s.pNames[i];
+                document.getElementById(`spec-score-${i}`).textContent = s.scores[i];
+
+                // Leg dots
+                const won  = s.legScore[i];
+                const dots = Array.from({ length: s.targetLegs }, (_, j) =>
+                    j < won ? '●' : '○'
+                ).join(' ');
+                document.getElementById(`spec-legs-${i}`).textContent = dots;
+
+                // Highlight active player
+                const card = document.getElementById(`spec-card-${i}`);
+                if (i === s.currentIdx) {
+                    card.classList.add('spec-card--active');
+                } else {
+                    card.classList.remove('spec-card--active');
+                }
+            });
+
+            const now = new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            document.getElementById('spec-updated').textContent = `Zuletzt aktualisiert: ${now}`;
+        }
+
+        async function poll() {
+            const { data } = await supa
+                .from('live_game')
+                .select('state')
+                .eq('id', gameId)
+                .single();
+            renderState(data ? data.state : null);
+        }
+
+        // Initial load + poll every 4 seconds
+        poll();
+        setInterval(poll, 4000);
+    </script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/fightclub-dart-tracker/sw.js').catch(() => {});
+        }
+    </script>
+</body>
+</html>
