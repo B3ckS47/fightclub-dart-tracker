@@ -63,11 +63,9 @@
 
             <!-- Singles Player Select -->
             <div id="singles-select" class="vs-block">
-                <select id="p1-select" class="select-field" onchange="updateStarterLabel()"><option>Loading...</option></select>
-                <button onclick="swapStarter()" class="starter-swap-btn" id="starter-swap-btn" title="Startspieler wechseln">
-                    <span id="starter-swap-label">🎯 P1 beginnt</span>
-                </button>
-                <select id="p2-select" class="select-field" onchange="updateStarterLabel()"><option>Loading...</option></select>
+                <select id="p1-select" class="select-field"><option>Loading...</option></select>
+                <span class="vs-label">VS</span>
+                <select id="p2-select" class="select-field"><option>Loading...</option></select>
             </div>
 
             <!-- Doubles Player Select -->
@@ -118,45 +116,57 @@
         <!-- ACTIVE GAME VIEW -->
         <div id="active-game-view" class="game-view" style="display:none;">
 
-            <!-- LEFT: Player cards + checkout -->
+            <!-- LEFT: Player cards -->
             <div class="game-left">
                 <div class="game-row">
                     <div class="player-column">
-                        <div class="player-name-row">
-                            <div id="p1-name-display" class="player-name">Player 1</div>
-                            <div id="p1-legs-display" class="legs-badge">LEGS: 0</div>
-                        </div>
                         <div id="p1-current-player" class="current-player-badge" style="display:none;"></div>
                         <div id="p1-card" class="score-card">
-                            <div id="p1-avg-display" class="avg-display">AVG: 0.00</div>
-                            <div id="p1-score-display" class="score-display score-active">501</div>
-                            <div id="p1-history" class="history-list"></div>
-                        </div>
-                        <div id="p1-checkout" class="checkout-box checkout-box--player" style="display:none;">
-                            <span class="checkout-label">CHECKOUT</span>
-                            <div id="p1-checkout-path" class="checkout-path">- - -</div>
+                            <!-- Header: throwing (left) | team name (center) | legs (right) -->
+                            <div class="sc-header">
+                                <div id="p1-throwing-display" class="sc-throwing"></div>
+                                <div id="p1-name-display" class="player-name"></div>
+                                <div id="p1-legs-display" class="legs-badge"></div>
+                            </div>
+                            <!-- Body: score | divider | history -->
+                            <div class="sc-body">
+                                <div id="p1-avg-display" class="avg-display">AVG: 0.00</div>
+                                <div id="p1-score-display" class="score-display score-active">501</div>
+                                <div class="score-card-divider"></div>
+                                <div id="p1-history" class="history-list"></div>
+                            </div>
+                            <!-- Footer: checkout -->
+                            <div id="p1-checkout" class="sc-footer" style="display:none;">
+                                <div id="p1-checkout-path" class="checkout-path">- - -</div>
+                            </div>
                         </div>
                     </div>
 
                     <div class="player-column">
-                        <div class="player-name-row">
-                            <div id="p2-name-display" class="player-name">Player 2</div>
-                            <div id="p2-legs-display" class="legs-badge">LEGS: 0</div>
-                        </div>
                         <div id="p2-current-player" class="current-player-badge" style="display:none;"></div>
                         <div id="p2-card" class="score-card score-card--inactive">
-                            <div id="p2-avg-display" class="avg-display">AVG: 0.00</div>
-                            <div id="p2-score-display" class="score-display">501</div>
-                            <div id="p2-history" class="history-list"></div>
-                        </div>
-                        <div id="p2-checkout" class="checkout-box checkout-box--player" style="display:none;">
-                            <span class="checkout-label">CHECKOUT</span>
-                            <div id="p2-checkout-path" class="checkout-path">- - -</div>
+                            <!-- Header: throwing (left) | team name (center) | legs (right) -->
+                            <div class="sc-header">
+                                <div id="p2-throwing-display" class="sc-throwing"></div>
+                                <div id="p2-name-display" class="player-name"></div>
+                                <div id="p2-legs-display" class="legs-badge"></div>
+                            </div>
+                            <!-- Body: score | divider | history -->
+                            <div class="sc-body">
+                                <div id="p2-avg-display" class="avg-display">AVG: 0.00</div>
+                                <div id="p2-score-display" class="score-display">501</div>
+                                <div class="score-card-divider"></div>
+                                <div id="p2-history" class="history-list"></div>
+                            </div>
+                            <!-- Footer: checkout -->
+                            <div id="p2-checkout" class="sc-footer" style="display:none;">
+                                <div id="p2-checkout-path" class="checkout-path">- - -</div>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Checkout Helper (mobile) -->
+                <!-- Checkout Helper (mobile only) -->
                 <div id="checkout-helper" class="checkout-box" style="display:none;">
                     <span class="checkout-label">CHECKOUT</span>
                     <div id="checkout-path" class="checkout-path">- - -</div>
@@ -201,13 +211,25 @@
                     <button onclick="pressKey('8')" class="key-btn">8</button>
                     <button onclick="pressKey('9')" class="key-btn">9</button>
                     <button onclick="quickScore(100)" class="key-btn key-quick">100</button>
-                    <button onclick="clearInput()" class="key-btn key-clear">C</button>
-                    <button onclick="pressKey('0')" class="key-btn">0</button>
-                    <button onclick="undoMove()" class="key-btn key-undo">↩ Undo</button>
-                    <button onclick="submitTurn()" class="key-btn key-submit key-submit--tablet">EINGABE</button>
+                    <button onclick="clearInput()"  class="key-btn key-clear key-tablet-clear">C</button>
+                    <button onclick="pressKey('0')" class="key-btn key-tablet-zero">0</button>
+                    <button onclick="undoMove()"    class="key-btn key-undo key-tablet-undo">↩ Undo</button>
+                    <button onclick="submitTurn()"  class="key-btn key-submit key-tablet-submit">EINGABE</button>
                 </div>
             </div>
 
+        </div>
+    </div>
+
+    <!-- ── STARTER MODAL ── -->
+    <div id="starter-modal-overlay" class="ausbullen-overlay" style="display:none;">
+        <div class="ausbullen-modal">
+            <div class="ausbullen-title">BULL OUT</div>
+            <p class="ausbullen-subtitle">Wer beginnt mit dem ersten Wurf?</p>
+            <div class="ausbullen-buttons">
+                <button class="ausbullen-btn ausbullen-btn--p1" onclick="selectStarter(0)" id="starter-p1">Player 1</button>
+                <button class="ausbullen-btn ausbullen-btn--p2" onclick="selectStarter(1)" id="starter-p2">Player 2</button>
+            </div>
         </div>
     </div>
 

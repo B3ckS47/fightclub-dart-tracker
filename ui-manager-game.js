@@ -13,7 +13,6 @@ function updateDropdowns() {
     // Default p2 to second player to avoid same player selected
     const p2 = document.getElementById('p2-select');
     if (p2 && players.length > 1) p2.selectedIndex = 1;
-    updateStarterLabel();
 }
 
 function refreshDisplay() {
@@ -25,20 +24,35 @@ function refreshDisplay() {
     document.getElementById('p1-score-display').innerText = gameState.scores[0];
     document.getElementById('p2-score-display').innerText = gameState.scores[1];
     document.getElementById('mode-display').innerText = `FIRST TO ${gameState.targetLegs} LEGS`;
-    document.getElementById('p1-legs-display').innerText = `LEGS: ${gameState.legScore[0]}`;
-    document.getElementById('p2-legs-display').innerText = `LEGS: ${gameState.legScore[1]}`;
 
-    // Doubles: current player badge
+    // Render legs as dots: ● filled, ○ empty
+    [0, 1].forEach(idx => {
+        const won  = gameState.legScore[idx];
+        const dots = Array.from({ length: gameState.targetLegs }, (_, i) =>
+            i < won ? '●' : '○'
+        ).join(' ');
+        document.getElementById(`p${idx + 1}-legs-display`).innerText = dots;
+    });
+
+    // Doubles: current player badge (mobile) + throwing name in header (tablet)
     const cp1 = document.getElementById('p1-current-player');
     const cp2 = document.getElementById('p2-current-player');
+    const t1  = document.getElementById('p1-throwing-display');
+    const t2  = document.getElementById('p2-throwing-display');
     if (isDoubles) {
+        const throwing1 = gameState.teamPlayers[0][gameState.teamPlayerIdx[0]];
+        const throwing2 = gameState.teamPlayers[1][gameState.teamPlayerIdx[1]];
         cp1.style.display = 'block';
         cp2.style.display = 'block';
-        cp1.innerText = '🎯 ' + gameState.teamPlayers[0][gameState.teamPlayerIdx[0]];
-        cp2.innerText = '🎯 ' + gameState.teamPlayers[1][gameState.teamPlayerIdx[1]];
+        cp1.innerText = '🎯 ' + throwing1;
+        cp2.innerText = '🎯 ' + throwing2;
+        if (t1) t1.textContent = '🎯 ' + throwing1;
+        if (t2) t2.textContent = '🎯 ' + throwing2;
     } else {
         cp1.style.display = 'none';
         cp2.style.display = 'none';
+        if (t1) t1.textContent = '';
+        if (t2) t2.textContent = '';
     }
 
     // Active card highlight
@@ -54,6 +68,8 @@ function refreshDisplay() {
         p2Card.classList.add('score-card--inactive');
         p1Score.classList.add('score-active');
         p2Score.classList.remove('score-active');
+        document.getElementById('p1-name-display').style.color = 'var(--text-primary)';
+        document.getElementById('p2-name-display').style.color = '';
     } else {
         p2Card.classList.add('score-card--active');
         p2Card.classList.remove('score-card--inactive');
@@ -61,6 +77,8 @@ function refreshDisplay() {
         p1Card.classList.add('score-card--inactive');
         p2Score.classList.add('score-active');
         p1Score.classList.remove('score-active');
+        document.getElementById('p2-name-display').style.color = 'var(--text-primary)';
+        document.getElementById('p1-name-display').style.color = '';
     }
 
     renderHist(0, 'p1-history');
@@ -94,7 +112,7 @@ function refreshDisplay() {
         if (!box) return;
         const score = gameState.scores[idx];
         if (isTablet && gameState.mode === 'double' && score <= 170 && checkouts[score]) {
-            box.style.display = 'flex';
+            box.style.display = 'block';
             path.innerText = checkouts[score];
         } else {
             box.style.display = 'none';
@@ -106,10 +124,19 @@ function renderHist(pIdx, elId) {
     const el = document.getElementById(elId);
     el.innerHTML = "";
     const recentThrows = gameState.history[pIdx].slice(-4).reverse();
-    recentThrows.forEach(val => {
+    recentThrows.forEach((val, i) => {
         const item = document.createElement('div');
-        if (val === "BUST") item.style.color = "var(--red)";
-        item.innerText = val;
+        item.className = 'history-row';
+        const throwNum = gameState.history[pIdx].length - i;
+        const numSpan  = document.createElement('span');
+        numSpan.className   = 'history-throw-num';
+        numSpan.textContent = `#${throwNum}`;
+        const valSpan  = document.createElement('span');
+        valSpan.className   = 'history-throw-val';
+        valSpan.textContent = val;
+        if (val === "BUST") valSpan.style.color = "var(--red)";
+        item.appendChild(numSpan);
+        item.appendChild(valSpan);
         el.appendChild(item);
     });
 }
@@ -144,22 +171,6 @@ function doExitGame() {
     document.getElementById('active-game-view').style.display = 'none';
     gameState.input = "";
     document.getElementById('input-preview').innerText = "0";
-}
-
-// ── SWAP STARTER (setup screen only, before first input) ──
-let starterIdx = 0;
-
-function swapStarter() {
-    starterIdx = starterIdx === 0 ? 1 : 0;
-    updateStarterLabel();
-}
-
-function updateStarterLabel() {
-    const p1Name = document.getElementById('p1-select').value;
-    const p2Name = document.getElementById('p2-select').value;
-    const name   = starterIdx === 0 ? p1Name : p2Name;
-    const label  = document.getElementById('starter-swap-label');
-    if (label) label.textContent = `🎯 ${name} beginnt`;
 }
 
 window.exitGame = exitGame;

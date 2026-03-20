@@ -125,17 +125,13 @@ function startGame() {
     gameState.history       = [[], []];
     gameState.legScore      = [0, 0];
     gameState.targetLegs    = legTarget;
-    gameState.legStarter    = (typeof starterIdx !== 'undefined') ? starterIdx : 0;
-    gameState.currentIdx    = gameState.legStarter;
+    gameState.legStarter    = 0;
+    gameState.currentIdx    = 0;
     gameState.teamPlayerIdx = [0, 0];
     gameState.mode          = mode;
     gameState.isOfficial    = document.getElementById('game-mode-track').classList.contains('game-mode-track--on');
     gameState.logs          = [];
-
-    // Reset starter toggle for next game
-    if (typeof starterIdx !== 'undefined') starterIdx = 0;
-    const swapLabel = document.getElementById('starter-swap-label');
-    if (swapLabel) swapLabel.textContent = '🎯 P1 beginnt';
+    gameState.ausbullenActive = true; // block input until starter is chosen
 
     document.getElementById('nav-setup').style.display        = 'none';
     document.getElementById('nav-game-active').style.display  = 'block';
@@ -143,6 +139,11 @@ function startGame() {
     document.getElementById('active-game-view').style.display  = '';
     document.getElementById('active-game-view').classList.add('game-active');
     refreshDisplay();
+
+    // Show starter selection modal
+    document.getElementById('starter-p1').textContent = gameState.pNames[0];
+    document.getElementById('starter-p2').textContent = gameState.pNames[1];
+    document.getElementById('starter-modal-overlay').style.display = 'flex';
 }
 
 function pressKey(num) {
@@ -325,6 +326,15 @@ function resetForNextLeg() {
             (gameState.teamPlayerIdx[gameState.legStarter] + 1) % 2;
     }
     gameState.input = "";
+    refreshDisplay();
+}
+
+// ── STARTER SELECTION ──
+function selectStarter(teamIdx) {
+    document.getElementById('starter-modal-overlay').style.display = 'none';
+    gameState.ausbullenActive = false;
+    gameState.legStarter  = teamIdx;
+    gameState.currentIdx  = teamIdx;
     refreshDisplay();
 }
 
