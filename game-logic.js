@@ -7,20 +7,21 @@ const FINE_REASONS = {
 
 const SCHNAPSZAHLEN = new Set([11,22,33,44,55,66,77,88,99,111,222,333,444,555]);
 
-// Insert a fine row silently — looks up player UUID by name
+// Insert a fine row silently — looks up player UUID by name, returns inserted ID
 async function insertFine(playerName, reason) {
     const player = players.find(p => p.name === playerName);
-    if (!player) return;
+    if (!player) return null;
     try {
-        await supa.from('fines_ledger').insert([{
+        const { data } = await supa.from('fines_ledger').insert([{
             player_id:  player.id,
             amount:     reason.amount,
             type:       'fine',
             reason:     reason.name,
             note:       null,
             created_by: 'system'
-        }]);
-    } catch(e) { console.error('Fine insert error:', e); }
+        }]).select('id').single();
+        return data ? data.id : null;
+    } catch(e) { console.error('Fine insert error:', e); return null; }
 }
 
 // ── TOAST ──
@@ -124,12 +125,17 @@ function startGame() {
     gameState.history       = [[], []];
     gameState.legScore      = [0, 0];
     gameState.targetLegs    = legTarget;
-    gameState.legStarter    = 0;
-    gameState.currentIdx    = 0;
+    gameState.legStarter    = (typeof starterIdx !== 'undefined') ? starterIdx : 0;
+    gameState.currentIdx    = gameState.legStarter;
     gameState.teamPlayerIdx = [0, 0];
     gameState.mode          = mode;
     gameState.isOfficial    = document.getElementById('game-mode-track').classList.contains('game-mode-track--on');
     gameState.logs          = [];
+
+    // Reset starter toggle for next game
+    if (typeof starterIdx !== 'undefined') starterIdx = 0;
+    const swapLabel = document.getElementById('starter-swap-label');
+    if (swapLabel) swapLabel.textContent = '🎯 P1 beginnt';
 
     document.getElementById('nav-setup').style.display        = 'none';
     document.getElementById('nav-game-active').style.display  = 'block';
@@ -158,10 +164,11 @@ function quickScore(val) {
 async function submitTurn() {
     if (gameState.ausbullenActive) return;
     const pts = parseInt(gameState.input) || 0;
-    if (pts > 180) return alert("Max is 180!");
+    if (pts > 180) { showToast('⚠️ Maximum ist 180!'); clearInput(); return; }
 
     // Snapshot for undo — explicitly exclude logs to prevent exponential growth
     const { logs: _ignored, ...snapshot } = gameState;
+    snapshot.fineIdsThisTurn = []; // will be filled after fines insert
     gameState.logs.push(JSON.parse(JSON.stringify(snapshot)));
     if (gameState.logs.length > 10) gameState.logs.shift();
 
@@ -192,25 +199,18 @@ async function submitTurn() {
         if (typeof refreshDisplay === "function") refreshDisplay();
 
         if (gameState.legScore[teamIdx] >= gameState.targetLegs) {
-            setTimeout(async () => {
-                alert("MATCH OVER! " + gameState.pNames[teamIdx] + " wins!");
-                if (gameState.gameType === 'singles' && gameState.isOfficial) {
-                    try { await saveMatchToSupabase(); } catch(e) { console.error(e); }
-                }
-                const startVal = parseInt(document.getElementById('start-score-select').value);
-                gameState.scores   = [startVal, startVal];
-                gameState.legScore = [0, 0];
-                exitGame(true);
-            }, 100);
+            if (gameState.gameType === 'singles' && gameState.isOfficial) {
+                try { await saveMatchToSupabase(); } catch(e) { console.error(e); }
+            }
+            showMatchModal(gameState.pNames[teamIdx]);
         } else {
-            alert("Leg gewonnen von " + gameState.pNames[teamIdx] + "!");
-            resetForNextLeg();
+            showLegModal(gameState.pNames[teamIdx]);
         }
         return;
     }
 
     if (newScore < 0 || (newScore === 1 && gameState.mode === 'double')) {
-        alert("BUST!");
+        showToast('💥 BUST!');
         gameState.history[teamIdx].push("BUST");
     } else {
         gameState.scores[teamIdx] = newScore;
@@ -222,16 +222,25 @@ async function submitTurn() {
                 ? gameState.pNames[teamIdx]
                 : gameState.teamPlayers[teamIdx][playerWithinTeam];
 
+            const insertedIds = [];
+
             // 26 fine
             if (pts === 26) {
-                insertFine(playerName, FINE_REASONS.twentySix);
+                const id = await insertFine(playerName, FINE_REASONS.twentySix);
+                if (id) insertedIds.push(id);
                 showToast(`💸 ${playerName}: 26 — ${FINE_REASONS.twentySix.amount.toFixed(2).replace('.',',')} €`);
             }
 
             // Schnapszahl fine
             if (SCHNAPSZAHLEN.has(newScore)) {
-                insertFine(playerName, FINE_REASONS.schnapszahl);
+                const id = await insertFine(playerName, FINE_REASONS.schnapszahl);
+                if (id) insertedIds.push(id);
                 showToast(`💸 ${playerName}: Schnapszahl (${newScore}) — ${FINE_REASONS.schnapszahl.amount.toFixed(2).replace('.',',')} €`);
+            }
+
+            // Store inserted IDs in the most recent log snapshot for undo
+            if (insertedIds.length > 0 && gameState.logs.length > 0) {
+                gameState.logs[gameState.logs.length - 1].fineIdsThisTurn = insertedIds;
             }
         }
     }
@@ -247,7 +256,6 @@ async function submitTurn() {
     refreshDisplay();
 
     // ── AUSBULLEN CHECK ──
-    // After both teams have had 20 turns each and neither has won the leg
     const turns0 = gameState.history[0].length;
     const turns1 = gameState.history[1].length;
     if (gameState.isOfficial && turns0 >= 20 && turns1 >= 20 && gameState.scores[0] > 0 && gameState.scores[1] > 0) {
@@ -258,11 +266,47 @@ async function submitTurn() {
 function undoMove() {
     if (gameState.logs.length === 0) return;
     const lastSnapshot = gameState.logs.pop();
-    const currentLogs  = gameState.logs; // keep the remaining logs
+    const currentLogs  = gameState.logs;
+
+    // Delete any fines that were inserted during the undone turn
+    const fineIds = lastSnapshot.fineIdsThisTurn || [];
+    if (fineIds.length > 0) {
+        supa.from('fines_ledger').delete().in('id', fineIds)
+            .then(() => {})
+            .catch(e => console.error('Fine undo error:', e));
+    }
+
     Object.assign(gameState, lastSnapshot);
-    gameState.logs = currentLogs; // restore logs, not the snapshotted ones
+    gameState.logs = currentLogs;
     refreshDisplay();
     clearInput();
+}
+
+// ── LEG MODAL ──
+function showLegModal(winnerName) {
+    document.getElementById('leg-modal-subtitle').textContent = winnerName;
+    document.getElementById('leg-modal-overlay').style.display = 'flex';
+}
+
+function dismissLegModal() {
+    document.getElementById('leg-modal-overlay').style.display = 'none';
+    resetForNextLeg();
+}
+
+// ── MATCH MODAL ──
+let matchWinnerName = '';
+function showMatchModal(winnerName) {
+    matchWinnerName = winnerName;
+    document.getElementById('match-modal-subtitle').textContent = winnerName + ' gewinnt das Match!';
+    document.getElementById('match-modal-overlay').style.display = 'flex';
+}
+
+async function dismissMatchModal() {
+    document.getElementById('match-modal-overlay').style.display = 'none';
+    const startVal = parseInt(document.getElementById('start-score-select').value);
+    gameState.scores   = [startVal, startVal];
+    gameState.legScore = [0, 0];
+    exitGame(true);
 }
 
 function clearInput() {
@@ -294,7 +338,7 @@ function showAusbullen() {
     document.getElementById('ausbullen-overlay').style.display = 'flex';
 }
 
-function selectAusbullenWinner(teamIdx) {
+async function selectAusbullenWinner(teamIdx) {
     document.getElementById('ausbullen-overlay').style.display = 'none';
     gameState.ausbullenActive = false;
 
@@ -317,18 +361,11 @@ function selectAusbullenWinner(teamIdx) {
     gameState.legScore[teamIdx]++;
 
     if (gameState.legScore[teamIdx] >= gameState.targetLegs) {
-        setTimeout(async () => {
-            alert("MATCH OVER! " + gameState.pNames[teamIdx] + " wins!");
-            if (gameState.gameType === 'singles' && gameState.isOfficial) {
-                try { await saveMatchToSupabase(); } catch(e) { console.error(e); }
-            }
-            const startVal = parseInt(document.getElementById('start-score-select').value);
-            gameState.scores   = [startVal, startVal];
-            gameState.legScore = [0, 0];
-            exitGame(true);
-        }, 100);
+        if (gameState.gameType === 'singles' && gameState.isOfficial) {
+            try { await saveMatchToSupabase(); } catch(e) { console.error(e); }
+        }
+        showMatchModal(gameState.pNames[teamIdx]);
     } else {
-        alert("Leg gewonnen von " + gameState.pNames[teamIdx] + "! (Ausbullen)");
-        resetForNextLeg();
+        showLegModal(gameState.pNames[teamIdx] + ' (Ausbullen)');
     }
 }

@@ -13,6 +13,7 @@ function updateDropdowns() {
     // Default p2 to second player to avoid same player selected
     const p2 = document.getElementById('p2-select');
     if (p2 && players.length > 1) p2.selectedIndex = 1;
+    updateStarterLabel();
 }
 
 function refreshDisplay() {
@@ -119,10 +120,23 @@ function exitGame(isFinished = false) {
         || gameState.legScore[0] > 0 || gameState.legScore[1] > 0;
 
     if (!isFinished && gameInProgress) {
-        const confirmExit = confirm("⚠️ Spiel läuft noch! Wirklich beenden? Fortschritt geht verloren.");
-        if (!confirmExit) return;
+        document.getElementById('exit-modal-overlay').style.display = 'flex';
+        return;
     }
 
+    doExitGame();
+}
+
+function confirmExit() {
+    document.getElementById('exit-modal-overlay').style.display = 'none';
+    doExitGame();
+}
+
+function cancelExit() {
+    document.getElementById('exit-modal-overlay').style.display = 'none';
+}
+
+function doExitGame() {
     document.getElementById('nav-setup').style.display = 'block';
     document.getElementById('nav-game-active').style.display = 'none';
     document.getElementById('setup-view').style.display = 'block';
@@ -130,6 +144,22 @@ function exitGame(isFinished = false) {
     document.getElementById('active-game-view').style.display = 'none';
     gameState.input = "";
     document.getElementById('input-preview').innerText = "0";
+}
+
+// ── SWAP STARTER (setup screen only, before first input) ──
+let starterIdx = 0;
+
+function swapStarter() {
+    starterIdx = starterIdx === 0 ? 1 : 0;
+    updateStarterLabel();
+}
+
+function updateStarterLabel() {
+    const p1Name = document.getElementById('p1-select').value;
+    const p2Name = document.getElementById('p2-select').value;
+    const name   = starterIdx === 0 ? p1Name : p2Name;
+    const label  = document.getElementById('starter-swap-label');
+    if (label) label.textContent = `🎯 ${name} beginnt`;
 }
 
 window.exitGame = exitGame;

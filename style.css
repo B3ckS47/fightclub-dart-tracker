@@ -232,6 +232,28 @@ body {
 
 .input-field { cursor: text; }
 
+/* ── STARTER SWAP BUTTON ── */
+.starter-swap-btn {
+    font-family: var(--font-display);
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    padding: 8px 16px;
+    border-radius: 20px;
+    border: 1px dashed var(--border-light);
+    background: var(--bg-element);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.18s ease;
+    white-space: nowrap;
+}
+
+.starter-swap-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-dim);
+}
+
 /* ── VS BLOCK (PLAYER SELECT) ── */
 .vs-block {
     display: flex;
@@ -1422,6 +1444,59 @@ body {
 .fine-toast--visible {
     opacity: 1;
     transform: translateX(-50%) translateY(0);
+}
+
+/* ── GAME NOTIFICATION MODALS (Leg / Match) ── */
+.game-notify-modal {
+    text-align: center;
+}
+
+.game-notify-icon {
+    font-size: 3rem;
+    margin-bottom: 12px;
+}
+
+.game-notify-title {
+    font-family: var(--font-display);
+    font-size: 2rem;
+    font-weight: 800;
+    letter-spacing: 4px;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+}
+
+.game-notify-subtitle {
+    font-family: var(--font-display);
+    font-size: 1.2rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: var(--accent);
+    margin-bottom: 28px;
+}
+
+/* ── FINES TOTAL ROW ── */
+.fines-total-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 11px 16px;
+    margin-top: 4px;
+    border-top: 1px solid var(--border);
+    border-radius: 0 0 var(--radius-md) var(--radius-md);
+}
+
+.fines-total-label {
+    font-family: var(--font-display);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: var(--text-muted);
+}
+
+.fines-total-amount {
+    font-family: var(--font-display);
+    font-size: 1.1rem;
+    font-weight: 800;
 }
 
 /* ── AUSBULLEN MODAL ── */

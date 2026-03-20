@@ -13,6 +13,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <script src="config.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -108,8 +109,8 @@
     </div>
 
     <script>
-        const SUPABASE_URL = 'https://daejfzypbnwtucwftkzn.supabase.co';
-        const SUPABASE_KEY = 'sb_publishable_xajv6XFl28cNrdMSohDhjg_aDyMT3Bl';
+        const SUPABASE_URL = window.SUPABASE_URL;
+        const SUPABASE_KEY = window.SUPABASE_KEY;
         const supa         = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         const SESSION_KEY  = 'fc47_user';
 
@@ -149,23 +150,39 @@
             const memberPlayers   = players.filter(p => memberPlayerIds.has(p.id));
             const guestPlayers    = players.filter(p => !memberPlayerIds.has(p.id));
 
-            // Render members
+            // Render members — sorted by balance descending (highest debt first)
             const membersEl = document.getElementById('fines-members-list');
             if (memberPlayers.length === 0) {
                 membersEl.innerHTML = '<p class="muted-text">Keine Mitglieder gefunden.</p>';
             } else {
-                membersEl.innerHTML = memberPlayers.map(p => renderOverviewRow(p, balanceMap[p.id] || 0)).join('');
+                const sorted = [...memberPlayers].sort((a, b) =>
+                    (balanceMap[b.id] || 0) - (balanceMap[a.id] || 0)
+                );
+                const memberTotal = memberPlayers.reduce((s, p) => s + (balanceMap[p.id] || 0), 0);
+                membersEl.innerHTML = sorted.map(p => renderOverviewRow(p, balanceMap[p.id] || 0)).join('') +
+                    renderTotalRow(memberTotal);
             }
 
-            // Render guests (always shown, regardless of balance)
+            // Render guests — sorted by balance descending
             const guestSection = document.getElementById('fines-guests-section');
             if (guestPlayers.length > 0) {
                 guestSection.style.display = 'block';
+                const sortedGuests = [...guestPlayers].sort((a, b) =>
+                    (balanceMap[b.id] || 0) - (balanceMap[a.id] || 0)
+                );
                 document.getElementById('fines-guests-list').innerHTML =
-                    guestPlayers.map(p => renderOverviewRow(p, balanceMap[p.id] || 0)).join('');
+                    sortedGuests.map(p => renderOverviewRow(p, balanceMap[p.id] || 0)).join('');
             } else {
                 guestSection.style.display = 'none';
             }
+        }
+
+        function renderTotalRow(total) {
+            return `
+<div class="fines-total-row">
+    <div class="fines-total-label">GESAMT OFFEN</div>
+    <div class="fines-total-amount ${total > 0 ? 'fines-amount--debt' : 'fines-amount--zero'}">${formatEur(total)}</div>
+</div>`;
         }
 
         function renderOverviewRow(player, balance) {

@@ -13,6 +13,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <script src="config.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="checkout.js"></script>
 </head>
@@ -62,9 +63,11 @@
 
             <!-- Singles Player Select -->
             <div id="singles-select" class="vs-block">
-                <select id="p1-select" class="select-field"><option>Loading...</option></select>
-                <span class="vs-label">VS</span>
-                <select id="p2-select" class="select-field"><option>Loading...</option></select>
+                <select id="p1-select" class="select-field" onchange="updateStarterLabel()"><option>Loading...</option></select>
+                <button onclick="swapStarter()" class="starter-swap-btn" id="starter-swap-btn" title="Startspieler wechseln">
+                    <span id="starter-swap-label">🎯 P1 beginnt</span>
+                </button>
+                <select id="p2-select" class="select-field" onchange="updateStarterLabel()"><option>Loading...</option></select>
             </div>
 
             <!-- Doubles Player Select -->
@@ -208,6 +211,19 @@
         </div>
     </div>
 
+    <!-- ── EXIT CONFIRM MODAL ── -->
+    <div id="exit-modal-overlay" class="ausbullen-overlay" style="display:none;">
+        <div class="ausbullen-modal game-notify-modal">
+            <div class="game-notify-icon">⚠️</div>
+            <div class="game-notify-title">SPIEL BEENDEN?</div>
+            <p class="game-notify-subtitle" style="color:var(--text-secondary);">Fortschritt geht unwiderruflich verloren.</p>
+            <div class="ausbullen-buttons">
+                <button class="ausbullen-btn" onclick="confirmExit()" style="border-color:var(--red);color:var(--red);">BEENDEN</button>
+                <button class="ausbullen-btn" onclick="cancelExit()">WEITER SPIELEN</button>
+            </div>
+        </div>
+    </div>
+
     <!-- ── AUSBULLEN MODAL ── -->
     <div id="ausbullen-overlay" class="ausbullen-overlay" style="display:none;">
         <div class="ausbullen-modal">
@@ -217,6 +233,26 @@
                 <button class="ausbullen-btn ausbullen-btn--p1" onclick="selectAusbullenWinner(0)" id="ausbullen-p1">Player 1</button>
                 <button class="ausbullen-btn ausbullen-btn--p2" onclick="selectAusbullenWinner(1)" id="ausbullen-p2">Player 2</button>
             </div>
+        </div>
+    </div>
+
+    <!-- ── LEG WON MODAL ── -->
+    <div id="leg-modal-overlay" class="ausbullen-overlay" style="display:none;">
+        <div class="ausbullen-modal game-notify-modal">
+            <div class="game-notify-icon">🎯</div>
+            <div class="game-notify-title" id="leg-modal-title">LEG GEWONNEN</div>
+            <p class="game-notify-subtitle" id="leg-modal-subtitle"></p>
+            <button class="btn btn-primary btn-full" onclick="dismissLegModal()">WEITER</button>
+        </div>
+    </div>
+
+    <!-- ── MATCH OVER MODAL ── -->
+    <div id="match-modal-overlay" class="ausbullen-overlay" style="display:none;">
+        <div class="ausbullen-modal game-notify-modal">
+            <div class="game-notify-icon">🏆</div>
+            <div class="game-notify-title">MATCH OVER</div>
+            <p class="game-notify-subtitle" id="match-modal-subtitle"></p>
+            <button class="btn btn-primary btn-full" onclick="dismissMatchModal()">ABSCHLUSS</button>
         </div>
     </div>
 
