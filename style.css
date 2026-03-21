@@ -71,7 +71,8 @@ body {
 #nav-tournaments,
 #nav-tournament-create,
 #nav-tournament-view,
-#nav-spectator {
+#nav-spectator,
+#nav-spieltag {
     position: sticky;
     top: 0;
     z-index: 100;
@@ -1531,90 +1532,6 @@ body {
     /* Card general */
     .card { padding: 32px 36px; }
 }
-
-/* ── GLOBAL TOAST (ui-utils.js) ── */
-.fc-toast {
-    position: fixed;
-    bottom: 24px;
-    left: 50%;
-    transform: translateX(-50%) translateY(20px);
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-left: 3px solid var(--accent);
-    border-radius: var(--radius-md);
-    padding: 12px 20px;
-    font-family: var(--font-display);
-    font-size: 0.95rem;
-    font-weight: 600;
-    letter-spacing: 0.5px;
-    color: var(--text-primary);
-    box-shadow: var(--shadow-card);
-    opacity: 0;
-    transition: opacity 0.3s ease, transform 0.3s ease;
-    z-index: 9999;
-    white-space: nowrap;
-    max-width: 90vw;
-    pointer-events: none;
-}
-.fc-toast--visible  { opacity: 1; transform: translateX(-50%) translateY(0); }
-.fc-toast--error    { border-left-color: var(--red);   }
-.fc-toast--success  { border-left-color: var(--green); }
-.fc-toast--info     { border-left-color: var(--accent);}
-
-/* ── GLOBAL CONFIRM MODAL (ui-utils.js) ── */
-.fc-confirm-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0,0,0,0.75);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 10000;
-    padding: 24px;
-}
-.fc-confirm-modal {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-top: 3px solid var(--accent);
-    border-radius: var(--radius-lg);
-    padding: 32px 28px 24px;
-    max-width: 360px;
-    width: 100%;
-    text-align: center;
-    box-shadow: var(--shadow-card);
-    animation: fcModalIn 0.2s ease;
-}
-@keyframes fcModalIn {
-    from { opacity: 0; transform: scale(0.95) translateY(10px); }
-    to   { opacity: 1; transform: scale(1)    translateY(0); }
-}
-.fc-confirm-icon  { font-size: 2rem; margin-bottom: 12px; }
-.fc-confirm-title {
-    font-family: var(--font-display);
-    font-size: 1.2rem;
-    font-weight: 800;
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    color: var(--text-primary);
-    margin-bottom: 10px;
-}
-.fc-confirm-msg {
-    font-size: 0.9rem;
-    color: var(--text-secondary);
-    line-height: 1.5;
-    margin-bottom: 24px;
-}
-.fc-confirm-btns {
-    display: flex;
-    gap: 10px;
-}
-.fc-confirm-btns .btn {
-    flex: 1;
-    background: var(--bg-element);
-    color: var(--text-secondary);
-    border: 1px solid var(--border);
-}
-.fc-confirm-btns .btn:hover { border-color: var(--border-light); color: var(--text-primary); }
 
 /* ── FINE TOAST ── */
 .fine-toast {
@@ -3384,3 +3301,82 @@ body {
     font-size: 0.8rem;
     color: var(--text-muted);
 }
+
+/* ── SPIELTAGSPLANUNG ── */
+.menu-card--spieltag { border-top: 3px solid #22d3ee; }
+.menu-card--spieltag:hover { border-color: #22d3ee; box-shadow: 0 8px 32px rgba(34,211,238,0.2); }
+
+.spieltag-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 14px 16px;
+    background: var(--bg-element);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    margin-bottom: 10px;
+    text-decoration: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+.spieltag-row:hover { border-color: #22d3ee; box-shadow: 0 4px 16px rgba(34,211,238,0.12); }
+.spieltag-row-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.spieltag-title { font-family: var(--font-display); font-size: 1.1rem; font-weight: 700; letter-spacing: 1px; color: var(--text-primary); }
+.spieltag-date  { font-family: var(--font-display); font-size: 0.78rem; color: var(--text-muted); white-space: nowrap; }
+.spieltag-meta  { font-size: 0.8rem; color: var(--text-muted); }
+
+/* Bracket container */
+.bracket-section { margin-bottom: 20px; }
+.bracket-label {
+    font-family: var(--font-display);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 3px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    margin-bottom: 10px;
+}
+.lineup-slot {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    background: var(--bg-element);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    margin-bottom: 6px;
+}
+.lineup-slot-num {
+    font-family: var(--font-display);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    width: 24px;
+    flex-shrink: 0;
+}
+.lineup-slot .select-field { flex: 1; }
+.lineup-slot-vs {
+    font-family: var(--font-display);
+    font-size: 0.7rem;
+    letter-spacing: 2px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+/* Player selection cards */
+.player-pool { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.player-pool-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    background: var(--bg-element);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    gap: 12px;
+}
+.player-pool-name { font-weight: 600; font-size: 0.9rem; color: var(--text-primary); }
+.player-pool-stats { display: flex; gap: 12px; align-items: center; }
+.player-pool-avg  { font-family: var(--font-display); font-size: 0.82rem; color: var(--accent); font-weight: 700; }
+.player-pool-pts  { font-family: var(--font-display); font-size: 0.82rem; color: #22d3ee; font-weight: 700; }
+.player-pool-lbl  { font-size: 0.65rem; color: var(--text-muted); letter-spacing: 1px; }

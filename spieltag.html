@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlightClub · Spieltagsplanung</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0d0d0f">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <script src="config.js"></script>
+    <script src="ui-utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+    <nav id="nav-spieltag">
+        <div class="nav-inner nav-inner--default">
+            <span class="nav-brand">FLIGHTCLUB</span>
+            <div class="nav-links">
+                <a href="index.html" class="nav-btn">« Menü</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="app-wrapper">
+
+        <div class="card">
+            <h2 class="card-title">SPIELTAGSPLANUNG</h2>
+            <div class="divider"></div>
+            <div id="spieltag-list"><p class="muted-text">Lade Spieltage…</p></div>
+        </div>
+
+    </div>
+
+    <script>
+        const supa = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
+        const raw  = sessionStorage.getItem('fc47_user');
+        if (!raw) window.location.href = 'index.html';
+        const user = JSON.parse(raw);
+        if (user.role !== 'admin') window.location.href = 'index.html';
+
+        async function load() {
+            const { data: appts } = await supa
+                .from('appointments')
+                .select('*')
+                .eq('type', 'Gameday')
+                .order('date', { ascending: false });
+
+            const el = document.getElementById('spieltag-list');
+            if (!appts || appts.length === 0) {
+                el.innerHTML = '<p class="muted-text">Keine Spieltage gefunden.</p>';
+                return;
+            }
+
+            const now = new Date();
+            el.innerHTML = appts.map(a => {
+                const d       = new Date(a.date);
+                const isPast  = d < now;
+                const dateStr = d.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' });
+                const timeStr = d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+                return `
+                    <a href="spieltag-detail.html?id=${a.id}" class="spieltag-row${isPast ? ' tourn-row--finished' : ''}">
+                        <div class="spieltag-row-top">
+                            <span class="spieltag-title">${a.title}</span>
+                            <span class="spieltag-date">${dateStr} · ${timeStr} Uhr</span>
+                        </div>
+                        <div class="spieltag-meta">${a.place ? '📍 ' + a.place : '&nbsp;'}</div>
+                    </a>`;
+            }).join('');
+        }
+
+        load();
+    </script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/fightclub-dart-tracker/sw.js').catch(() => {});
+        }
+    </script>
+</body>
+</html>

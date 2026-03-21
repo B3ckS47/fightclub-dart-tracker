@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlightClub · Spieltag</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0d0d0f">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <script src="config.js"></script>
+    <script src="ui-utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+    <nav id="nav-spieltag">
+        <div class="nav-inner nav-inner--default">
+            <span class="nav-brand">FLIGHTCLUB</span>
+            <div class="nav-links">
+                <a href="spieltag.html" class="nav-btn">« Spieltage</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="app-wrapper">
+
+        <!-- Header -->
+        <div class="card">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px;">
+                <div>
+                    <h2 class="card-title" id="appt-title">–</h2>
+                    <p class="muted-text" id="appt-meta" style="margin-top:4px;"></p>
+                </div>
+                <span id="appt-status" class="tourn-status"></span>
+            </div>
+        </div>
+
+        <!-- Player Pool -->
+        <div class="card">
+            <h2 class="card-title">ZUGESAGTE SPIELER</h2>
+            <div class="divider"></div>
+            <p class="muted-text" style="font-size:0.78rem; margin-bottom:12px;">Sortiert nach Punkten. Nur Mitglieder und Admins die zugesagt haben.</p>
+            <div id="player-pool"></div>
+        </div>
+
+        <!-- Bracket 1: 6 Singles -->
+        <div class="card">
+            <h2 class="card-title">BRACKET 1 · EINZEL</h2>
+            <div class="divider"></div>
+            <p class="muted-text" style="font-size:0.78rem; margin-bottom:12px;">6 Einzel · jeder Spieler nur einmal pro Bracket</p>
+            <div class="bracket-section" id="bracket-1"></div>
+        </div>
+
+        <!-- Bracket 2: 3 Doubles -->
+        <div class="card">
+            <h2 class="card-title">BRACKET 2 · DOPPEL</h2>
+            <div class="divider"></div>
+            <p class="muted-text" style="font-size:0.78rem; margin-bottom:12px;">3 Doppel · jeder Spieler nur einmal pro Bracket</p>
+            <div class="bracket-section" id="bracket-2"></div>
+        </div>
+
+        <!-- Bracket 3: 6 Singles -->
+        <div class="card">
+            <h2 class="card-title">BRACKET 3 · EINZEL</h2>
+            <div class="divider"></div>
+            <p class="muted-text" style="font-size:0.78rem; margin-bottom:12px;">6 Einzel · jeder Spieler nur einmal pro Bracket</p>
+            <div class="bracket-section" id="bracket-3"></div>
+        </div>
+
+        <!-- Save button -->
+        <button class="btn btn-primary btn-full btn-lg" onclick="saveLineup()">AUFSTELLUNG SPEICHERN</button>
+
+    </div>
+
+    <script>
+        const supa   = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
+        const raw    = sessionStorage.getItem('fc47_user');
+        if (!raw) window.location.href = 'index.html';
+        const user   = JSON.parse(raw);
+        if (user.role !== 'admin') window.location.href = 'index.html';
+
+        const params = new URLSearchParams(window.location.search);
+        const apptId = params.get('id');
+        if (!apptId) window.location.href = 'spieltag.html';
+
+        // Bracket config: [bracket_num, slots, type]
+        const BRACKETS = [
+            { num: 1, slots: 6, type: 'singles' },
+            { num: 2, slots: 3, type: 'doubles' },
+            { num: 3, slots: 6, type: 'singles' }
+        ];
+
+        let attendees = []; // { player_id, name, avg30, points }
+        let existing  = {}; // { "bracket-slot": { player1_id, player2_id } }
+
+        async function load() {
+            // Load appointment info
+            const { data: appt } = await supa
+                .from('appointments')
+                .select('*')
+                .eq('id', apptId)
+                .single();
+
+            if (!appt) { window.location.href = 'spieltag.html'; return; }
+
+            document.getElementById('appt-title').textContent = appt.title;
+            const d = new Date(appt.date);
+            document.getElementById('appt-meta').textContent =
+                d.toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' })
+                + ' · ' + d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) + ' Uhr'
+                + (appt.place ? ' · 📍 ' + appt.place : '');
+
+            const isPast = d < new Date();
+            const badge  = document.getElementById('appt-status');
+            badge.textContent = isPast ? 'VERGANGEN' : 'GEPLANT';
+            badge.className   = 'tourn-status ' + (isPast ? 'tourn-status--done' : 'tourn-status--active');
+
+            // Load confirmed attendees (member + admin only)
+            const { data: votes } = await supa
+                .from('appointment_votes')
+                .select('user_id, username')
+                .eq('appointment_id', apptId)
+                .eq('vote', 'yes')
+                .eq('is_guest', false);
+
+            if (!votes || votes.length === 0) {
+                document.getElementById('player-pool').innerHTML = '<p class="muted-text">Keine Zusagen von Mitgliedern.</p>';
+                return;
+            }
+
+            // Get player_ids for confirmed users
+            const userIds = votes.map(v => v.user_id);
+            const { data: appUsers } = await supa
+                .from('app_users')
+                .select('id, player_id, role')
+                .in('id', userIds)
+                .in('role', ['admin', 'member']);
+
+            const memberPlayerIds = (appUsers || [])
+                .map(u => u.player_id)
+                .filter(Boolean);
+
+            if (memberPlayerIds.length === 0) {
+                document.getElementById('player-pool').innerHTML = '<p class="muted-text">Keine Mitglieder haben zugesagt.</p>';
+                return;
+            }
+
+            // Calculate stats for each player
+            const now30 = new Date();
+            now30.setDate(now30.getDate() - 30);
+
+            const [histRes, trainRes, tournRes] = await Promise.all([
+                supa.from('game_history')
+                    .select('player_id, is_win, avg_game, one_eighties, high_finishes, created_at')
+                    .in('player_id', memberPlayerIds),
+                // Training attendance
+                supa.from('appointment_votes')
+                    .select('user_id')
+                    .eq('vote', 'yes')
+                    .eq('is_guest', false)
+                    .in('user_id', userIds),
+                // Swiss loser bracket wins
+                supa.from('tournament_matches')
+                    .select('winner_id, tournament_id')
+                    .eq('bracket', 'losers')
+                    .eq('status', 'done')
+            ]);
+
+            // Past training appointments count
+            const { data: pastTrainings } = await supa
+                .from('appointments')
+                .select('id')
+                .eq('type', 'Training')
+                .lt('date', new Date().toISOString());
+
+            const pastTrainingIds = new Set((pastTrainings || []).map(a => a.id));
+
+            // Training votes per user
+            const { data: trainingVotes } = await supa
+                .from('appointment_votes')
+                .select('user_id, appointment_id')
+                .eq('vote', 'yes')
+                .in('user_id', userIds);
+
+            // Swiss loser bracket participant mapping
+            const loserWinnerPartIds = new Set((tournRes.data || []).map(m => m.winner_id));
+            const { data: loserParts } = loserWinnerPartIds.size > 0
+                ? await supa.from('tournament_participants')
+                    .select('id, player_id')
+                    .in('id', [...loserWinnerPartIds])
+                : { data: [] };
+            const loserWinPlayerIds = new Set((loserParts || []).map(p => p.player_id));
+
+            // Build user → player_id map
+            const userToPlayer = {};
+            (appUsers || []).forEach(u => { userToPlayer[u.id] = u.player_id; });
+
+            // Count training attendance per player
+            const trainingCount = {};
+            (trainingVotes || []).forEach(v => {
+                if (!pastTrainingIds.has(v.appointment_id)) return;
+                const pid = userToPlayer[v.user_id];
+                if (pid) trainingCount[pid] = (trainingCount[pid] || 0) + 1;
+            });
+
+            // Get player names
+            const { data: playerRows } = await supa
+                .from('players')
+                .select('id, name')
+                .in('id', memberPlayerIds);
+
+            const playerName = {};
+            (playerRows || []).forEach(p => { playerName[p.id] = p.name; });
+
+            const allHistory = histRes.data || [];
+
+            attendees = memberPlayerIds.map(pid => {
+                const pHistory = allHistory.filter(h => h.player_id === pid);
+                const hist30   = pHistory.filter(h => new Date(h.created_at) >= now30);
+
+                // Avg last 30 days
+                const avg30 = hist30.length > 0
+                    ? (hist30.reduce((s, h) => s + (h.avg_game || 0), 0) / hist30.length).toFixed(2)
+                    : '–';
+
+                // Points
+                const trainPts   = (trainingCount[pid] || 0) * 5;
+                const winPts     = pHistory.filter(h => h.is_win).length * 2;
+                const loserPts   = loserWinPlayerIds.has(pid) ? 1 : 0;
+                const oneEighty  = pHistory.reduce((s, h) => s + (h.one_eighties || 0), 0);
+                const highFin    = pHistory.reduce((s, h) => s + (h.high_finishes || 0), 0);
+                const points     = trainPts + winPts + loserPts + oneEighty + highFin;
+
+                return { player_id: pid, name: playerName[pid] || pid, avg30, points };
+            }).sort((a, b) => b.points - a.points);
+
+            // Render player pool
+            renderPool();
+
+            // Load existing lineup
+            const { data: savedSlots } = await supa
+                .from('gameday_lineups')
+                .select('*')
+                .eq('appointment_id', apptId);
+
+            (savedSlots || []).forEach(s => {
+                existing[`${s.bracket}-${s.slot}`] = {
+                    player1_id: s.player1_id,
+                    player2_id: s.player2_id
+                };
+            });
+
+            // Render brackets
+            BRACKETS.forEach(b => renderBracket(b));
+        }
+
+        function renderPool() {
+            const el = document.getElementById('player-pool');
+            if (attendees.length === 0) {
+                el.innerHTML = '<p class="muted-text">Keine Daten.</p>';
+                return;
+            }
+            el.innerHTML = attendees.map(p => `
+                <div class="player-pool-item">
+                    <span class="player-pool-name">${p.name}</span>
+                    <div class="player-pool-stats">
+                        <div style="text-align:right;">
+                            <div class="player-pool-avg">${p.avg30}</div>
+                            <div class="player-pool-lbl">AVG 30T</div>
+                        </div>
+                        <div style="text-align:right;">
+                            <div class="player-pool-pts">${p.points}</div>
+                            <div class="player-pool-lbl">PUNKTE</div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderBracket(bracket) {
+            const el      = document.getElementById(`bracket-${bracket.num}`);
+            const options = attendees.map(p =>
+                `<option value="${p.player_id}">${p.name}</option>`
+            ).join('');
+            const emptyOpt = `<option value="">– Spieler wählen –</option>`;
+
+            let html = '';
+            for (let s = 1; s <= bracket.slots; s++) {
+                const key   = `${bracket.num}-${s}`;
+                const saved = existing[key] || {};
+
+                if (bracket.type === 'singles') {
+                    const sel1 = `<select class="select-field" id="b${bracket.num}-s${s}-p1" onchange="refreshBracketSelects(${bracket.num})">${emptyOpt}${options}</select>`;
+                    html += `
+                        <div class="lineup-slot">
+                            <span class="lineup-slot-num">${s}</span>
+                            ${sel1}
+                        </div>`;
+                } else {
+                    const sel1 = `<select class="select-field" id="b${bracket.num}-s${s}-p1" onchange="refreshBracketSelects(${bracket.num})">${emptyOpt}${options}</select>`;
+                    const sel2 = `<select class="select-field" id="b${bracket.num}-s${s}-p2" onchange="refreshBracketSelects(${bracket.num})">${emptyOpt}${options}</select>`;
+                    html += `
+                        <div class="lineup-slot">
+                            <span class="lineup-slot-num">${s}</span>
+                            ${sel1}
+                            <span class="lineup-slot-vs">&</span>
+                            ${sel2}
+                        </div>`;
+                }
+            }
+            el.innerHTML = html;
+
+            // Restore saved values
+            for (let s = 1; s <= bracket.slots; s++) {
+                const key   = `${bracket.num}-${s}`;
+                const saved = existing[key] || {};
+                const p1sel = document.getElementById(`b${bracket.num}-s${s}-p1`);
+                if (p1sel && saved.player1_id) p1sel.value = saved.player1_id;
+                if (bracket.type === 'doubles') {
+                    const p2sel = document.getElementById(`b${bracket.num}-s${s}-p2`);
+                    if (p2sel && saved.player2_id) p2sel.value = saved.player2_id;
+                }
+            }
+
+            refreshBracketSelects(bracket.num);
+        }
+
+        function getBracketConfig(num) {
+            return BRACKETS.find(b => b.num === num);
+        }
+
+        function refreshBracketSelects(bracketNum) {
+            const bracket = getBracketConfig(bracketNum);
+            if (!bracket) return;
+
+            // Collect all selected in this bracket
+            const selected = new Set();
+            for (let s = 1; s <= bracket.slots; s++) {
+                const p1 = document.getElementById(`b${bracketNum}-s${s}-p1`);
+                if (p1 && p1.value) selected.add(p1.value);
+                if (bracket.type === 'doubles') {
+                    const p2 = document.getElementById(`b${bracketNum}-s${s}-p2`);
+                    if (p2 && p2.value) selected.add(p2.value);
+                }
+            }
+
+            const allOpts = attendees.map(p =>
+                `<option value="${p.player_id}">${p.name}</option>`
+            ).join('');
+            const emptyOpt = `<option value="">– Spieler wählen –</option>`;
+
+            for (let s = 1; s <= bracket.slots; s++) {
+                ['p1', 'p2'].forEach(pKey => {
+                    if (bracket.type === 'singles' && pKey === 'p2') return;
+                    const sel = document.getElementById(`b${bracketNum}-s${s}-${pKey}`);
+                    if (!sel) return;
+                    const current = sel.value;
+                    sel.innerHTML = emptyOpt + attendees
+                        .filter(p => p.player_id === current || !selected.has(p.player_id))
+                        .map(p => `<option value="${p.player_id}">${p.name}</option>`)
+                        .join('');
+                    sel.value = current;
+                });
+            }
+        }
+
+        async function saveLineup() {
+            const rows = [];
+
+            for (const bracket of BRACKETS) {
+                for (let s = 1; s <= bracket.slots; s++) {
+                    const p1sel = document.getElementById(`b${bracket.num}-s${s}-p1`);
+                    const p1    = p1sel ? p1sel.value || null : null;
+                    let p2 = null;
+                    if (bracket.type === 'doubles') {
+                        const p2sel = document.getElementById(`b${bracket.num}-s${s}-p2`);
+                        p2 = p2sel ? p2sel.value || null : null;
+                    }
+                    rows.push({
+                        appointment_id: apptId,
+                        bracket:        bracket.num,
+                        slot:           s,
+                        player1_id:     p1,
+                        player2_id:     p2
+                    });
+                }
+            }
+
+            // Upsert all slots
+            const { error } = await supa
+                .from('gameday_lineups')
+                .upsert(rows, { onConflict: 'appointment_id,bracket,slot' });
+
+            if (error) {
+                showToast('Fehler beim Speichern: ' + error.message, 'error');
+            } else {
+                showToast('Aufstellung gespeichert!', 'success');
+            }
+        }
+
+        load();
+    </script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/fightclub-dart-tracker/sw.js').catch(() => {});
+        }
+    </script>
+</body>
+</html>

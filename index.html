@@ -14,7 +14,6 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="apple-touch-icon" href="apple-touch-icon.png">
     <script src="config.js"></script>
-    <script src="ui-utils.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -247,9 +246,23 @@
                     });
             }
 
-            // admin: add admin card
+            // admin: add admin card + Spieltagsplanung
             if (user.role === 'admin') {
                 const cards = document.getElementById('menu-cards');
+
+                const spieltagCard = document.createElement('a');
+                spieltagCard.href = 'spieltag.html';
+                spieltagCard.className = 'menu-card menu-card--spieltag';
+                spieltagCard.innerHTML = `
+                    <div class="menu-card-icon">📋</div>
+                    <div class="menu-card-body">
+                        <div class="menu-card-title">SPIELTAGSPLANUNG</div>
+                        <div class="menu-card-sub">Aufstellung · Brackets · Spieltage</div>
+                    </div>
+                    <div class="menu-card-arrow">»</div>
+                `;
+                cards.appendChild(spieltagCard);
+
                 const adminCard = document.createElement('a');
                 adminCard.href = 'admin.html';
                 adminCard.className = 'menu-card menu-card--admin';
