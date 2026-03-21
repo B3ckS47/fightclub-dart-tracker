@@ -6,10 +6,11 @@ window.addEventListener('DOMContentLoaded', () => {
 
 const SINGLES_SELECTS = ['p1-select', 'p2-select'];
 const DOUBLES_SELECTS = ['t1p1-select', 't1p2-select', 't2p1-select', 't2p2-select'];
-const GAME_SELECTS    = [...SINGLES_SELECTS, ...DOUBLES_SELECTS];
+const ALL_GAME_SELECTS = [...SINGLES_SELECTS, ...DOUBLES_SELECTS];
 
 function updateDropdowns() {
-    GAME_SELECTS.forEach(id => {
+    // Populate all selects with full player list
+    ALL_GAME_SELECTS.forEach(id => {
         const el = document.getElementById(id);
         if (!el) return;
         const prev = el.value;
@@ -27,18 +28,18 @@ function updateDropdowns() {
 
 function refreshGameDropdowns() {
     // Only filter within the currently active mode's selects
-    const isDoubles = gameState.gameType === 'doubles';
-    const activeSelects = isDoubles ? DOUBLES_SELECTS : SINGLES_SELECTS;
+    const isDoubles    = gameState.gameType === 'doubles';
+    const activeGroup  = isDoubles ? DOUBLES_SELECTS : SINGLES_SELECTS;
 
     const selected = new Set(
-        activeSelects
+        activeGroup
             .map(id => document.getElementById(id))
             .filter(el => el)
             .map(el => el.value)
             .filter(Boolean)
     );
 
-    activeSelects.forEach(id => {
+    activeGroup.forEach(id => {
         const el = document.getElementById(id);
         if (!el) return;
         const current = el.value;
@@ -49,6 +50,7 @@ function refreshGameDropdowns() {
         el.value = current;
     });
 }
+
 function refreshDisplay() {
     const isDoubles = gameState.gameType === 'doubles';
     const activeIdx = gameState.currentIdx;
@@ -208,7 +210,7 @@ function doExitGame() {
     }
     document.getElementById('nav-setup').style.display = 'block';
     document.getElementById('nav-game-active').style.display = 'none';
-    document.getElementById('setup-view').style.display = 'block';
+    document.getElementById('setup-view').style.display = '';
     document.getElementById('active-game-view').classList.remove('game-active');
     document.getElementById('active-game-view').style.display = 'none';
     gameState.input = "";
