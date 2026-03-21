@@ -4,17 +4,51 @@ window.addEventListener('DOMContentLoaded', () => {
     fetchPlayers();
 });
 
+const SINGLES_SELECTS = ['p1-select', 'p2-select'];
+const DOUBLES_SELECTS = ['t1p1-select', 't1p2-select', 't2p1-select', 't2p2-select'];
+const GAME_SELECTS    = [...SINGLES_SELECTS, ...DOUBLES_SELECTS];
+
 function updateDropdowns() {
-    const options = players.map(p => `<option value="${p.name}">${p.name}</option>`).join('');
-    ['p1-select','p2-select','t1p1-select','t1p2-select','t2p1-select','t2p2-select'].forEach(id => {
+    GAME_SELECTS.forEach(id => {
         const el = document.getElementById(id);
-        if (el) el.innerHTML = options;
+        if (!el) return;
+        const prev = el.value;
+        el.innerHTML = players.map(p =>
+            `<option value="${p.name}">${p.name}</option>`
+        ).join('');
+        if (prev && players.find(p => p.name === prev)) el.value = prev;
+        el.onchange = refreshGameDropdowns;
     });
-    // Default p2 to second player to avoid same player selected
+    // Default p2 to second player
     const p2 = document.getElementById('p2-select');
     if (p2 && players.length > 1) p2.selectedIndex = 1;
+    refreshGameDropdowns();
 }
 
+function refreshGameDropdowns() {
+    // Only filter within the currently active mode's selects
+    const isDoubles = gameState.gameType === 'doubles';
+    const activeSelects = isDoubles ? DOUBLES_SELECTS : SINGLES_SELECTS;
+
+    const selected = new Set(
+        activeSelects
+            .map(id => document.getElementById(id))
+            .filter(el => el)
+            .map(el => el.value)
+            .filter(Boolean)
+    );
+
+    activeSelects.forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const current = el.value;
+        el.innerHTML = players
+            .filter(p => p.name === current || !selected.has(p.name))
+            .map(p => `<option value="${p.name}">${p.name}</option>`)
+            .join('');
+        el.value = current;
+    });
+}
 function refreshDisplay() {
     const isDoubles = gameState.gameType === 'doubles';
     const activeIdx = gameState.currentIdx;

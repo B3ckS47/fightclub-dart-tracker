@@ -68,20 +68,42 @@ async function openPlayerProfile(playerId) {
     if (chartSection) chartSection.style.display = 'none';
 
     // ── FETCH ALL DATA IN PARALLEL ──
-    const [histRes, userRes] = await Promise.all([
+    const [histRes, userRes, tournRes] = await Promise.all([
         supa.from('game_history').select('*')
             .eq('player_id', playerId)
             .order('created_at', { ascending: false })
             .limit(10),
         supa.from('app_users').select('id')
             .eq('player_id', playerId)
-            .maybeSingle()
+            .maybeSingle(),
+        // Fetch tournament participants where this player is winner or runner-up
+        supa.from('tournament_participants').select('id, tournament_id')
+            .eq('player_id', playerId)
     ]);
 
     const history = histRes.data || [];
+    const partIds = (tournRes.data || []).map(p => p.id);
+
+    // Fetch finished tournaments where this participant placed 1st or 2nd
+    let tournWins   = 0;
+    let tournSecond = 0;
+    if (partIds.length > 0) {
+        const { data: finishedT } = await supa
+            .from('tournaments')
+            .select('winner_id, runner_up_id')
+            .eq('status', 'finished')
+            .or(`winner_id.in.(${partIds.join(',')}),runner_up_id.in.(${partIds.join(',')})`);
+        tournWins   = (finishedT || []).filter(t => partIds.includes(t.winner_id)).length;
+        tournSecond = (finishedT || []).filter(t => partIds.includes(t.runner_up_id)).length;
+    }
+
+    // Store for re-use by filter
+    openPlayerProfile._history    = history;
+    openPlayerProfile._playerId   = playerId;
+    openPlayerProfile._tournWins  = tournWins;
+    openPlayerProfile._tournSec   = tournSecond;
 
     // ── ATTENDANCE ──
-    // A member votes with their app_users.id; a guest votes with their players.id
     const voteUserId = userRes.data ? userRes.data.id : playerId;
 
     const [votesRes, apptRes] = await Promise.all([
@@ -137,20 +159,10 @@ async function openPlayerProfile(playerId) {
 
     const totalGames  = history.length;
     const gamesWon    = history.filter(h => h.is_win === true).length;
-    const gamesLost   = totalGames - gamesWon;
     const winRate     = ((gamesWon / totalGames) * 100).toFixed(1);
     const total180s   = history.reduce((sum, h) => sum + (h.one_eighties || 0), 0);
     const total26s    = history.reduce((sum, h) => sum + (h.twenty_sixes || 0), 0);
     const lifetimeAvg = (history.reduce((sum, h) => sum + (h.avg_game || 0), 0) / totalGames).toFixed(2);
-    const avgTo170    = (history.reduce((sum, h) => sum + (h.avg_pre_170 || 0), 0) / totalGames).toFixed(2);
-    const totalLegsWon    = history.reduce((sum, h) => sum + (h.legs_won  || 0), 0);
-    const totalLegsLost   = history.reduce((sum, h) => sum + (h.legs_lost || 0), 0);
-    const totalLegsPlayed = totalLegsWon + totalLegsLost;
-    const bestGameAvg = Math.max(...history.map(h => h.avg_game || 0)).toFixed(2);
-    const totalClosingDarts = history.reduce((sum, h) => sum + (h.closing_darts || 0), 0);
-    const avgVisitsToClose  = (totalClosingDarts / totalGames / 3).toFixed(1);
-    const totalHighFinishes = history.reduce((sum, h) => sum + (h.high_finishes || 0), 0);
-    const highestFinish     = Math.max(0, ...history.map(h => h.highest_finish || 0));
 
     summaryBox.innerHTML = `
 <div class="stat-box stat-box--accent">
@@ -170,15 +182,8 @@ async function openPlayerProfile(playerId) {
     <div class="stat-value">${total26s}</div>
 </div>`;
 
-    advancedBox.innerHTML = `
-<div class="adv-box"><div class="adv-label">Games (W / L)</div><div class="adv-value">${totalGames} &nbsp;<span style="color:var(--green)">${gamesWon}</span>/<span style="color:var(--red)">${gamesLost}</span></div></div>
-<div class="adv-box"><div class="adv-label">Best Game Avg</div><div class="adv-value" style="color:var(--accent)">${bestGameAvg}</div></div>
-<div class="adv-box"><div class="adv-label">Total Legs</div><div class="adv-value">${totalLegsPlayed}</div></div>
-<div class="adv-box"><div class="adv-label">Legs (W / L)</div><div class="adv-value">${totalLegsWon} / ${totalLegsLost}</div></div>
-<div class="adv-box"><div class="adv-label">Avg to 170</div><div class="adv-value">${avgTo170}</div></div>
-<div class="adv-box"><div class="adv-label">Visits to Close</div><div class="adv-value">${avgVisitsToClose}</div></div>
-<div class="adv-box"><div class="adv-label">High Finishes</div><div class="adv-value" style="color:var(--accent)">${totalHighFinishes}</div></div>
-<div class="adv-box"><div class="adv-label">Highest Finish</div><div class="adv-value" style="color:var(--accent)">${highestFinish > 0 ? ' ' + highestFinish : '–'}</div></div>`;
+    // Render advanced stats (respects filter)
+    renderAdvancedStats(null);
 
     historyBox.innerHTML = history.slice(0, 5).map(h => `
 <div class="match-row ${h.is_win ? 'match-row--win' : 'match-row--loss'}">
@@ -254,4 +259,48 @@ async function openPlayerProfile(playerId) {
     <polyline points="${points}" fill="none" stroke="#f5a623" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
     ${dots}
 </svg>`;
+}
+
+// ── ADVANCED STATS RENDERER (supports date filter) ──
+function renderAdvancedStats(fromDate) {
+    const advancedBox = document.getElementById('profile-advanced-stats');
+    if (!advancedBox) return;
+
+    const allHistory  = openPlayerProfile._history   || [];
+    const tournWins   = openPlayerProfile._tournWins  || 0;
+    const tournSecond = openPlayerProfile._tournSec   || 0;
+
+    // Apply date filter
+    const history = fromDate
+        ? allHistory.filter(h => new Date(h.created_at) >= fromDate)
+        : allHistory;
+
+    if (history.length === 0) {
+        advancedBox.innerHTML = '<p class="muted-text" style="padding:8px 0;">Keine Daten für diesen Zeitraum.</p>';
+        return;
+    }
+
+    const totalGames        = history.length;
+    const gamesWon          = history.filter(h => h.is_win === true).length;
+    const gamesLost         = totalGames - gamesWon;
+    const bestGameAvg       = Math.max(...history.map(h => h.avg_game || 0)).toFixed(2);
+    const totalLegsWon      = history.reduce((sum, h) => sum + (h.legs_won   || 0), 0);
+    const totalLegsLost     = history.reduce((sum, h) => sum + (h.legs_lost  || 0), 0);
+    const avgTo170          = (history.reduce((sum, h) => sum + (h.avg_pre_170    || 0), 0) / totalGames).toFixed(2);
+    const totalClosingDarts = history.reduce((sum, h) => sum + (h.closing_darts   || 0), 0);
+    const avgVisitsToClose  = (totalClosingDarts / totalGames / 3).toFixed(1);
+    const totalHighFinishes = history.reduce((sum, h) => sum + (h.high_finishes   || 0), 0);
+    const highestFinish     = Math.max(0, ...history.map(h => h.highest_finish    || 0));
+
+    advancedBox.innerHTML = `
+<div class="adv-box"><div class="adv-label">Games (W / L)</div><div class="adv-value">${totalGames} &nbsp;<span style="color:var(--green)">${gamesWon}</span>/<span style="color:var(--red)">${gamesLost}</span></div></div>
+<div class="adv-box"><div class="adv-label">Best Game Avg</div><div class="adv-value" style="color:var(--accent)">${bestGameAvg}</div></div>
+<div class="adv-box"><div class="adv-label">Total Legs</div><div class="adv-value">${totalLegsWon + totalLegsLost}</div></div>
+<div class="adv-box"><div class="adv-label">Legs (W / L)</div><div class="adv-value">${totalLegsWon} / ${totalLegsLost}</div></div>
+<div class="adv-box"><div class="adv-label">Avg to 170</div><div class="adv-value">${avgTo170}</div></div>
+<div class="adv-box"><div class="adv-label">Visits to Close</div><div class="adv-value">${avgVisitsToClose}</div></div>
+<div class="adv-box"><div class="adv-label">High Finishes</div><div class="adv-value" style="color:var(--accent)">${totalHighFinishes}</div></div>
+<div class="adv-box"><div class="adv-label">Highest Finish</div><div class="adv-value" style="color:var(--accent)">${highestFinish > 0 ? highestFinish : '–'}</div></div>
+<div class="adv-box"><div class="adv-label">🏆 Turniersiege</div><div class="adv-value" style="color:#ffd700;">${tournWins}</div></div>
+<div class="adv-box"><div class="adv-label">🥈 Turnierfinale</div><div class="adv-value" style="color:#c0c0c0;">${tournSecond}</div></div>`;
 }

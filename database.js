@@ -91,22 +91,22 @@ async function registerPlayer() {
     if (!name) return;
     const { error } = await supa.from('players').insert([{ name }]);
     if (error) {
-        alert(error.message);
+        showToast(error.message, 'error');
     } else {
         document.getElementById('reg-name').value = "";
-        await fetchPlayers(); // This now updates both dropdowns and dashboard
+        await fetchPlayers();
     }
 }
 
 // Delete Members from the Club
 async function deletePlayer(playerId, playerName) {
-    const confirmFirst = confirm(`⚠️ DANGER: Are you sure you want to delete "${playerName}"?`);
-    if (!confirmFirst) return;
+    const ok1 = await showConfirm('Spieler löschen', `„${playerName}" wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.`, '⚠️');
+    if (!ok1) return;
 
-    const confirmSecond = confirm(`LAST WARNING: This will also delete ALL match history for ${playerName}. This cannot be undone!`);
-    if (!confirmSecond) return;
+    const ok2 = await showConfirm('Letzte Warnung', `Hiermit wird AUCH die gesamte Spielhistorie von ${playerName} gelöscht!`, '🚨');
+    if (!ok2) return;
 
-    // 1. Delete Match History first (Cascade)
+    // 1. Delete Match History first
     const { error: matchError } = await supa
         .from('game_history')
         .delete()
@@ -123,14 +123,14 @@ async function deletePlayer(playerId, playerName) {
         .eq('id', playerId);
 
     if (playerError) {
-        alert("Error deleting player: " + playerError.message);
+        showToast('Fehler: ' + playerError.message, 'error');
         return;
     }
 
-    // 3. Refresh the entire app state
+    // 3. Refresh
     await fetchPlayers();
-    showPage('stats-page'); // Redirect back to the leaderboard
-    alert(`${playerName} has been removed from the club.`);
+    showPage('stats-page');
+    showToast(`${playerName} wurde entfernt.`, 'success');
 }
 
 // Sends the Statistics of both Players to Supabase
@@ -193,25 +193,20 @@ async function saveMatchToSupabase() {
 
 // Function to delete single Games
 async function deleteMatch(matchId, playerId) {
-    const confirmDelete = confirm("Are you sure you want to delete this match record? This will permanently change player statistics.");
+    const ok = await showConfirm('Spiel löschen', 'Diesen Spieleintrag wirklich löschen? Die Statistiken werden dauerhaft geändert.');
+    if (!ok) return;
 
-    if (!confirmDelete) return;
-
-    // 1. Delete from Supabase
     const { error } = await supa
         .from('game_history')
         .delete()
         .eq('id', matchId);
 
     if (error) {
-        alert("Error deleting match: " + error.message);
+        showToast('Fehler: ' + error.message, 'error');
         return;
     }
 
-    // 2. Re-fetch all data to recalculate averages and update leaderboard
     await fetchPlayers();
-
-    // 3. Refresh the current profile view to show the updated history
     openPlayerProfile(playerId);
 }
 

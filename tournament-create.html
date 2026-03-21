@@ -12,6 +12,7 @@
     <meta name="theme-color" content="#0d0d0f">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <script src="config.js"></script>
+    <script src="ui-utils.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -210,6 +211,20 @@
                 participants.push({ name, player_id: player ? player.id : null, is_guest: v.is_guest || false });
             });
             renderParticipants();
+            refreshPlayerSearch();
+        }
+
+        function refreshPlayerSearch() {
+            const sel = document.getElementById('player-search');
+            if (!sel) return;
+            const addedIds = new Set(participants.map(p => p.player_id).filter(Boolean));
+            const current  = sel.value;
+            sel.innerHTML  = '<option value="">– Spieler wählen –</option>' +
+                allPlayers
+                    .filter(p => !addedIds.has(p.id))
+                    .map(p => `<option value="${p.id}">${p.name}</option>`)
+                    .join('');
+            if (current && !addedIds.has(current)) sel.value = current;
         }
 
         function addSelectedPlayer() {
@@ -222,11 +237,13 @@
             participants.push({ name: player.name, player_id: player.id, is_guest: false });
             sel.value = '';
             renderParticipants();
+            refreshPlayerSearch();
         }
 
         function removeParticipant(idx) {
             participants.splice(idx, 1);
             renderParticipants();
+            refreshPlayerSearch();
         }
 
         function renderParticipants() {

@@ -314,9 +314,10 @@ function setGameType(type) {
     document.getElementById('type-doubles').classList.toggle('game-type-btn--active', type === 'doubles');
     document.getElementById('singles-select').style.display = type === 'singles' ? 'flex' : 'none';
     document.getElementById('doubles-select').style.display = type === 'doubles' ? 'flex' : 'none';
+    if (typeof refreshGameDropdowns === 'function') refreshGameDropdowns();
 }
 
-function startGame() {
+async function startGame() {
     const startVal  = parseInt(document.getElementById('start-score-select').value);
     const legTarget = parseInt(document.getElementById('legs-to-win-select').value);
     const mode      = document.getElementById('checkout-mode-select').value;
@@ -324,8 +325,8 @@ function startGame() {
     if (gameState.gameType === 'singles') {
         const p1 = document.getElementById('p1-select').value;
         const p2 = document.getElementById('p2-select').value;
-        if (!p1 || !p2)  return alert("Bitte zwei Spieler auswaehlen!");
-        if (p1 === p2)   return alert("Bitte zwei verschiedene Spieler auswaehlen!");
+        if (!p1 || !p2)  { await showAlert('Spieler fehlt', 'Bitte zwei Spieler auswählen!'); return; }
+        if (p1 === p2)   { await showAlert('Gleicher Spieler', 'Bitte zwei verschiedene Spieler auswählen!'); return; }
         gameState.pNames      = [p1, p2];
         gameState.teamPlayers = [[p1], [p2]];
         gameState.stats       = [makePlayerStats(), makePlayerStats()];
@@ -334,7 +335,7 @@ function startGame() {
         const t1p2 = document.getElementById('t1p2-select').value;
         const t2p1 = document.getElementById('t2p1-select').value;
         const t2p2 = document.getElementById('t2p2-select').value;
-        if (new Set([t1p1,t1p2,t2p1,t2p2]).size < 4) return alert("Bitte vier verschiedene Spieler auswaehlen!");
+        if (new Set([t1p1,t1p2,t2p1,t2p2]).size < 4) { await showAlert('Gleiche Spieler', 'Bitte vier verschiedene Spieler auswählen!'); return; }
         gameState.pNames      = [t1p1 + " & " + t1p2, t2p1 + " & " + t2p2];
         gameState.teamPlayers = [[t1p1, t1p2], [t2p1, t2p2]];
         gameState.stats       = [makePlayerStats(), makePlayerStats(), makePlayerStats(), makePlayerStats()];

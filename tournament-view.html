@@ -12,6 +12,7 @@
     <meta name="theme-color" content="#0d0d0f">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <script src="config.js"></script>
+    <script src="ui-utils.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -181,7 +182,8 @@
         }
 
         async function closeTournament() {
-            if (!confirm(`Turnier "${tournament.name}" wirklich schließen?`)) return;
+            const ok = await showConfirm('Turnier schließen', `„${tournament.name}" wirklich schließen?`);
+            if (!ok) return;
             await supa.from('tournaments').update({
                 status:      'finished',
                 closed_by:   user.username,

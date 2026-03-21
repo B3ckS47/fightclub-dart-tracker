@@ -14,6 +14,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="apple-touch-icon" href="apple-touch-icon.png">
     <script src="config.js"></script>
+    <script src="ui-utils.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -155,19 +156,51 @@
                 return;
             }
 
-            const { error } = await supa.from('app_users').insert([{ username, password, role }]);
+            // 1. Check if a player with this name already exists (e.g. as a guest)
+            const { data: existingPlayers } = await supa
+                .from('players')
+                .select('id, name')
+                .ilike('name', username);
+
+            let playerId = null;
+
+            if (existingPlayers && existingPlayers.length > 0) {
+                // Link to existing player
+                playerId = existingPlayers[0].id;
+            } else {
+                // Create a new player with the username as name
+                const { data: newPlayer, error: playerErr } = await supa
+                    .from('players')
+                    .insert([{ name: username }])
+                    .select('id')
+                    .single();
+                if (playerErr) {
+                    msgEl.textContent = 'Fehler beim Erstellen des Spielers: ' + playerErr.message;
+                    msgEl.style.color = 'var(--red)';
+                    return;
+                }
+                playerId = newPlayer.id;
+            }
+
+            // 2. Create app user linked to the player
+            const { error } = await supa.from('app_users').insert([{
+                username, password, role, player_id: playerId
+            }]);
 
             if (error) {
                 msgEl.textContent = error.message.includes('unique') ? 'Username bereits vergeben.' : error.message;
                 msgEl.style.color = 'var(--red)';
             } else {
-                msgEl.textContent = `${username} wurde hinzugefügt!`;
+                const linked = existingPlayers && existingPlayers.length > 0
+                    ? ` (Spieler „${existingPlayers[0].name}" verknüpft)`
+                    : ' (neuer Spieler erstellt)';
+                msgEl.textContent = `${username} wurde hinzugefügt!${linked}`;
                 msgEl.style.color = 'var(--green)';
                 document.getElementById('new-username').value = '';
                 document.getElementById('new-password').value = '';
                 loadUsers();
             }
-            setTimeout(() => msgEl.textContent = '', 3000);
+            setTimeout(() => msgEl.textContent = '', 4000);
         }
 
         // ── CHANGE ROLE ──
@@ -176,16 +209,17 @@
                 .from('app_users')
                 .update({ role: newRole })
                 .eq('id', userId);
-            if (error) alert('Fehler: ' + error.message);
+            if (error) { showToast('Fehler: ' + error.message, 'error'); }
             else loadUsers();
         }
 
         // ── DELETE USER ──
         async function deleteUser(userId, username) {
-            if (!confirm(`Benutzer "${username}" wirklich löschen?`)) return;
+            const ok = await showConfirm('Benutzer löschen', `„${username}" wirklich löschen?`);
+            if (!ok) return;
             const { error } = await supa.from('app_users').delete().eq('id', userId);
-            if (error) alert('Fehler: ' + error.message);
-            else loadUsers();
+            if (error) showToast('Fehler: ' + error.message, 'error');
+            else { showToast(`${username} wurde gelöscht.`, 'success'); loadUsers(); }
         }
 
         // Load on start
@@ -260,14 +294,15 @@
                 .from('fines_reasons')
                 .update({ amount })
                 .eq('id', id);
-            if (error) alert('Fehler: ' + error.message);
+            if (error) { showToast('Fehler: ' + error.message, 'error'); }
         }
 
         // ── DELETE REASON ──
         async function deleteReason(id, name) {
-            if (!confirm(`Grund "${name}" wirklich löschen?`)) return;
+            const ok = await showConfirm('Grund löschen', `„${name}" wirklich löschen?`);
+            if (!ok) return;
             const { error } = await supa.from('fines_reasons').delete().eq('id', id);
-            if (error) alert('Fehler: ' + error.message);
+            if (error) showToast('Fehler: ' + error.message, 'error');
             else loadReasons();
         }
     </script>

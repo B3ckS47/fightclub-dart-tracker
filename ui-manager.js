@@ -276,8 +276,8 @@ function exitGame(isFinished = false) {
         || gameState.legScore[0] > 0 || gameState.legScore[1] > 0;
 
     if (!isFinished && gameInProgress) {
-        const confirmExit = confirm("⚠️ Spiel läuft noch! Wirklich beenden? Fortschritt geht verloren.");
-        if (!confirmExit) return;
+        const ok = await showConfirm('Spiel beenden', 'Spiel läuft noch! Wirklich beenden? Fortschritt geht verloren.');
+        if (!ok) return;
     }
 
     document.getElementById('nav-default').style.display     = 'flex';

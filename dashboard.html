@@ -73,6 +73,11 @@
                         <span class="fold-icon" id="fold-advanced-icon">▶</span>
                     </div>
                     <div id="fold-advanced" class="fold-body" style="display:none;">
+                        <div class="filter-bar" style="margin-bottom:12px;">
+                            <button class="filter-btn filter-btn--active" onclick="setAdvancedFilter('all',  this)">Gesamt</button>
+                            <button class="filter-btn"                    onclick="setAdvancedFilter('3m',   this)">3 Monate</button>
+                            <button class="filter-btn"                    onclick="setAdvancedFilter('30d',  this)">30 Tage</button>
+                        </div>
                         <div id="profile-advanced-stats" class="advanced-grid"></div>
                     </div>
                 </div>
@@ -131,6 +136,16 @@
             const isOpen = body.style.display !== 'none';
             body.style.display = isOpen ? 'none' : 'block';
             icon.textContent   = isOpen ? '▶' : '▼';
+        }
+
+        function setAdvancedFilter(range, btn) {
+            document.querySelectorAll('#fold-advanced .filter-btn').forEach(b => b.classList.remove('filter-btn--active'));
+            btn.classList.add('filter-btn--active');
+            const now = new Date();
+            let fromDate = null;
+            if (range === '30d') { fromDate = new Date(now); fromDate.setDate(fromDate.getDate() - 30); }
+            else if (range === '3m') { fromDate = new Date(now); fromDate.setMonth(fromDate.getMonth() - 3); }
+            if (typeof renderAdvancedStats === 'function') renderAdvancedStats(fromDate);
         }
 
         function setFilter(range, btn) {

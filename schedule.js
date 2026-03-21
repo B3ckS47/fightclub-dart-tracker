@@ -247,7 +247,7 @@ async function castVote(appointmentId, vote) {
         is_guest:       false
     }, { onConflict: 'appointment_id,user_id' });
 
-    if (error) { alert('Fehler: ' + error.message); return; }
+    if (error) { showToast('Fehler: ' + error.message, 'error'); return; }
     loadAppointments();
 }
 
@@ -270,7 +270,7 @@ async function addGuestVote(appointmentId) {
         is_guest:       true
     }, { onConflict: 'appointment_id,user_id' });
 
-    if (error) { alert('Fehler: ' + error.message); return; }
+    if (error) { showToast('Fehler: ' + error.message, 'error'); return; }
     loadAppointments();
 }
 
@@ -284,7 +284,7 @@ async function removeGuestVote(appointmentId, guestId) {
         .eq('appointment_id', appointmentId)
         .eq('user_id', guestId);
 
-    if (error) { alert('Fehler: ' + error.message); return; }
+    if (error) { showToast('Fehler: ' + error.message, 'error'); return; }
     loadAppointments();
 }
 
@@ -327,9 +327,10 @@ async function createAppointment() {
 
 // ── DELETE APPOINTMENT (admin only) ──
 async function deleteAppointment(id) {
-    if (!confirm('Termin wirklich löschen?')) return;
+    const ok = await showConfirm('Termin löschen', 'Diesen Termin wirklich löschen?');
+    if (!ok) return;
     const { error } = await supa.from('appointments').delete().eq('id', id);
-    if (error) alert('Fehler: ' + error.message);
+    if (error) showToast('Fehler: ' + error.message, 'error');
     else loadAppointments();
 }
 
