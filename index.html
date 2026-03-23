@@ -374,10 +374,12 @@
                             <div class="live-teaser-row">
                                 <span class="live-teaser-score ${s.currentIdx === 0 ? 'live-teaser-score--active' : ''}">${s.scores[0]}</span>
                                 <span class="live-teaser-legs">${dots(0)}</span>
+                                ${s.liveAvgs && s.liveAvgs[0] !== null ? `<span class="live-teaser-avg">Ø ${s.liveAvgs[0].toFixed(2)}</span>` : ''}
                             </div>
                             <div class="live-teaser-row">
                                 <span class="live-teaser-score ${s.currentIdx === 1 ? 'live-teaser-score--active' : ''}">${s.scores[1]}</span>
                                 <span class="live-teaser-legs">${dots(1)}</span>
+                                ${s.liveAvgs && s.liveAvgs[1] !== null ? `<span class="live-teaser-avg">Ø ${s.liveAvgs[1].toFixed(2)}</span>` : ''}
                             </div>
                         </div>
                         <div class="next-appt-arrow">»</div>

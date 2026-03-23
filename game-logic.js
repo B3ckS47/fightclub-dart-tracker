@@ -218,19 +218,37 @@ const _liveRole = _liveUser.role || '';
 async function pushLiveState() {
     if (!gameState.isOfficial) return;
     try {
+        // Calculate live averages per team (singles: stats[0/1], doubles: combine both team players)
+        const liveAvgs = [0, 1].map(teamIdx => {
+            let totalPoints = 0, dartsThrown = 0;
+            if (gameState.gameType === 'singles') {
+                totalPoints  = gameState.stats[teamIdx].totalPoints;
+                dartsThrown  = gameState.stats[teamIdx].dartsThrown;
+            } else {
+                // doubles: stats[0] + stats[1] for team 0, stats[2] + stats[3] for team 1
+                const base = teamIdx === 0 ? 0 : 2;
+                totalPoints  = gameState.stats[base].totalPoints  + gameState.stats[base + 1].totalPoints;
+                dartsThrown  = gameState.stats[base].dartsThrown  + gameState.stats[base + 1].dartsThrown;
+            }
+            return dartsThrown > 0
+                ? parseFloat((totalPoints / (dartsThrown / 3)).toFixed(2))
+                : null;
+        });
+
         await supa.from('live_game').upsert({
             id:         _liveId,
             role:       _liveRole,
             state:      {
-                pNames:       gameState.pNames,
-                scores:       gameState.scores,
-                legScore:     gameState.legScore,
-                targetLegs:   gameState.targetLegs,
-                currentIdx:   gameState.currentIdx,
-                gameType:     gameState.gameType,
-                teamPlayers:  gameState.teamPlayers,
+                pNames:        gameState.pNames,
+                scores:        gameState.scores,
+                legScore:      gameState.legScore,
+                targetLegs:    gameState.targetLegs,
+                currentIdx:    gameState.currentIdx,
+                gameType:      gameState.gameType,
+                teamPlayers:   gameState.teamPlayers,
                 teamPlayerIdx: gameState.teamPlayerIdx,
-                history:      gameState.history
+                history:       gameState.history,
+                liveAvgs:      liveAvgs
             },
             updated_at: new Date().toISOString()
         });

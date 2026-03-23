@@ -13,9 +13,30 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <!-- Entry detail bottom sheet (tap on row) -->
+    <div id="entry-sheet-overlay" class="entry-sheet-overlay" onclick="closeEntrySheet()" style="display:none;"></div>
+    <div id="entry-sheet" class="entry-sheet" style="display:none;">
+        <div class="entry-sheet-handle"></div>
+        <div class="entry-sheet-content">
+            <div id="entry-sheet-type" class="entry-sheet-type"></div>
+            <div id="entry-sheet-amount" class="entry-sheet-amount"></div>
+            <div class="entry-sheet-rows">
+                <div class="entry-sheet-row"><span class="entry-sheet-label">Datum</span><span id="entry-sheet-date" class="entry-sheet-value"></span></div>
+                <div class="entry-sheet-row"><span class="entry-sheet-label">Grund</span><span id="entry-sheet-reason" class="entry-sheet-value"></span></div>
+                <div class="entry-sheet-row"><span class="entry-sheet-label">Eingetragen von</span><span id="entry-sheet-by" class="entry-sheet-value"></span></div>
+                <div id="entry-sheet-note-row" class="entry-sheet-row" style="display:none;"><span class="entry-sheet-label">Notiz</span><span id="entry-sheet-note" class="entry-sheet-value"></span></div>
+            </div>
+            <div id="entry-sheet-delete-wrap" style="display:none; margin-top:20px;">
+                <button class="btn btn-danger-outline btn-full" onclick="deleteCurrentEntry()">EINTRAG LÖSCHEN</button>
+            </div>
+            <button class="btn btn-full" style="margin-top:10px; background:var(--bg-element);" onclick="closeEntrySheet()">SCHLIESSEN</button>
+        </div>
+    </div>
+
     <script src="config.js"></script>
     <script src="ui-utils.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body>
 
@@ -99,7 +120,13 @@
 
             <!-- Ledger -->
             <div class="card">
-                <h2 class="card-title">VERLAUF</h2>
+                <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+                    <h2 class="card-title" style="margin:0;">VERLAUF</h2>
+                    <div style="display:flex; gap:8px;">
+                        <button class="btn btn-sm" onclick="exportCSV()">⬇ CSV</button>
+                        <button class="btn btn-sm" onclick="exportPDF()">⬇ PDF</button>
+                    </div>
+                </div>
                 <div class="divider"></div>
                 <div id="fines-ledger-list">
                     <p class="muted-text">Lade Einträge…</p>
@@ -269,8 +296,11 @@
         }
 
         const reason = [e.reason, noteDisplay].filter(Boolean).join(' · ') || '–';
+        const clickAttr = isAdmin
+            ? `onclick="openEntrySheet('${e.id}','${escHtml(e.type)}','${escHtml(e.reason||'')}','${escHtml(noteDisplay)}',${e.amount},'${escHtml(e.created_by||'')}','${escHtml(dateStr)}')" style="cursor:pointer;"`
+            : '';
         return `
-<div class="fines-table-row">
+<div class="fines-table-row${isAdmin ? ' fines-table-row--tappable' : ''}" ${clickAttr}>
     <span class="fines-col-date">${dateStr}</span>
     <span class="fines-col-type ${isFine ? 'fines-type--fine' : 'fines-type--payment'}">${isFine ? '💸 Strafe' : '✅ Zahlung'}</span>
     <span class="fines-col-reason">${escHtml(reason)}</span>
@@ -370,6 +400,173 @@
             document.getElementById('fines-overview').style.display     = 'block';
             document.getElementById('nav-fines-overview').style.display = 'block';
             loadOverview(); // refresh balances
+        }
+
+        // ── EXPORT CSV ──
+        async function exportCSV() {
+            if (!detailPlayerId) { showToast('Kein Spieler geöffnet.', 'error'); return; }
+            const { data, error } = await supa
+                .from('fines_ledger').select('*')
+                .eq('player_id', detailPlayerId)
+                .order('created_at', { ascending: false });
+            if (error || !data) { showToast('Export fehlgeschlagen.', 'error'); return; }
+
+            const rows = [['Datum', 'Typ', 'Grund', 'Betrag (€)', 'Eingetragen von', 'Notiz']];
+            data.forEach(e => {
+                const d   = new Date(e.created_at).toLocaleDateString('de-DE');
+                const amt = (e.type === 'fine' ? '+' : '-') + Math.abs(parseFloat(e.amount)).toFixed(2).replace('.', ',');
+                rows.push([d, e.type === 'fine' ? 'Strafe' : 'Zahlung', e.reason || '', amt, e.created_by || '', e.note || '']);
+            });
+
+            const csv  = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(';')).join('\n');
+            const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+            const url  = URL.createObjectURL(blob);
+            const a    = Object.assign(document.createElement('a'), {
+                href: url,
+                download: `Strafen_${detailPlayerName}_${new Date().toISOString().slice(0,10)}.csv`
+            });
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast('CSV exportiert.', 'success');
+        }
+
+        // ── EXPORT PDF ──
+        async function exportPDF() {
+            if (!detailPlayerId) { showToast('Kein Spieler geöffnet.', 'error'); return; }
+            if (!window.jspdf) { showToast('PDF-Bibliothek lädt noch, bitte kurz warten.', 'info'); return; }
+
+            const { data, error } = await supa
+                .from('fines_ledger').select('*')
+                .eq('player_id', detailPlayerId)
+                .order('created_at', { ascending: false });
+            if (error || !data) { showToast('Export fehlgeschlagen.', 'error'); return; }
+
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+            const balance = data.reduce((s, e) => s + parseFloat(e.amount), 0);
+            const now     = new Date().toLocaleDateString('de-DE');
+
+            // ── Background ──
+            doc.setFillColor(13, 13, 15);
+            doc.rect(0, 0, 210, 297, 'F');
+
+            // ── Header ──
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(16);
+            doc.setTextColor(245, 166, 35);
+            doc.text('DC FlightClub 47', 14, 18);
+
+            doc.setFontSize(10);
+            doc.setTextColor(150, 150, 170);
+            doc.setFont('helvetica', 'normal');
+            doc.text(`Strafenübersicht · ${detailPlayerName}`, 14, 26);
+            doc.text(`Exportiert: ${now}`, 14, 32);
+
+            const balFmt = (balance > 0 ? '+' : '') + balance.toFixed(2).replace('.', ',') + ' €';
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(balance > 0 ? 255 : 80, balance > 0 ? 100 : 200, balance > 0 ? 100 : 120);
+            doc.text(`Saldo: ${balFmt}`, 14, 38);
+
+            // ── Divider ──
+            doc.setDrawColor(50, 50, 65);
+            doc.line(14, 42, 196, 42);
+
+            // ── Table header ──
+            let y = 50;
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(8);
+            doc.setTextColor(120, 120, 145);
+            doc.text('DATUM',  14,  y);
+            doc.text('TYP',    46,  y);
+            doc.text('GRUND',  76,  y);
+            doc.text('VON',   148,  y);
+            doc.text('BETRAG', 196, y, { align: 'right' });
+            y += 3;
+            doc.line(14, y, 196, y);
+            y += 6;
+
+            // ── Rows ──
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(8.5);
+            data.forEach(e => {
+                if (y > 275) {
+                    doc.addPage();
+                    doc.setFillColor(13, 13, 15);
+                    doc.rect(0, 0, 210, 297, 'F');
+                    y = 20;
+                }
+                const isFine = e.type === 'fine';
+                const d      = new Date(e.created_at).toLocaleDateString('de-DE');
+                const amt    = (isFine ? '+' : '–') + Math.abs(parseFloat(e.amount)).toFixed(2).replace('.', ',') + ' €';
+
+                doc.setTextColor(180, 180, 200);
+                doc.text(d, 14, y);
+                doc.setTextColor(isFine ? [220,90,90] : [80,200,130]);
+                doc.text(isFine ? 'Strafe' : 'Zahlung', 46, y);
+                doc.setTextColor(180, 180, 200);
+                doc.text(doc.splitTextToSize((e.reason || '–'), 68)[0], 76, y);
+                doc.text((e.created_by || '–').slice(0, 18), 148, y);
+                doc.setTextColor(isFine ? [220,90,90] : [80,200,130]);
+                doc.text(amt, 196, y, { align: 'right' });
+
+                doc.setDrawColor(35, 35, 48);
+                doc.line(14, y + 2.5, 196, y + 2.5);
+                y += 9;
+            });
+
+            doc.save(`Strafen_${detailPlayerName}_${new Date().toISOString().slice(0,10)}.pdf`);
+            showToast('PDF exportiert.', 'success');
+        }
+
+        // ── ENTRY DETAIL SHEET ──
+        let _currentEntryId = null;
+
+        function openEntrySheet(id, type, reason, note, amount, createdBy, dateStr) {
+            _currentEntryId = id;
+            const isFine = type === 'fine';
+            document.getElementById('entry-sheet-type').textContent    = isFine ? '💸 Strafe' : '✅ Zahlung';
+            document.getElementById('entry-sheet-type').className       = 'entry-sheet-type ' + (isFine ? 'fines-type--fine' : 'fines-type--payment');
+            document.getElementById('entry-sheet-amount').textContent  = (isFine ? '+' : '–') + formatEur(Math.abs(parseFloat(amount)));
+            document.getElementById('entry-sheet-amount').className    = 'entry-sheet-amount ' + (isFine ? 'fines-amount--debt' : 'fines-amount--zero');
+            document.getElementById('entry-sheet-date').textContent    = dateStr;
+            document.getElementById('entry-sheet-reason').textContent  = reason || '–';
+            document.getElementById('entry-sheet-by').textContent      = createdBy || '–';
+            const noteRow = document.getElementById('entry-sheet-note-row');
+            if (note) {
+                document.getElementById('entry-sheet-note').textContent = note;
+                noteRow.style.display = 'flex';
+            } else {
+                noteRow.style.display = 'none';
+            }
+            document.getElementById('entry-sheet-delete-wrap').style.display = isAdmin ? 'block' : 'none';
+
+            document.getElementById('entry-sheet-overlay').style.display = 'block';
+            const sheet = document.getElementById('entry-sheet');
+            sheet.style.display = 'block';
+            requestAnimationFrame(() => sheet.classList.add('entry-sheet--open'));
+        }
+
+        function closeEntrySheet() {
+            const sheet = document.getElementById('entry-sheet');
+            sheet.classList.remove('entry-sheet--open');
+            setTimeout(() => {
+                sheet.style.display = 'block';
+                document.getElementById('entry-sheet-overlay').style.display = 'none';
+                sheet.style.display = 'none';
+            }, 300);
+            _currentEntryId = null;
+        }
+
+        async function deleteCurrentEntry() {
+            if (!_currentEntryId) return;
+            const ok = await showConfirm('Eintrag löschen', 'Diesen Eintrag wirklich dauerhaft löschen?');
+            if (!ok) return;
+            const { error } = await supa.from('fines_ledger').delete().eq('id', _currentEntryId);
+            if (error) { showToast('Fehler: ' + error.message, 'error'); return; }
+            closeEntrySheet();
+            showToast('Eintrag gelöscht.', 'success');
+            await loadLedger();
         }
 
         // ── HELPERS ──

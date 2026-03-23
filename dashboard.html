@@ -66,6 +66,17 @@
                 </div>
                 <div id="profile-stats-summary" class="stats-grid"></div>
 
+                <!-- Head-to-Head (foldable) -->
+                <div class="fold-section" id="fold-h2h-section" style="display:none;">
+                    <div class="fold-header" onclick="toggleFold('fold-h2h')">
+                        <h3 class="subsection-title subsection-title--fold">Head-to-Head</h3>
+                        <span class="fold-icon" id="fold-h2h-icon">▶</span>
+                    </div>
+                    <div id="fold-h2h" class="fold-body" style="display:none;">
+                        <div id="profile-h2h"></div>
+                    </div>
+                </div>
+
                 <!-- Advanced Analytics (foldable) -->
                 <div class="fold-section">
                     <div class="fold-header" onclick="toggleFold('fold-advanced')">
@@ -183,6 +194,8 @@
             var u = JSON.parse(raw);
             if (u.role === 'ipad') window.location.href = 'game.html';
             if (u.role === 'admin') document.getElementById('danger-zone').style.display = 'block';
+            // Expose for ui-manager-dashboard.js
+            window.loggedInUser = u;
         })();
     </script>
     <script>

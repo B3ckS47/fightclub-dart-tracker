@@ -63,6 +63,13 @@ async function openPlayerProfile(playerId) {
         if (body) body.style.display = 'none';
         if (icon) icon.textContent = '▶';
     });
+    // Reset H2H fold + hide section until we know if it applies
+    const h2hSection = document.getElementById('fold-h2h-section');
+    const h2hBody    = document.getElementById('fold-h2h');
+    const h2hIcon    = document.getElementById('fold-h2h-icon');
+    if (h2hSection) h2hSection.style.display = 'none';
+    if (h2hBody)    h2hBody.style.display    = 'none';
+    if (h2hIcon)    h2hIcon.textContent       = '▶';
     // Hide chart section wrapper until we know there's data
     const chartSection = document.getElementById('profile-chart-section');
     if (chartSection) chartSection.style.display = 'none';
@@ -83,6 +90,73 @@ async function openPlayerProfile(playerId) {
 
     const history = histRes.data || [];
     const partIds = (tournRes.data || []).map(p => p.id);
+
+    // ── HEAD-TO-HEAD ──
+    const loggedUser = window.loggedInUser || null;
+    const loggedPid  = loggedUser?.player_id || null;
+
+    let loggedPlayer = loggedPid ? players.find(p => p.id === loggedPid) : null;
+    if (!loggedPlayer && loggedUser?.username) {
+        loggedPlayer = players.find(p => p.name.toLowerCase() === loggedUser.username.toLowerCase());
+    }
+
+    console.log('[H2H] loggedUser:', loggedUser);
+    console.log('[H2H] loggedPlayer:', loggedPlayer);
+    console.log('[H2H] viewing:', playerId, player.name);
+
+    if (loggedPlayer && loggedPlayer.id !== playerId) {
+        // Fetch from each player's own rows — no double counting
+        const [myRes, theirRes] = await Promise.all([
+            supa.from('game_history').select('is_win, avg_game')
+                .eq('player_id', loggedPlayer.id)
+                .eq('opponent_name', player.name),
+            supa.from('game_history').select('avg_game')
+                .eq('player_id', playerId)
+                .eq('opponent_name', loggedPlayer.name)
+        ]);
+
+        console.log('[H2H] my rows:', myRes.data, myRes.error);
+        console.log('[H2H] their rows:', theirRes.data, theirRes.error);
+
+        const myGames    = myRes.data   || [];
+        const theirGames = theirRes.data || [];
+        const myWins     = myGames.filter(g => g.is_win).length;
+        const theirWins  = myGames.length - myWins; // mirror of my wins
+        const total      = myGames.length; // one row per game, from my side only
+
+        const h2hBox     = document.getElementById('profile-h2h');
+        const h2hSection = document.getElementById('fold-h2h-section');
+
+        if (total === 0) {
+            if (h2hSection) h2hSection.style.display = 'none';
+        } else {
+            if (h2hSection) h2hSection.style.display = 'block';
+            const myAvg    = myGames.length    > 0 ? (myGames.reduce((s,g)    => s + (g.avg_game||0), 0) / myGames.length).toFixed(2)    : '–';
+            const theirAvg = theirGames.length > 0 ? (theirGames.reduce((s,g) => s + (g.avg_game||0), 0) / theirGames.length).toFixed(2) : '–';
+            const myPct    = total > 0 ? Math.round((myWins / total) * 100) : 0;
+            const barColor = myWins > theirWins ? 'var(--green)' : myWins < theirWins ? 'var(--red)' : 'var(--accent)';
+            h2hBox.innerHTML = `
+<div class="h2h-matchup">
+    <div class="h2h-side">
+        <div class="h2h-player-name">${loggedPlayer.name}</div>
+        <div class="h2h-wins" style="color:${myWins >= theirWins ? 'var(--green)' : 'var(--red)'};">${myWins}</div>
+        <div class="h2h-avg-label">Ø ${myAvg}</div>
+    </div>
+    <div class="h2h-center">
+        <div class="h2h-total">${total} Spiele</div>
+        <div class="h2h-bar-wrap">
+            <div class="h2h-bar-fill" style="width:${myPct}%; background:${barColor};"></div>
+        </div>
+        <div class="h2h-vs-label">VS</div>
+    </div>
+    <div class="h2h-side h2h-side--right">
+        <div class="h2h-player-name">${player.name}</div>
+        <div class="h2h-wins" style="color:${theirWins >= myWins ? 'var(--green)' : 'var(--red)'};">${theirWins}</div>
+        <div class="h2h-avg-label">Ø ${theirAvg}</div>
+    </div>
+</div>`;
+        }
+    }
 
     // Fetch finished tournaments where this participant placed 1st or 2nd
     let tournWins   = 0;
@@ -198,7 +272,7 @@ async function openPlayerProfile(playerId) {
             <div class="match-avg">Avg: <strong>${h.avg_game}</strong></div>
             <div class="match-legs">Legs: ${h.leg_count}</div>
         </div>
-        <button class="match-delete-btn" onclick="deleteMatch('${h.id}', '${player.id}')">Löschen</button>
+        <button class="match-delete-btn" onclick="deleteMatch('${h.id}', '${player.id}')" style="display:${(window.loggedInUser?.role === 'admin') ? 'inline-block' : 'none'};">Löschen</button>
     </div>
 </div>`).join('');
 
