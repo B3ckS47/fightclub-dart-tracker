@@ -63,6 +63,21 @@
             <p id="settings-msg" class="settings-msg"></p>
         </div>
 
+        <!-- PUSH NOTIFICATIONS -->
+        <div class="card">
+            <h2 class="card-title">BENACHRICHTIGUNGEN</h2>
+            <div class="divider"></div>
+            <p class="muted-text" style="margin-bottom:16px; font-size:0.85rem;">
+                Erhalte eine Push-Benachrichtigung 24 Stunden vor einem Termin.<br>
+                Die App muss als PWA installiert sein.
+            </p>
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+                <span id="push-status-text" style="font-size:0.9rem; color:var(--text-secondary);">Lade Status…</span>
+                <button id="push-toggle-btn" class="btn btn-primary" onclick="togglePush()" style="min-width:140px; display:none;">–</button>
+            </div>
+            <p id="push-msg" class="settings-msg" style="margin-top:10px;"></p>
+        </div>
+
     </div>
 
     <script>
@@ -137,6 +152,89 @@
 
             showMsg('Passwort erfolgreich geändert!', 'var(--green)');
         }
+
+        // ── PUSH NOTIFICATIONS ──
+        const VAPID_PUBLIC_KEY = 'BGQh6RgTsZmguX6S1nRxpzz0-2Now2mIQAdjgfkkhvge7lSQXaHam55cFNSQTZotupFCqAybeosZZ4k-Ly7za0w';
+
+        function urlBase64ToUint8Array(b64) {
+            const pad = '='.repeat((4 - b64.length % 4) % 4);
+            const raw = atob((b64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
+            return new Uint8Array([...raw].map(c => c.charCodeAt(0)));
+        }
+
+        async function checkPushStatus() {
+            const statusEl = document.getElementById('push-status-text');
+            const btnEl    = document.getElementById('push-toggle-btn');
+
+            if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+                statusEl.textContent  = 'Push-Benachrichtigungen werden auf diesem Gerät nicht unterstützt.';
+                btnEl.style.display   = 'none';
+                return;
+            }
+            if (Notification.permission === 'denied') {
+                statusEl.textContent  = 'Benachrichtigungen sind im Browser blockiert. Bitte in den Einstellungen freigeben.';
+                btnEl.style.display   = 'none';
+                return;
+            }
+
+            const { data: existing } = await supa
+                .from('push_subscriptions')
+                .select('id')
+                .eq('user_id', currentUser.id)
+                .maybeSingle();
+
+            btnEl.style.display = 'inline-block';
+            if (existing) {
+                statusEl.textContent = '🔔 Benachrichtigungen aktiviert';
+                btnEl.textContent    = 'DEAKTIVIEREN';
+                btnEl.className      = 'btn';
+            } else {
+                statusEl.textContent = '🔕 Benachrichtigungen deaktiviert';
+                btnEl.textContent    = 'AKTIVIEREN';
+                btnEl.className      = 'btn btn-primary';
+            }
+        }
+
+        async function togglePush() {
+            const { data: existing } = await supa
+                .from('push_subscriptions')
+                .select('id')
+                .eq('user_id', currentUser.id)
+                .maybeSingle();
+
+            if (existing) {
+                // Unsubscribe
+                const reg = await navigator.serviceWorker.ready;
+                const sub = await reg.pushManager.getSubscription();
+                if (sub) await sub.unsubscribe();
+                await supa.from('push_subscriptions').delete().eq('user_id', currentUser.id);
+                showToast('Benachrichtigungen deaktiviert.', 'info');
+            } else {
+                // Subscribe
+                try {
+                    const reg = await navigator.serviceWorker.ready;
+                    const sub = await reg.pushManager.subscribe({
+                        userVisibleOnly:      true,
+                        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+                    });
+                    const json   = sub.toJSON();
+                    const { error } = await supa.from('push_subscriptions').upsert([{
+                        user_id:  currentUser.id,
+                        endpoint: json.endpoint,
+                        p256dh:   json.keys.p256dh,
+                        auth:     json.keys.auth
+                    }], { onConflict: 'endpoint' });
+                    if (error) throw new Error(error.message);
+                    showToast('Benachrichtigungen aktiviert!', 'success');
+                } catch(e) {
+                    showToast('Fehler: ' + e.message, 'error');
+                    return;
+                }
+            }
+            checkPushStatus();
+        }
+
+        checkPushStatus();
     </script>
     <script>
         if ('serviceWorker' in navigator) {

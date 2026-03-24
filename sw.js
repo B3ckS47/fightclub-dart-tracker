@@ -65,3 +65,41 @@ self.addEventListener('fetch', event => {
             .catch(() => caches.match(event.request))
     );
 });
+// ── PUSH NOTIFICATION HANDLER ──
+self.addEventListener('push', event => {
+    let data = {
+        title: 'FlightClub 47',
+        body:  'Erinnerung an einen bevorstehenden Termin.',
+        url:   '/fightclub-dart-tracker/schedule.html'
+    };
+    if (event.data) {
+        try { data = { ...data, ...event.data.json() }; } catch(e) {}
+    }
+    event.waitUntil(
+        self.registration.showNotification(data.title, {
+            body:             data.body,
+            icon:             '/fightclub-dart-tracker/icon-192.png',
+            badge:            '/fightclub-dart-tracker/icon-192.png',
+            data:             { url: data.url },
+            vibrate:          [200, 100, 200],
+            requireInteraction: false
+        })
+    );
+});
+
+// ── NOTIFICATION CLICK → open schedule ──
+self.addEventListener('notificationclick', event => {
+    event.notification.close();
+    const target = event.notification.data?.url || '/fightclub-dart-tracker/schedule.html';
+    event.waitUntil(
+        clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+            for (const client of list) {
+                if (client.url.includes('fightclub-dart-tracker') && 'focus' in client) {
+                    client.navigate(target);
+                    return client.focus();
+                }
+            }
+            return clients.openWindow(target);
+        })
+    );
+});
