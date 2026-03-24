@@ -1543,6 +1543,87 @@ body {
     .card { padding: 32px 36px; }
 }
 
+/* ── GLOBAL TOAST (ui-utils.js) ── */
+.fc-toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: var(--radius-md);
+    padding: 12px 20px;
+    font-family: var(--font-display);
+    font-size: 0.95rem;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    color: var(--text-primary);
+    box-shadow: var(--shadow-card);
+    opacity: 0;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+    z-index: 9999;
+    white-space: nowrap;
+    max-width: 90vw;
+    pointer-events: none;
+}
+.fc-toast--visible  { opacity: 1; transform: translateX(-50%) translateY(0); }
+.fc-toast--error    { border-left-color: var(--red);   }
+.fc-toast--success  { border-left-color: var(--green); }
+.fc-toast--info     { border-left-color: var(--accent);}
+
+/* ── GLOBAL CONFIRM MODAL (ui-utils.js) ── */
+.fc-confirm-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.75);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    padding: 24px;
+}
+.fc-confirm-modal {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-top: 3px solid var(--accent);
+    border-radius: var(--radius-lg);
+    padding: 32px 28px 24px;
+    max-width: 360px;
+    width: 100%;
+    text-align: center;
+    box-shadow: var(--shadow-card);
+    animation: fcModalIn 0.2s ease;
+}
+@keyframes fcModalIn {
+    from { opacity: 0; transform: scale(0.95) translateY(10px); }
+    to   { opacity: 1; transform: scale(1)    translateY(0); }
+}
+.fc-confirm-icon  { font-size: 2rem; margin-bottom: 12px; }
+.fc-confirm-title {
+    font-family: var(--font-display);
+    font-size: 1.2rem;
+    font-weight: 800;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text-primary);
+    margin-bottom: 10px;
+}
+.fc-confirm-msg {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin-bottom: 24px;
+}
+.fc-confirm-btns { display: flex; gap: 10px; }
+.fc-confirm-btns .btn {
+    flex: 1;
+    background: var(--bg-element);
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+}
+.fc-confirm-btns .btn:hover { border-color: var(--border-light); color: var(--text-primary); }
+
 /* ── FINE TOAST ── */
 .fine-toast {
     position: fixed;

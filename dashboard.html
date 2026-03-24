@@ -21,9 +21,9 @@
     <!-- ── NAV ── -->
     <nav id="nav-dashboard">
         <div class="nav-inner nav-inner--default">
-            <span class="nav-brand">FLIGHTCLUB</span>
+            <a href="index.html" class="nav-brand" style="text-decoration:none; color:inherit;">FLIGHTCLUB</a>
             <div class="nav-links">
-                <a href="index.html" class="nav-btn">« Menü</a>
+                <a href="index.html" class="nav-btn" id="nav-dashboard-btn">« Menü</a>
             </div>
         </div>
     </nav>
@@ -60,22 +60,9 @@
         <div id="player-profile-view" class="page">
             <div class="card">
                 <div class="profile-header">
-                    <button onclick="showPage('stats-page')" class="btn btn-ghost">« Zurück</button>
                     <h2 id="profile-name" class="profile-name-title">Player Name</h2>
-                    <div style="width:80px;"></div>
                 </div>
                 <div id="profile-stats-summary" class="stats-grid"></div>
-
-                <!-- Head-to-Head (foldable) -->
-                <div class="fold-section" id="fold-h2h-section" style="display:none;">
-                    <div class="fold-header" onclick="toggleFold('fold-h2h')">
-                        <h3 class="subsection-title subsection-title--fold">Head-to-Head</h3>
-                        <span class="fold-icon" id="fold-h2h-icon">▶</span>
-                    </div>
-                    <div id="fold-h2h" class="fold-body" style="display:none;">
-                        <div id="profile-h2h"></div>
-                    </div>
-                </div>
 
                 <!-- Advanced Analytics (foldable) -->
                 <div class="fold-section">
@@ -149,6 +136,20 @@
             icon.textContent   = isOpen ? '▶' : '▼';
         }
 
+        function updateNavBtn(page) {
+            const btn = document.getElementById('nav-dashboard-btn');
+            if (!btn) return;
+            if (page === 'player-profile-view') {
+                btn.textContent = '« Dashboard';
+                btn.href        = '#';
+                btn.onclick     = (e) => { e.preventDefault(); showPage('stats-page'); };
+            } else {
+                btn.textContent = '« Menü';
+                btn.href        = 'index.html';
+                btn.onclick     = null;
+            }
+        }
+
         function setAdvancedFilter(range, btn) {
             document.querySelectorAll('#fold-advanced .filter-btn').forEach(b => b.classList.remove('filter-btn--active'));
             btn.classList.add('filter-btn--active');
@@ -194,8 +195,6 @@
             var u = JSON.parse(raw);
             if (u.role === 'ipad') window.location.href = 'game.html';
             if (u.role === 'admin') document.getElementById('danger-zone').style.display = 'block';
-            // Expose for ui-manager-dashboard.js
-            window.loggedInUser = u;
         })();
     </script>
     <script>
