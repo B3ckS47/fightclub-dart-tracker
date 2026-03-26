@@ -290,70 +290,36 @@
         })();
     </script>
     <script>
-        // Pre-fill setup from tournament URL params if present
+        // Handle tournament URL params
         (function() {
             var p = new URLSearchParams(window.location.search);
             if (!p.get('tournament_match_id')) return;
-            window.addEventListener('DOMContentLoaded', function() {
-                var score    = p.get('start_score');
-                var checkout = p.get('checkout');
-                var legs     = p.get('legs');
-                var p1       = p.get('p1');
-                var p2       = p.get('p2');
-                var gtype    = p.get('game_type') || 'singles';
 
-                if (score)    document.getElementById('start-score-select').value    = score;
-                if (checkout) document.getElementById('checkout-mode-select').value  = checkout;
-                if (legs)     document.getElementById('legs-to-win-select').value    = legs;
-
-                // Set game type
-                if (typeof setGameType === 'function') setGameType(gtype);
-
-                // Wait for players to load then set selections and lock everything
-                var interval = setInterval(function() {
-                    var p1sel = document.getElementById('p1-select');
-                    if (!p1sel || p1sel.options.length <= 1) return;
-                    clearInterval(interval);
-                    if (p1) {
-                        for (var i = 0; i < p1sel.options.length; i++) {
-                            if (p1sel.options[i].value === p1) { p1sel.selectedIndex = i; break; }
+            if (p.get('skip_setup') === '1') {
+                // Skip setup screen entirely — jump straight to game
+                window.addEventListener('DOMContentLoaded', function() {
+                    // Wait for game-logic.js to be ready
+                    var interval = setInterval(function() {
+                        if (typeof startGameFromTournament === 'function') {
+                            clearInterval(interval);
+                            startGameFromTournament();
                         }
-                    }
-                    var p2sel = document.getElementById('p2-select');
-                    if (p2 && p2sel) {
-                        for (var i = 0; i < p2sel.options.length; i++) {
-                            if (p2sel.options[i].value === p2) { p2sel.selectedIndex = i; break; }
-                        }
-                    }
-                    // Force official game mode
-                    var track = document.getElementById('game-mode-track');
-                    if (track && !track.classList.contains('game-mode-track--on')) {
-                        track.classList.add('game-mode-track--on');
-                        var label = document.getElementById('game-mode-label');
-                        if (label) label.textContent = '🏆 Offizielles Spiel';
-                    }
+                    }, 100);
+                });
+            } else {
+                // Legacy: pre-fill setup screen (kept for safety)
+                window.addEventListener('DOMContentLoaded', function() {
+                    var score    = p.get('start_score');
+                    var checkout = p.get('checkout');
+                    var legs     = p.get('legs');
+                    var gtype    = p.get('game_type') || 'singles';
 
-                    // Lock all setup fields — tournament config is fixed
-                    var lockIds = [
-                        'p1-select', 'p2-select',
-                        'start-score-select', 'checkout-mode-select', 'legs-to-win-select',
-                        'type-singles', 'type-doubles', 'game-mode-track'
-                    ];
-                    lockIds.forEach(function(id) {
-                        var el = document.getElementById(id);
-                        if (el) {
-                            el.disabled = true;
-                            el.style.pointerEvents = 'none';
-                            el.style.opacity = '0.5';
-                        }
-                    });
-                    // Also lock doubles selects if visible
-                    ['t1p1-select','t1p2-select','t2p1-select','t2p2-select'].forEach(function(id) {
-                        var el = document.getElementById(id);
-                        if (el) { el.disabled = true; el.style.pointerEvents = 'none'; el.style.opacity = '0.5'; }
-                    });
-                }, 200);
-            });
+                    if (score)    document.getElementById('start-score-select').value   = score;
+                    if (checkout) document.getElementById('checkout-mode-select').value = checkout;
+                    if (legs)     document.getElementById('legs-to-win-select').value   = legs;
+                    if (typeof setGameType === 'function') setGameType(gtype);
+                });
+            }
         })();
     </script>
     <script>

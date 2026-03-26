@@ -7,7 +7,6 @@ window.addEventListener('DOMContentLoaded', () => {
 function showPage(id) {
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.getElementById(id).classList.add('active');
-    if (typeof updateNavBtn === 'function') updateNavBtn(id);
 }
 
 function updateDropdowns() {} // Not needed on dashboard
@@ -64,7 +63,6 @@ async function openPlayerProfile(playerId) {
         if (body) body.style.display = 'none';
         if (icon) icon.textContent = '▶';
     });
-    // Reset H2H fold + hide section until we know if it applies
     const h2hSection = document.getElementById('fold-h2h-section');
     const h2hBody    = document.getElementById('fold-h2h');
     const h2hIcon    = document.getElementById('fold-h2h-icon');
@@ -95,18 +93,13 @@ async function openPlayerProfile(playerId) {
     // ── HEAD-TO-HEAD ──
     const loggedUser = window.loggedInUser || null;
     const loggedPid  = loggedUser?.player_id || null;
-
     let loggedPlayer = loggedPid ? players.find(p => p.id === loggedPid) : null;
     if (!loggedPlayer && loggedUser?.username) {
         loggedPlayer = players.find(p => p.name.toLowerCase() === loggedUser.username.toLowerCase());
     }
 
-    console.log('[H2H] loggedUser:', loggedUser);
-    console.log('[H2H] loggedPlayer:', loggedPlayer);
-    console.log('[H2H] viewing:', playerId, player.name);
-
     if (loggedPlayer && loggedPlayer.id !== playerId) {
-        // Fetch from each player's own rows — no double counting
+        // Fetch from each side — my rows for wins, their rows for avg
         const [myRes, theirRes] = await Promise.all([
             supa.from('game_history').select('is_win, avg_game')
                 .eq('player_id', loggedPlayer.id)
@@ -116,25 +109,20 @@ async function openPlayerProfile(playerId) {
                 .eq('opponent_name', loggedPlayer.name)
         ]);
 
-        console.log('[H2H] my rows:', myRes.data, myRes.error);
-        console.log('[H2H] their rows:', theirRes.data, theirRes.error);
-
         const myGames    = myRes.data   || [];
         const theirGames = theirRes.data || [];
         const myWins     = myGames.filter(g => g.is_win).length;
-        const theirWins  = myGames.length - myWins; // mirror of my wins
-        const total      = myGames.length; // one row per game, from my side only
+        const theirWins  = myGames.length - myWins;
+        const total      = myGames.length;
 
         const h2hBox     = document.getElementById('profile-h2h');
         const h2hSection = document.getElementById('fold-h2h-section');
 
-        if (total === 0) {
-            if (h2hSection) h2hSection.style.display = 'none';
-        } else {
+        if (total > 0) {
             if (h2hSection) h2hSection.style.display = 'block';
             const myAvg    = myGames.length    > 0 ? (myGames.reduce((s,g)    => s + (g.avg_game||0), 0) / myGames.length).toFixed(2)    : '–';
             const theirAvg = theirGames.length > 0 ? (theirGames.reduce((s,g) => s + (g.avg_game||0), 0) / theirGames.length).toFixed(2) : '–';
-            const myPct    = total > 0 ? Math.round((myWins / total) * 100) : 0;
+            const myPct    = Math.round((myWins / total) * 100);
             const barColor = myWins > theirWins ? 'var(--green)' : myWins < theirWins ? 'var(--red)' : 'var(--accent)';
             h2hBox.innerHTML = `
 <div class="h2h-matchup">

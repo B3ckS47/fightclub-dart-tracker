@@ -4,6 +4,58 @@ const _tournMatchId = _urlParams.get('tournament_match_id');
 const _tournId      = _urlParams.get('tournament_id');
 const _tournP1Id    = _urlParams.get('tournament_p1_id');
 const _tournP2Id    = _urlParams.get('tournament_p2_id');
+const _skipSetup    = _urlParams.get('skip_setup') === '1';
+const _isOfficial   = _urlParams.get('is_official') !== '0';
+
+// Called directly when coming from a tournament (skip_setup=1)
+async function startGameFromTournament() {
+    const p1        = _urlParams.get('p1');
+    const p2        = _urlParams.get('p2');
+    const startVal  = parseInt(_urlParams.get('start_score')) || 501;
+    const legTarget = parseInt(_urlParams.get('legs'))        || 2;
+    const mode      = _urlParams.get('checkout')             || 'double';
+    const gameType  = _urlParams.get('game_type')            || 'singles';
+
+    if (!p1 || !p2) return;
+
+    gameState.gameType    = gameType;
+    if (gameType === 'singles') {
+        gameState.pNames      = [p1, p2];
+        gameState.teamPlayers = [[p1], [p2]];
+        gameState.stats       = [makePlayerStats(), makePlayerStats()];
+    } else {
+        // doubles: p1/p2 are team names "A & B"
+        const t1 = p1.split(' & ');
+        const t2 = p2.split(' & ');
+        gameState.pNames      = [p1, p2];
+        gameState.teamPlayers = [t1, t2];
+        gameState.stats       = [makePlayerStats(), makePlayerStats(), makePlayerStats(), makePlayerStats()];
+    }
+
+    gameState.scores        = [startVal, startVal];
+    gameState.history       = [[], []];
+    gameState.legScore      = [0, 0];
+    gameState.targetLegs    = legTarget;
+    gameState.legStarter    = 0;
+    gameState.currentIdx    = 0;
+    gameState.teamPlayerIdx = [0, 0];
+    gameState.mode          = mode;
+    gameState.isOfficial    = _isOfficial;
+    gameState.logs          = [];
+    gameState.ausbullenActive = true;
+
+    document.getElementById('nav-setup').style.display       = 'none';
+    document.getElementById('nav-game-active').style.display = 'block';
+    document.getElementById('setup-view').style.display      = 'none';
+    document.getElementById('active-game-view').style.display = '';
+    document.getElementById('active-game-view').classList.add('game-active');
+    refreshDisplay();
+
+    // Show starter modal immediately
+    document.getElementById('starter-p1').textContent = gameState.pNames[0];
+    document.getElementById('starter-p2').textContent = gameState.pNames[1];
+    document.getElementById('starter-modal-overlay').style.display = 'flex';
+}
 
 async function saveTournamentResult(winnerName) {
     if (!_tournMatchId || !_tournP1Id || !_tournP2Id) return;
@@ -218,37 +270,19 @@ const _liveRole = _liveUser.role || '';
 async function pushLiveState() {
     if (!gameState.isOfficial) return;
     try {
-        // Calculate live averages per team (singles: stats[0/1], doubles: combine both team players)
-        const liveAvgs = [0, 1].map(teamIdx => {
-            let totalPoints = 0, dartsThrown = 0;
-            if (gameState.gameType === 'singles') {
-                totalPoints  = gameState.stats[teamIdx].totalPoints;
-                dartsThrown  = gameState.stats[teamIdx].dartsThrown;
-            } else {
-                // doubles: stats[0] + stats[1] for team 0, stats[2] + stats[3] for team 1
-                const base = teamIdx === 0 ? 0 : 2;
-                totalPoints  = gameState.stats[base].totalPoints  + gameState.stats[base + 1].totalPoints;
-                dartsThrown  = gameState.stats[base].dartsThrown  + gameState.stats[base + 1].dartsThrown;
-            }
-            return dartsThrown > 0
-                ? parseFloat((totalPoints / (dartsThrown / 3)).toFixed(2))
-                : null;
-        });
-
         await supa.from('live_game').upsert({
             id:         _liveId,
             role:       _liveRole,
             state:      {
-                pNames:        gameState.pNames,
-                scores:        gameState.scores,
-                legScore:      gameState.legScore,
-                targetLegs:    gameState.targetLegs,
-                currentIdx:    gameState.currentIdx,
-                gameType:      gameState.gameType,
-                teamPlayers:   gameState.teamPlayers,
+                pNames:       gameState.pNames,
+                scores:       gameState.scores,
+                legScore:     gameState.legScore,
+                targetLegs:   gameState.targetLegs,
+                currentIdx:   gameState.currentIdx,
+                gameType:     gameState.gameType,
+                teamPlayers:  gameState.teamPlayers,
                 teamPlayerIdx: gameState.teamPlayerIdx,
-                history:       gameState.history,
-                liveAvgs:      liveAvgs
+                history:      gameState.history
             },
             updated_at: new Date().toISOString()
         });

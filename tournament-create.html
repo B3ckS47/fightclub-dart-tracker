@@ -18,7 +18,7 @@
 <body>
     <nav id="nav-tournament-create">
         <div class="nav-inner nav-inner--default">
-            <a href="index.html" class="nav-brand" style="text-decoration:none;color:inherit;">FLIGHTCLUB</a>
+            <span class="nav-brand">FLIGHTCLUB</span>
             <div class="nav-links">
                 <a href="tournaments.html" class="nav-btn">« Turniere</a>
             </div>
@@ -45,6 +45,14 @@
                         <option value="ko" selected>K.O. – Verlierer scheidet aus</option>
                         <option value="swiss">Swiss – Verlierer-Bracket</option>
                     </select>
+                </div>
+
+                <div class="settings-field">
+                    <label class="settings-label">SPIELTYP</label>
+                    <div class="game-mode-toggle" id="tourn-official-toggle" onclick="toggleTournOfficial()" style="justify-content:flex-start; padding:8px 0;">
+                        <div class="game-mode-track game-mode-track--on" id="tourn-official-track"></div>
+                        <span class="game-mode-label" id="tourn-official-label">🏆 Offizielles Turnier</span>
+                    </div>
                 </div>
 
                 <div class="settings-field">
@@ -134,10 +142,19 @@
         const user = JSON.parse(raw);
         if (user.role === 'ipad') window.location.href = 'tournaments.html';
 
-        let mode       = 'ko';
-        let gameType   = 'singles';
-        let allPlayers = [];
+        let mode        = 'ko';
+        let gameType    = 'singles';
+        let isOfficial  = true;
+        let allPlayers  = [];
         let participants = []; // { name, player_id, is_guest }
+
+        function toggleTournOfficial() {
+            isOfficial = !isOfficial;
+            const track = document.getElementById('tourn-official-track');
+            const label = document.getElementById('tourn-official-label');
+            track.classList.toggle('game-mode-track--on', isOfficial);
+            label.textContent = isOfficial ? '🏆 Offizielles Turnier' : '🎮 Spaßturnier';
+        }
 
         function setMode(m) {
             mode = m;
@@ -441,6 +458,7 @@
                     checkout,
                     legs,
                     status:     'active',
+                    is_official: isOfficial,
                     created_by: user.username
                 }])
                 .select('id')

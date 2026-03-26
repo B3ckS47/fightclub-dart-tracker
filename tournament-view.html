@@ -18,7 +18,7 @@
 <body>
     <nav id="nav-tournament-view">
         <div class="nav-inner nav-inner--default">
-            <a href="index.html" class="nav-brand" style="text-decoration:none;color:inherit;">FLIGHTCLUB</a>
+            <span class="nav-brand">FLIGHTCLUB</span>
             <div class="nav-links">
                 <a href="tournaments.html" class="nav-btn">« Turniere</a>
             </div>
@@ -345,6 +345,8 @@
             url.searchParams.set('game_type', t.game_type);
             url.searchParams.set('p1', p1);
             url.searchParams.set('p2', p2);
+            url.searchParams.set('skip_setup', '1');
+            url.searchParams.set('is_official', t.is_official === false ? '0' : '1');
             return url.toString();
         }
 
