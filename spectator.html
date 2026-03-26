@@ -48,6 +48,8 @@
                     <div class="spec-name" id="spec-name-0">–</div>
                     <div class="spec-score" id="spec-score-0">501</div>
                     <div class="spec-legs" id="spec-legs-0">○</div>
+                    <div class="spec-avg" id="spec-avg-0"></div>
+                    <div class="spec-history" id="spec-history-0"></div>
                 </div>
 
                 <!-- VS -->
@@ -58,6 +60,8 @@
                     <div class="spec-name" id="spec-name-1">–</div>
                     <div class="spec-score" id="spec-score-1">501</div>
                     <div class="spec-legs" id="spec-legs-1">○</div>
+                    <div class="spec-avg" id="spec-avg-1"></div>
+                    <div class="spec-history" id="spec-history-1"></div>
                 </div>
             </div>
 
@@ -104,13 +108,27 @@
                 ).join(' ');
                 document.getElementById(`spec-legs-${i}`).textContent = dots;
 
+                // Live average
+                const avgEl = document.getElementById(`spec-avg-${i}`);
+                const avg   = s.liveAvgs?.[i];
+                if (avgEl) avgEl.textContent = (avg !== null && avg !== undefined) ? `Ø ${avg.toFixed(2)}` : '';
+
+                // Last 3 visits
+                const histEl = document.getElementById(`spec-history-${i}`);
+                if (histEl) {
+                    const hist  = (s.history && s.history[i]) ? s.history[i] : [];
+                    const last3 = hist.slice(-3);
+                    histEl.innerHTML = last3.map(v => {
+                        const isBust = v === 'BUST';
+                        const is180  = v === 180;
+                        const color  = isBust ? 'var(--red)' : is180 ? 'var(--accent)' : 'var(--text-secondary)';
+                        return `<span class="spec-visit" style="color:${color};">${v}</span>`;
+                    }).join('');
+                }
+
                 // Highlight active player
                 const card = document.getElementById(`spec-card-${i}`);
-                if (i === s.currentIdx) {
-                    card.classList.add('spec-card--active');
-                } else {
-                    card.classList.remove('spec-card--active');
-                }
+                card.classList.toggle('spec-card--active', i === s.currentIdx);
             });
 
             const now = new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' });

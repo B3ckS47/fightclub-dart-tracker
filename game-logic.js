@@ -105,7 +105,7 @@ async function advanceKO(winnerId, thisMatch) {
 async function advanceSwiss(winnerId, loserId, thisMatch) {
     const { data: allMatches } = await supa
         .from('tournament_matches')
-        .select('id, round, match_number, bracket, p1_id, p2_id, status, winner_id, loser_id')
+        .select('id, round, match_number, bracket, p1_id, p2_id, status, winner_id, loser_id, is_bye')
         .eq('tournament_id', _tournId);
     if (!allMatches) return;
 
@@ -115,32 +115,62 @@ async function advanceSwiss(winnerId, loserId, thisMatch) {
     const round    = thisMatch.round;
     const bracket  = thisMatch.bracket;
 
+    // Helper: pair players for next round, creating a bye slot if odd
+    async function createNextRound(players, newBracket, newRound) {
+        if (players.length === 0) return;
+        const rows = [];
+        const pool = [...players];
+        const hasBye = pool.length % 2 !== 0;
+
+        if (hasBye) {
+            // Bye slot: admin assigns who gets it in tournament-view
+            rows.push({
+                tournament_id: _tournId,
+                round:         newRound,
+                match_number:  Math.ceil(pool.length / 2),
+                bracket:       newBracket,
+                p1_id:         null,
+                p2_id:         null,
+                status:        'pending',
+                is_bye:        true
+            });
+            pool.pop(); // pair the rest
+        }
+
+        for (let i = 0; i < pool.length / 2; i++) {
+            rows.push({
+                tournament_id: _tournId,
+                round:         newRound,
+                match_number:  i + 1,
+                bracket:       newBracket,
+                p1_id:         pool[i * 2],
+                p2_id:         pool[i * 2 + 1],
+                status:        'pending',
+                is_bye:        false
+            });
+        }
+        if (rows.length > 0) await supa.from('tournament_matches').insert(rows);
+    }
+
     if (bracket === 'winners') {
-        // ── Check if all winners matches this round are now done ──
         const thisRoundW = winnerMs.filter(m => m.round === round);
         const allDone    = thisRoundW.every(m => m.status === 'done' || m.id === _tournMatchId);
 
-        // Collect all winners from this round (including the one just played)
         const roundWinners = thisRoundW.map(m =>
             m.id === _tournMatchId ? winnerId : m.winner_id
         ).filter(Boolean);
 
-        // Collect all losers from this round
         const roundLosers = thisRoundW.map(m =>
             m.id === _tournMatchId ? loserId : m.loser_id
         ).filter(Boolean);
 
         if (allDone) {
-            // Only 1 winner left → they're the winners bracket champion
-            // Check if there's a losers bracket champion to face
-            const losersDoneMs = loserMs.filter(m => m.status === 'done');
-            const losersChamp  = losersDoneMs.length > 0
-                ? losersDoneMs[losersDoneMs.length - 1].winner_id : null;
-
             if (roundWinners.length === 1) {
-                // Winners bracket champion determined
+                // Winners champion — check if losers champion waiting
+                const losersDone  = loserMs.filter(m => m.status === 'done' && !m.is_bye);
+                const losersChamp = losersDone.length > 0
+                    ? losersDone[losersDone.length - 1].winner_id : null;
                 if (losersChamp && finalMs.length === 0) {
-                    // Create the final
                     await supa.from('tournament_matches').insert([{
                         tournament_id: _tournId,
                         round:         round + 1,
@@ -148,60 +178,47 @@ async function advanceSwiss(winnerId, loserId, thisMatch) {
                         bracket:       'final',
                         p1_id:         roundWinners[0],
                         p2_id:         losersChamp,
-                        status:        'pending'
+                        status:        'pending',
+                        is_bye:        false
                     }]);
                 }
-                // If no losers champ yet, final will be created when losers bracket finishes
             } else {
-                // Create next winners bracket round matches
-                const nextRound = round + 1;
-                for (let i = 0; i < Math.floor(roundWinners.length / 2); i++) {
-                    await supa.from('tournament_matches').insert([{
-                        tournament_id: _tournId,
-                        round:         nextRound,
-                        match_number:  i + 1,
-                        bracket:       'winners',
-                        p1_id:         roundWinners[i * 2],
-                        p2_id:         roundWinners[i * 2 + 1] || null,
-                        status:        'pending'
-                    }]);
-                }
+                await createNextRound(roundWinners, 'winners', round + 1);
             }
 
-            // Create losers bracket matches for all losers this round
-            const existingLoserRounds = loserMs.length > 0
-                ? Math.max(...loserMs.map(m => m.round)) : 0;
-            const newLoserRound = existingLoserRounds + 1;
-            for (let i = 0; i < Math.floor(roundLosers.length / 2); i++) {
-                await supa.from('tournament_matches').insert([{
-                    tournament_id: _tournId,
-                    round:         newLoserRound,
-                    match_number:  i + 1,
-                    bracket:       'losers',
-                    p1_id:         roundLosers[i * 2],
-                    p2_id:         roundLosers[i * 2 + 1] || null,
-                    status:        'pending'
-                }]);
+            // Create losers pool for this round's losers
+            if (roundLosers.length > 0) {
+                const existingLoserRounds = loserMs.length > 0
+                    ? Math.max(...loserMs.map(m => m.round)) : 0;
+                await createNextRound(roundLosers, 'losers', existingLoserRounds + 1);
             }
         }
-        // If not all done yet, just wait — the last match of the round triggers creation
 
     } else if (bracket === 'losers') {
-        // Winner stays in losers bracket next round, loser is eliminated
-        const thisRoundL = loserMs.filter(m => m.round === round);
+        // is_bye matches are auto-resolved by tournament-view — skip here
+        const thisRoundL = loserMs.filter(m => m.round === round && !m.is_bye);
         const allDone    = thisRoundL.every(m => m.status === 'done' || m.id === _tournMatchId);
 
-        if (allDone) {
-            const roundWinners = thisRoundL.map(m =>
+        // Also check bye matches for this round are resolved
+        const byesDone = loserMs
+            .filter(m => m.round === round && m.is_bye)
+            .every(m => m.status === 'done');
+
+        if (allDone && byesDone) {
+            // Collect all round winners (real matches + bye winners)
+            const realWinners = thisRoundL.map(m =>
                 m.id === _tournMatchId ? winnerId : m.winner_id
             ).filter(Boolean);
+            const byeWinners = loserMs
+                .filter(m => m.round === round && m.is_bye && m.winner_id)
+                .map(m => m.winner_id);
+            const roundWinners = [...realWinners, ...byeWinners];
 
             if (roundWinners.length === 1) {
-                // Losers bracket champion — check if winners champ is waiting
-                const winnersDoneMs = winnerMs.filter(m => m.status === 'done');
-                const winnersChamp  = winnersDoneMs.length > 0
-                    ? winnersDoneMs[winnersDoneMs.length - 1].winner_id : null;
-
+                // Losers champion
+                const winnersDone  = winnerMs.filter(m => m.status === 'done');
+                const winnersChamp = winnersDone.length > 0
+                    ? winnersDone[winnersDone.length - 1].winner_id : null;
                 if (winnersChamp && finalMs.length === 0) {
                     await supa.from('tournament_matches').insert([{
                         tournament_id: _tournId,
@@ -210,23 +227,12 @@ async function advanceSwiss(winnerId, loserId, thisMatch) {
                         bracket:       'final',
                         p1_id:         winnersChamp,
                         p2_id:         roundWinners[0],
-                        status:        'pending'
+                        status:        'pending',
+                        is_bye:        false
                     }]);
                 }
-            } else {
-                // More losers bracket matches needed
-                const nextRound = round + 1;
-                for (let i = 0; i < Math.floor(roundWinners.length / 2); i++) {
-                    await supa.from('tournament_matches').insert([{
-                        tournament_id: _tournId,
-                        round:         nextRound,
-                        match_number:  i + 1,
-                        bracket:       'losers',
-                        p1_id:         roundWinners[i * 2],
-                        p2_id:         roundWinners[i * 2 + 1] || null,
-                        status:        'pending'
-                    }]);
-                }
+            } else if (roundWinners.length > 1) {
+                await createNextRound(roundWinners, 'losers', round + 1);
             }
         }
 

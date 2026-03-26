@@ -408,17 +408,17 @@
                 });
             }
 
-            // Odd player gets a bye — auto-advances to round 2 winners
+            // Odd player gets a bye — admin assigns who gets it in tournament-view
             if (hasBye) {
                 matchRows.push({
                     tournament_id: tournId,
                     round:         1,
                     match_number:  pairs + 1,
                     bracket:       'winners',
-                    p1_id:         shuffled[n - 1],
+                    p1_id:         null,
                     p2_id:         null,
-                    winner_id:     shuffled[n - 1],
-                    status:        'done'
+                    status:        'pending',
+                    is_bye:        true
                 });
             }
 

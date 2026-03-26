@@ -66,6 +66,12 @@
             <div id="loser-round-matches"></div>
         </div>
 
+        <!-- Bye assignment cards (winners + losers bracket) -->
+        <div id="bye-section" style="display:none;">
+            <h2 class="section-title">FREILOS VERGEBEN</h2>
+            <div id="bye-cards"></div>
+        </div>
+
     </div>
 
     <script>
@@ -123,7 +129,7 @@
 
             // Auto-close if no open matches remain
             if (tournament.status === 'active') {
-                const open = matches.filter(m => m.status === 'pending' && m.p1_id && m.p2_id);
+                const open = matches.filter(m => m.status === 'pending' && m.p1_id && m.p2_id && !m.is_bye);
                 if (open.length === 0) {
                     const done = matches.filter(m => m.status === 'done');
                     if (done.length > 0) {
@@ -178,7 +184,10 @@
 
             renderBracketTree();
             renderCurrentRound();
-            if (t.mode === 'swiss') renderLoserBracket();
+            if (t.mode === 'swiss') {
+                renderLoserBracket();
+                renderByeCards();
+            }
         }
 
         async function closeTournament() {
@@ -232,8 +241,11 @@
         }
 
         function renderCurrentRound() {
-            // Find the lowest round with pending matches in winners bracket
-            const pending = matches.filter(m => m.status === 'pending' && m.p1_id && m.p2_id && m.bracket !== 'losers');
+            // Find the lowest round with pending matches in winners bracket (excluding byes)
+            const pending = matches.filter(m =>
+                m.status === 'pending' && m.p1_id && m.p2_id &&
+                m.bracket !== 'losers' && !m.is_bye
+            );
             if (pending.length === 0) {
                 document.getElementById('current-round-section').style.display = 'none';
                 return;
@@ -307,7 +319,9 @@
             });
 
             // ── Pending match cards ──
-            const pending = loserMatches.filter(m => m.status === 'pending' && m.p1_id && m.p2_id);
+            const pending = loserMatches.filter(m =>
+                m.status === 'pending' && m.p1_id && m.p2_id && !m.is_bye
+            );
             const loserSection = document.getElementById('loser-section');
             if (pending.length === 0) {
                 loserSection.style.display = 'none';
@@ -328,6 +342,93 @@
                     </a>
                 `;
             }).join('');
+        }
+
+        function renderByeCards() {
+            const byeMatches = matches.filter(m =>
+                m.is_bye && m.status === 'pending' &&
+                (m.bracket === 'winners' || m.bracket === 'losers')
+            );
+            const section = document.getElementById('bye-section');
+            const cards   = document.getElementById('bye-cards');
+
+            if (byeMatches.length === 0 || user.role !== 'admin') {
+                section.style.display = 'none';
+                return;
+            }
+
+            section.style.display = 'block';
+
+            // Build list of players already assigned a bye this tournament
+            const alreadyHadBye = new Set(
+                matches.filter(m => m.is_bye && m.winner_id).map(m => m.winner_id)
+            );
+
+            cards.innerHTML = byeMatches.map(m => {
+                const bracketLabel = m.bracket === 'winners' ? 'WINNER-BRACKET' : 'VERLIERER-BRACKET';
+
+                // Eligible players: those in same bracket pool this round without a match yet
+                // = participants who won in previous rounds of this bracket but have no match in this round
+                const thisRound = matches.filter(mx =>
+                    mx.bracket === m.bracket && mx.round === m.round && !mx.is_bye
+                );
+                const alreadyInRound = new Set([
+                    ...thisRound.map(mx => mx.p1_id),
+                    ...thisRound.map(mx => mx.p2_id)
+                ].filter(Boolean));
+
+                const eligible = participants.filter(p =>
+                    !alreadyInRound.has(p.id)
+                );
+
+                const warnClass = eligible.some(p => alreadyHadBye.has(p.id)) ? '' : '';
+                const options = eligible.map(p => {
+                    const hadBye = alreadyHadBye.has(p.id);
+                    return `<option value="${p.id}" ${hadBye ? 'style="color:var(--red)"' : ''}>${p.name}${hadBye ? ' ⚠ (hatte schon Freilos)' : ''}</option>`;
+                }).join('');
+
+                return `
+                <div class="card" style="margin-bottom:16px; border-top:3px solid var(--accent);">
+                    <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+                        <div>
+                            <div class="bracket-round-label" style="margin-bottom:4px;">${bracketLabel} · RUNDE ${m.round}</div>
+                            <h3 class="subsection-title" style="margin:0;">FREILOS VERGEBEN</h3>
+                        </div>
+                    </div>
+                    <div class="divider"></div>
+                    <p class="muted-text" style="font-size:0.82rem; margin-bottom:12px;">
+                        Wähle den Spieler, der das Freilos erhält (automatischer Sieg ohne Spiel).
+                        Spieler mit ⚠ hatten bereits ein Freilos.
+                    </p>
+                    <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                        <select id="bye-select-${m.id}" class="select-field" style="flex:1;">
+                            <option value="">– Spieler wählen –</option>
+                            ${options}
+                        </select>
+                        <button class="btn btn-primary" onclick="assignBye('${m.id}')">VERGEBEN</button>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        async function assignBye(matchId) {
+            const sel      = document.getElementById(`bye-select-${matchId}`);
+            const playerId = sel ? sel.value : '';
+            if (!playerId) { showToast('Bitte einen Spieler auswählen.', 'error'); return; }
+
+            // Mark bye as done with this player as winner
+            const { error } = await supa
+                .from('tournament_matches')
+                .update({
+                    p1_id:     playerId,
+                    winner_id: playerId,
+                    status:    'done'
+                })
+                .eq('id', matchId);
+
+            if (error) { showToast('Fehler: ' + error.message, 'error'); return; }
+            showToast('Freilos vergeben.', 'success');
+            load(); // refresh
         }
 
         function buildGameUrl(match) {
