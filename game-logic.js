@@ -103,143 +103,151 @@ async function advanceKO(winnerId, thisMatch) {
 }
 
 async function advanceSwiss(winnerId, loserId, thisMatch) {
-    const { data: allMatches } = await supa
-        .from('tournament_matches')
-        .select('id, round, match_number, bracket, p1_id, p2_id, status, winner_id, loser_id, is_bye')
-        .eq('tournament_id', _tournId);
-    if (!allMatches) return;
+    // ── NEW SWISS LOGIC ──
+    // Pools are based on participant records, not separate bracket columns.
+    // winners pool = 0 losses, losers pool = 1 loss, 2 losses = eliminated.
+    // bracket column is kept for display but pool membership is driven by record.
 
-    const winnerMs = allMatches.filter(m => m.bracket === 'winners');
-    const loserMs  = allMatches.filter(m => m.bracket === 'losers');
-    const finalMs  = allMatches.filter(m => m.bracket === 'final');
-    const round    = thisMatch.round;
-    const bracket  = thisMatch.bracket;
+    try {
+        // 1. Update winner and loser records
+        await Promise.all([
+            supa.from('tournament_participants')
+                .update({ wins:   supa.rpc ? undefined : undefined }) // handled below
+                .eq('id', winnerId),
+            supa.from('tournament_participants')
+                .update({ losses: supa.rpc ? undefined : undefined })
+                .eq('id', loserId)
+        ]);
 
-    // Helper: pair players for next round, creating a bye slot if odd
-    async function createNextRound(players, newBracket, newRound) {
-        if (players.length === 0) return;
-        const rows = [];
-        const pool = [...players];
-        const hasBye = pool.length % 2 !== 0;
+        // Fetch current records
+        const { data: allParts } = await supa
+            .from('tournament_participants')
+            .select('id, name, wins, losses, bye_count, seed')
+            .eq('tournament_id', _tournId);
+        if (!allParts) return;
 
-        if (hasBye) {
-            // Bye slot: admin assigns who gets it in tournament-view
-            rows.push({
+        // Update winner record
+        const winnerPart = allParts.find(p => p.id === winnerId);
+        const loserPart  = allParts.find(p => p.id === loserId);
+        if (!winnerPart || !loserPart) return;
+
+        await Promise.all([
+            supa.from('tournament_participants')
+                .update({ wins: (winnerPart.wins || 0) + 1 })
+                .eq('id', winnerId),
+            supa.from('tournament_participants')
+                .update({ losses: (loserPart.losses || 0) + 1 })
+                .eq('id', loserId)
+        ]);
+
+        // Refresh with updated records
+        const { data: parts } = await supa
+            .from('tournament_participants')
+            .select('id, name, wins, losses, bye_count, seed')
+            .eq('tournament_id', _tournId);
+        if (!parts) return;
+
+        // Fetch all matches to check if current round is fully done
+        const { data: allMatches } = await supa
+            .from('tournament_matches')
+            .select('id, round, bracket, p1_id, p2_id, status, winner_id, loser_id')
+            .eq('tournament_id', _tournId);
+        if (!allMatches) return;
+
+        const round = thisMatch.round;
+
+        // Check all matches in current round are done (including this one just played)
+        const thisRound = allMatches.filter(m => m.round === round);
+        const allDone   = thisRound.every(m => m.status === 'done' || m.id === _tournMatchId);
+        if (!allDone) return; // wait for other matches in this round
+
+        // 2. Build pools from updated records
+        // winners pool: 0 losses, losers pool: 1 loss, 2 losses = eliminated
+        const winnersPool = parts.filter(p => (p.losses || 0) === 0);
+        const losersPool  = parts.filter(p => (p.losses || 0) === 1);
+
+        const finalMs = allMatches.filter(m => m.bracket === 'final');
+        const nextRound = round + 1;
+
+        // 3. Check if tournament is over: 1 in each pool = final
+        if (winnersPool.length === 1 && losersPool.length === 1 && finalMs.length === 0) {
+            await supa.from('tournament_matches').insert([{
                 tournament_id: _tournId,
-                round:         newRound,
-                match_number:  Math.ceil(pool.length / 2),
-                bracket:       newBracket,
-                p1_id:         null,
-                p2_id:         null,
-                status:        'pending',
-                is_bye:        true
-            });
-            pool.pop(); // pair the rest
+                round:         nextRound,
+                match_number:  1,
+                bracket:       'final',
+                p1_id:         winnersPool[0].id,
+                p2_id:         losersPool[0].id,
+                status:        'pending'
+            }]);
+            return;
         }
 
-        for (let i = 0; i < pool.length / 2; i++) {
-            rows.push({
-                tournament_id: _tournId,
-                round:         newRound,
-                match_number:  i + 1,
-                bracket:       newBracket,
-                p1_id:         pool[i * 2],
-                p2_id:         pool[i * 2 + 1],
-                status:        'pending',
-                is_bye:        false
-            });
+        // 4. Check if only 1 pool has players left (edge case — all eliminated from one side)
+        if (winnersPool.length === 1 && losersPool.length === 0 && finalMs.length === 0) {
+            // Only winner left, no one to face — tournament over
+            return;
         }
-        if (rows.length > 0) await supa.from('tournament_matches').insert(rows);
-    }
 
-    if (bracket === 'winners') {
-        const thisRoundW = winnerMs.filter(m => m.round === round);
-        const allDone    = thisRoundW.every(m => m.status === 'done' || m.id === _tournMatchId);
+        // 5. Generate next round matches for each pool
+        async function generatePoolMatches(pool, bracketLabel) {
+            if (pool.length === 0) return;
 
-        const roundWinners = thisRoundW.map(m =>
-            m.id === _tournMatchId ? winnerId : m.winner_id
-        ).filter(Boolean);
+            // Shuffle pool (sort by seed for determinism, then pair)
+            const sorted = [...pool].sort((a, b) => (a.seed || 0) - (b.seed || 0));
+            const hasBye = sorted.length % 2 !== 0;
 
-        const roundLosers = thisRoundW.map(m =>
-            m.id === _tournMatchId ? loserId : m.loser_id
-        ).filter(Boolean);
+            let byePlayer = null;
+            if (hasBye) {
+                // Give bye to player with lowest bye_count, breaking ties by seed
+                const minByes = Math.min(...sorted.map(p => p.bye_count || 0));
+                const eligible = sorted.filter(p => (p.bye_count || 0) === minByes);
+                // Random among eligible
+                byePlayer = eligible[Math.floor(Math.random() * eligible.length)];
 
-        if (allDone) {
-            if (roundWinners.length === 1) {
-                // Winners champion — check if losers champion waiting
-                const losersDone  = loserMs.filter(m => m.status === 'done' && !m.is_bye);
-                const losersChamp = losersDone.length > 0
-                    ? losersDone[losersDone.length - 1].winner_id : null;
-                if (losersChamp && finalMs.length === 0) {
-                    await supa.from('tournament_matches').insert([{
-                        tournament_id: _tournId,
-                        round:         round + 1,
-                        match_number:  1,
-                        bracket:       'final',
-                        p1_id:         roundWinners[0],
-                        p2_id:         losersChamp,
-                        status:        'pending',
-                        is_bye:        false
-                    }]);
-                }
-            } else {
-                await createNextRound(roundWinners, 'winners', round + 1);
+                // Update bye_count
+                await supa.from('tournament_participants')
+                    .update({ bye_count: (byePlayer.bye_count || 0) + 1 })
+                    .eq('id', byePlayer.id);
+
+                // Create auto-won bye match
+                const matchNum = Math.ceil(sorted.length / 2);
+                await supa.from('tournament_matches').insert([{
+                    tournament_id: _tournId,
+                    round:         nextRound,
+                    match_number:  matchNum,
+                    bracket:       bracketLabel,
+                    p1_id:         byePlayer.id,
+                    p2_id:         null,
+                    winner_id:     byePlayer.id,
+                    loser_id:      null,
+                    status:        'done'
+                }]);
             }
 
-            // Create losers pool for this round's losers
-            if (roundLosers.length > 0) {
-                const existingLoserRounds = loserMs.length > 0
-                    ? Math.max(...loserMs.map(m => m.round)) : 0;
-                await createNextRound(roundLosers, 'losers', existingLoserRounds + 1);
+            // Pair remaining players
+            const toMatch = sorted.filter(p => !byePlayer || p.id !== byePlayer.id);
+            const rows = [];
+            for (let i = 0; i < toMatch.length / 2; i++) {
+                rows.push({
+                    tournament_id: _tournId,
+                    round:         nextRound,
+                    match_number:  i + 1,
+                    bracket:       bracketLabel,
+                    p1_id:         toMatch[i * 2].id,
+                    p2_id:         toMatch[i * 2 + 1].id,
+                    status:        'pending'
+                });
             }
-        }
-
-    } else if (bracket === 'losers') {
-        // is_bye matches are auto-resolved by tournament-view — skip here
-        const thisRoundL = loserMs.filter(m => m.round === round && !m.is_bye);
-        const allDone    = thisRoundL.every(m => m.status === 'done' || m.id === _tournMatchId);
-
-        // Also check bye matches for this round are resolved
-        const byesDone = loserMs
-            .filter(m => m.round === round && m.is_bye)
-            .every(m => m.status === 'done');
-
-        if (allDone && byesDone) {
-            // Collect all round winners (real matches + bye winners)
-            const realWinners = thisRoundL.map(m =>
-                m.id === _tournMatchId ? winnerId : m.winner_id
-            ).filter(Boolean);
-            const byeWinners = loserMs
-                .filter(m => m.round === round && m.is_bye && m.winner_id)
-                .map(m => m.winner_id);
-            const roundWinners = [...realWinners, ...byeWinners];
-
-            if (roundWinners.length === 1) {
-                // Losers champion
-                const winnersDone  = winnerMs.filter(m => m.status === 'done');
-                const winnersChamp = winnersDone.length > 0
-                    ? winnersDone[winnersDone.length - 1].winner_id : null;
-                if (winnersChamp && finalMs.length === 0) {
-                    await supa.from('tournament_matches').insert([{
-                        tournament_id: _tournId,
-                        round:         Math.max(...allMatches.map(m => m.round)) + 1,
-                        match_number:  1,
-                        bracket:       'final',
-                        p1_id:         winnersChamp,
-                        p2_id:         roundWinners[0],
-                        status:        'pending',
-                        is_bye:        false
-                    }]);
-                }
-            } else if (roundWinners.length > 1) {
-                await createNextRound(roundWinners, 'losers', round + 1);
+            if (rows.length > 0) {
+                await supa.from('tournament_matches').insert(rows);
             }
         }
 
-    } else if (bracket === 'final') {
-        // 1st: winnerId, 2nd: loserId (winners bracket finalist who lost final)
-        // 3rd: handled by checkAndCloseTournaments via losers bracket
-    }
+        await generatePoolMatches(winnersPool, 'winners');
+        await generatePoolMatches(losersPool,  'losers');
+
+    } catch(e) { console.error('[Swiss] Error:', e); }
 }
 
 // ── AUTO-FINE CONSTANTS (IDs from fines_reasons table) ──
