@@ -109,28 +109,18 @@ async function advanceSwiss(winnerId, loserId, thisMatch) {
     // bracket column is kept for display but pool membership is driven by record.
 
     try {
-        // 1. Update winner and loser records
-        await Promise.all([
-            supa.from('tournament_participants')
-                .update({ wins:   supa.rpc ? undefined : undefined }) // handled below
-                .eq('id', winnerId),
-            supa.from('tournament_participants')
-                .update({ losses: supa.rpc ? undefined : undefined })
-                .eq('id', loserId)
-        ]);
-
-        // Fetch current records
+        // 1. Fetch current records
         const { data: allParts } = await supa
             .from('tournament_participants')
             .select('id, name, wins, losses, bye_count, seed')
             .eq('tournament_id', _tournId);
         if (!allParts) return;
 
-        // Update winner record
         const winnerPart = allParts.find(p => p.id === winnerId);
         const loserPart  = allParts.find(p => p.id === loserId);
         if (!winnerPart || !loserPart) return;
 
+        // 2. Update winner and loser records
         await Promise.all([
             supa.from('tournament_participants')
                 .update({ wins: (winnerPart.wins || 0) + 1 })
@@ -140,14 +130,14 @@ async function advanceSwiss(winnerId, loserId, thisMatch) {
                 .eq('id', loserId)
         ]);
 
-        // Refresh with updated records
+        // 3. Refresh with updated records
         const { data: parts } = await supa
             .from('tournament_participants')
             .select('id, name, wins, losses, bye_count, seed')
             .eq('tournament_id', _tournId);
         if (!parts) return;
 
-        // Fetch all matches to check if current round is fully done
+        // 4. Fetch all matches to check if current round is fully done
         const { data: allMatches } = await supa
             .from('tournament_matches')
             .select('id, round, bracket, p1_id, p2_id, status, winner_id, loser_id')
@@ -155,13 +145,9 @@ async function advanceSwiss(winnerId, loserId, thisMatch) {
         if (!allMatches) return;
 
         const round = thisMatch.round;
-
-        // Check all matches in current round are done (including this one just played)
         const thisRound = allMatches.filter(m => m.round === round);
         const allDone   = thisRound.every(m => m.status === 'done' || m.id === _tournMatchId);
         if (!allDone) return; // wait for other matches in this round
-
-        // 2. Build pools from updated records
         // winners pool: 0 losses, losers pool: 1 loss, 2 losses = eliminated
         const winnersPool = parts.filter(p => (p.losses || 0) === 0);
         const losersPool  = parts.filter(p => (p.losses || 0) === 1);
