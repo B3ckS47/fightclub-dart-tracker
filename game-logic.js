@@ -102,6 +102,9 @@ async function advanceKO(winnerId, thisMatch) {
 
 async function advanceSwiss(winnerId, loserId, thisMatch) {
     try {
+        // Final match — tournament is over, let auto-close handle it
+        if (thisMatch.bracket === 'final') return;
+
         // 1. Fetch current participant records
         const { data: allParts } = await supa
             .from('tournament_participants')
@@ -653,4 +656,4 @@ async function selectAusbullenWinner(teamIdx) {
     } else {
         showLegModal(gameState.pNames[teamIdx] + ' (Ausbullen)');
     }
-              }
+            }
