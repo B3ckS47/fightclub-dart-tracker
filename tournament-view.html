@@ -53,9 +53,16 @@
             <div id="current-round-matches"></div>
         </div>
 
+        <!-- Swiss: standings -->
+        <div id="swiss-standings-card" class="card" style="display:none; margin-top:24px;">
+            <h2 class="card-title">SWISS · STANDINGS</h2>
+            <div class="divider"></div>
+            <div id="swiss-standings"></div>
+        </div>
+
         <!-- Swiss: loser bracket card -->
         <div id="loser-bracket-card" class="card" style="display:none; margin-top:24px;">
-            <h2 class="card-title">VERLIERER-BRACKET</h2>
+            <h2 class="card-title">LOSER-POOL (1 Niederlage)</h2>
             <div class="divider"></div>
             <div id="loser-bracket-tree" class="bracket-tree"></div>
         </div>
@@ -108,7 +115,7 @@
 
             const { data: parts } = await supa
                 .from('tournament_participants')
-                .select('*')
+                .select('id, name, seed, wins, losses, bye_count')
                 .eq('tournament_id', tournId)
                 .order('seed');
             participants = parts || [];
@@ -127,8 +134,7 @@
                 if (open.length === 0) {
                     const done = matches.filter(m => m.status === 'done');
                     if (done.length > 0) {
-                        const finalMatch = done.find(m => m.bracket === 'final')
-                            || done.reduce((a, b) => a.round > b.round ? a : b);
+                        const finalMatch = done.find(m => m.bracket === 'final');
                         if (finalMatch?.winner_id && finalMatch?.loser_id) {
                             let thirdId = null;
                             const now = new Date().toISOString();
@@ -174,11 +180,34 @@
             `;
 
             document.getElementById('bracket-title').textContent =
-                t.mode === 'swiss' ? 'GEWINNER-BRACKET' : 'TURNIERPLAN';
+                t.mode === 'swiss' ? 'WINNER-POOL (0 Niederlagen)' : 'TURNIERPLAN';
 
             renderBracketTree();
             renderCurrentRound();
-            if (t.mode === 'swiss') renderLoserBracket();
+            if (t.mode === 'swiss') {
+                renderLoserBracket();
+                renderSwissStandings();
+                document.getElementById('swiss-standings-card').style.display = 'block';
+            }
+        }
+
+        function renderSwissStandings() {
+            const el = document.getElementById('swiss-standings');
+            if (!el) return;
+            const sorted = [...participants].sort((a, b) =>
+                (b.wins||0) - (a.wins||0) || (a.losses||0) - (b.losses||0)
+            );
+            el.innerHTML = sorted.map(p => {
+                const losses = p.losses || 0;
+                const cls    = losses >= 2 ? 'swiss-standing--out' : losses === 0 ? 'swiss-standing--winner' : 'swiss-standing--loser';
+                const status = losses >= 2 ? '❌ Ausgeschieden' : losses === 0 ? '🟢 Winner Pool' : '🟡 Loser Pool';
+                return `<div class="swiss-standing-row ${cls}">
+                    <span class="swiss-standing-name">${p.name}</span>
+                    <span class="swiss-standing-record">${p.wins||0}W – ${losses}L</span>
+                    ${(p.bye_count||0) > 0 ? `<span class="swiss-standing-bye">Freilos ×${p.bye_count}</span>` : '<span></span>'}
+                    <span class="swiss-standing-status">${status}</span>
+                </div>`;
+            }).join('');
         }
 
         async function closeTournament() {
