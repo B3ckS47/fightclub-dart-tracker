@@ -27,50 +27,49 @@
 
     <div class="app-wrapper">
 
-        <!-- Header info -->
+        <!-- 1) Header: Turniername, Tags, Close-Button -->
         <div class="card" id="tourn-header-card">
             <div class="tourn-header-row">
                 <h2 class="card-title" id="tourn-title">–</h2>
                 <span id="tourn-status-badge" class="tourn-status"></span>
             </div>
             <div class="tourn-tags" id="tourn-setup-tags" style="margin-top:8px;"></div>
-            <!-- Admin close button — injected by JS -->
             <div id="close-btn-wrap" style="display:none; margin-top:14px;">
                 <button class="btn btn-danger btn-full" onclick="closeTournament()">TURNIER SCHLIESSEN</button>
             </div>
         </div>
 
-        <!-- Bracket tree (small overview) -->
+        <!-- 2) Alle Spiele: Winner + Loser zusammen, farblich unterschieden -->
+        <div id="all-matches-section" style="display:none;">
+            <h2 class="section-title" id="all-matches-title">AKTUELLE PARTIEN</h2>
+            <div id="all-matches-list"></div>
+        </div>
+
+        <!-- Für K.O.-Modus: nur Winner-Matches -->
+        <div id="current-round-section" style="display:none;">
+            <h2 class="section-title" id="current-round-title">AKTUELLE RUNDE</h2>
+            <div id="current-round-matches"></div>
+        </div>
+
+        <!-- 3) Winner-Pool Turnierbaum -->
         <div class="card">
             <h2 class="card-title" id="bracket-title">TURNIERPLAN</h2>
             <div class="divider"></div>
             <div id="bracket-tree" class="bracket-tree"></div>
         </div>
 
-        <!-- Current round matches (large, clickable) -->
-        <div id="current-round-section" style="display:none;">
-            <h2 class="section-title" id="current-round-title">AKTUELLE RUNDE</h2>
-            <div id="current-round-matches"></div>
-        </div>
-
-        <!-- Swiss: standings -->
-        <div id="swiss-standings-card" class="card" style="display:none; margin-top:24px;">
-            <h2 class="card-title">SWISS · STANDINGS</h2>
-            <div class="divider"></div>
-            <div id="swiss-standings"></div>
-        </div>
-
-        <!-- Swiss: loser bracket card -->
+        <!-- 4) Loser-Pool Turnierbaum -->
         <div id="loser-bracket-card" class="card" style="display:none; margin-top:24px;">
-            <h2 class="card-title">LOSER-POOL (1 Niederlage)</h2>
+            <h2 class="card-title">LOSER-POOL · 1 NIEDERLAGE</h2>
             <div class="divider"></div>
             <div id="loser-bracket-tree" class="bracket-tree"></div>
         </div>
 
-        <!-- Swiss: pending loser bracket matches (large, clickable) -->
-        <div id="loser-section" style="display:none;">
-            <h2 class="section-title">VERLIERER-BRACKET · AKTUELLE RUNDE</h2>
-            <div id="loser-round-matches"></div>
+        <!-- 5) Swiss Standings -->
+        <div id="swiss-standings-card" class="card" style="display:none; margin-top:24px;">
+            <h2 class="card-title">SWISS · STANDINGS</h2>
+            <div class="divider"></div>
+            <div id="swiss-standings"></div>
         </div>
 
     </div>
@@ -180,14 +179,19 @@
             `;
 
             document.getElementById('bracket-title').textContent =
-                t.mode === 'swiss' ? 'WINNER-POOL (0 Niederlagen)' : 'TURNIERPLAN';
+                t.mode === 'swiss' ? 'WINNER-POOL · 0 NIEDERLAGEN' : 'TURNIERPLAN';
 
             renderBracketTree();
-            renderCurrentRound();
+
             if (t.mode === 'swiss') {
+                renderAllSwissMatches();
                 renderLoserBracket();
                 renderSwissStandings();
                 document.getElementById('swiss-standings-card').style.display = 'block';
+                document.getElementById('current-round-section').style.display = 'none';
+            } else {
+                renderCurrentRound();
+                document.getElementById('all-matches-section').style.display = 'none';
             }
         }
 
@@ -249,9 +253,9 @@
                     const p2won  = m.winner_id === m.p2_id;
 
                     card.innerHTML = `
-                        <div class="bracket-player ${p1won ? 'bracket-player--winner' : (m.status === 'done' ? 'bracket-player--loser' : '')}">${m.p1_id ? p1name : '–'}</div>
+                        <div class="bracket-player ${p1won ? 'bracket-player--winner' : (m.status === 'done' ? 'bracket-player--loser' : '')}">${m.p1_id ? p1name : 'Freilos'}</div>
                         <div class="bracket-divider"></div>
-                        <div class="bracket-player ${p2won ? 'bracket-player--winner' : (m.status === 'done' && m.p2_id ? 'bracket-player--loser' : '')}">${m.p2_id ? p2name : (m.p1_id ? 'BYE' : '–')}</div>
+                        <div class="bracket-player ${p2won ? 'bracket-player--winner' : (m.status === 'done' && m.p2_id ? 'bracket-player--loser' : '')}">${m.p2_id ? p2name : 'Freilos'}</div>
                     `;
                     col.appendChild(card);
                 });
@@ -260,27 +264,70 @@
             });
         }
 
+        function renderAllSwissMatches() {
+            // Alle offenen Partien aus beiden Pools zusammen anzeigen
+            const pending = matches.filter(m => m.status === 'pending' && m.p1_id && m.p2_id);
+            const active  = matches.filter(m => m.status === 'active'  && m.p1_id && m.p2_id);
+            const current = [...active, ...pending];
+
+            const section = document.getElementById('all-matches-section');
+            if (current.length === 0) {
+                section.style.display = 'none';
+                return;
+            }
+
+            section.style.display = 'block';
+            const winnerCount = current.filter(m => m.bracket !== 'losers').length;
+            const loserCount  = current.filter(m => m.bracket === 'losers').length;
+
+            let titleParts = [];
+            if (winnerCount > 0) titleParts.push(`${winnerCount} WINNER`);
+            if (loserCount  > 0) titleParts.push(`${loserCount} LOSER`);
+            document.getElementById('all-matches-title').textContent =
+                `AKTUELLE PARTIEN · ${titleParts.join(' + ')}`;
+
+            const el = document.getElementById('all-matches-list');
+            el.innerHTML = current.map(m => {
+                const url       = buildGameUrl(m);
+                const isLoser   = m.bracket === 'losers';
+                const isFinal   = m.bracket === 'final';
+                const poolBadge = isLoser ? '<span class="match-pool-badge match-pool-badge--loser">LOSER POOL</span>'
+                                : isFinal ? '<span class="match-pool-badge match-pool-badge--final">FINALE</span>'
+                                :           '<span class="match-pool-badge match-pool-badge--winner">WINNER POOL</span>';
+                const cardClass = isLoser ? 'tourn-match-card tourn-match-card--loser'
+                                : isFinal ? 'tourn-match-card tourn-match-card--final'
+                                :           'tourn-match-card';
+                return `
+                    <a href="${url}" class="${cardClass}">
+                        <div class="tourn-match-meta">${poolBadge}<span class="tourn-match-round">Runde ${m.round}</span></div>
+                        <div class="tourn-match-players">
+                            <span class="tourn-match-player">${partName(m.p1_id)}</span>
+                            <span class="tourn-match-vs">VS</span>
+                            <span class="tourn-match-player">${partName(m.p2_id)}</span>
+                        </div>
+                        <div class="tourn-match-action">🎯 Spiel starten »</div>
+                    </a>
+                `;
+            }).join('');
+        }
+
         function renderCurrentRound() {
-            // Find the lowest round with pending matches in winners bracket
             const pending = matches.filter(m => m.status === 'pending' && m.p1_id && m.p2_id && m.bracket !== 'losers');
             if (pending.length === 0) {
                 document.getElementById('current-round-section').style.display = 'none';
                 return;
             }
-
-            const currentRound = Math.min(...pending.map(m => m.round));
+            const currentRound   = Math.min(...pending.map(m => m.round));
             const currentMatches = pending.filter(m => m.round === currentRound);
 
             document.getElementById('current-round-section').style.display = 'block';
             document.getElementById('current-round-title').textContent =
                 `RUNDE ${currentRound} · ${currentMatches.length} ${currentMatches.length === 1 ? 'MATCH' : 'MATCHES'}`;
 
-            const el = document.getElementById('current-round-matches');
-            el.innerHTML = currentMatches.map(m => {
+            document.getElementById('current-round-matches').innerHTML = currentMatches.map(m => {
                 const url = buildGameUrl(m);
-                const canStart = user.role !== 'ipad' || true; // all roles can start
                 return `
-                    <a href="${url}" class="tourn-match-card ${canStart ? '' : 'tourn-match-card--readonly'}">
+                    <a href="${url}" class="tourn-match-card">
                         <div class="tourn-match-players">
                             <span class="tourn-match-player">${partName(m.p1_id)}</span>
                             <span class="tourn-match-vs">VS</span>
@@ -296,15 +343,13 @@
             const loserMatches = matches.filter(m => m.bracket === 'losers');
             if (loserMatches.length === 0) {
                 document.getElementById('loser-bracket-card').style.display = 'none';
-                document.getElementById('loser-section').style.display = 'none';
                 return;
             }
 
-            // ── Bracket tree ──
             document.getElementById('loser-bracket-card').style.display = 'block';
-            const rounds = [...new Set(loserMatches.map(m => m.round))].sort((a, b) => a - b);
+            const rounds   = [...new Set(loserMatches.map(m => m.round))].sort((a, b) => a - b);
             const maxRound = Math.max(...rounds);
-            const treeEl = document.getElementById('loser-bracket-tree');
+            const treeEl   = document.getElementById('loser-bracket-tree');
             treeEl.innerHTML = '';
 
             rounds.forEach(r => {
@@ -325,38 +370,15 @@
                     const p2won = m.winner_id === m.p2_id;
 
                     card.innerHTML = `
-                        <div class="bracket-player ${p1won ? 'bracket-player--winner' : (m.status === 'done' ? 'bracket-player--loser' : '')}">${m.p1_id ? partNameShort(m.p1_id) : '–'}</div>
+                        <div class="bracket-player ${p1won ? 'bracket-player--winner' : (m.status === 'done' ? 'bracket-player--loser' : '')}">${m.p1_id ? partNameShort(m.p1_id) : 'Freilos'}</div>
                         <div class="bracket-divider"></div>
-                        <div class="bracket-player ${p2won ? 'bracket-player--winner' : (m.status === 'done' && m.p2_id ? 'bracket-player--loser' : '')}">${m.p2_id ? partNameShort(m.p2_id) : '–'}</div>
+                        <div class="bracket-player ${p2won ? 'bracket-player--winner' : (m.status === 'done' && m.p2_id ? 'bracket-player--loser' : '')}">${m.p2_id ? partNameShort(m.p2_id) : 'Freilos'}</div>
                     `;
                     col.appendChild(card);
                 });
 
                 treeEl.appendChild(col);
             });
-
-            // ── Pending match cards ──
-            const pending = loserMatches.filter(m => m.status === 'pending' && m.p1_id && m.p2_id);
-            const loserSection = document.getElementById('loser-section');
-            if (pending.length === 0) {
-                loserSection.style.display = 'none';
-                return;
-            }
-
-            loserSection.style.display = 'block';
-            document.getElementById('loser-round-matches').innerHTML = pending.map(m => {
-                const url = buildGameUrl(m);
-                return `
-                    <a href="${url}" class="tourn-match-card tourn-match-card--loser">
-                        <div class="tourn-match-players">
-                            <span class="tourn-match-player">${partName(m.p1_id)}</span>
-                            <span class="tourn-match-vs">VS</span>
-                            <span class="tourn-match-player">${partName(m.p2_id)}</span>
-                        </div>
-                        <div class="tourn-match-action">🎯 Spiel starten »</div>
-                    </a>
-                `;
-            }).join('');
         }
 
         function buildGameUrl(match) {

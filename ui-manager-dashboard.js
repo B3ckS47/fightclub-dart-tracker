@@ -278,8 +278,9 @@ async function openPlayerProfile(playerId) {
 
     const avgs   = chartData.map(h => parseFloat(h.avg_game) || 0);
     const labels = chartData.map((h, i) => 'G' + (i + 1));
-    const minVal = Math.max(0, Math.floor(Math.min(...avgs) - 10));
-    const maxVal = Math.ceil(Math.max(...avgs) + 10);
+    const ltAvg  = parseFloat(lifetimeAvg) || 0;
+    const minVal = Math.max(0, Math.floor(Math.min(...avgs, ltAvg) - 10));
+    const maxVal = Math.ceil(Math.max(...avgs, ltAvg) + 10);
     const W = 500, H = 180, padL = 40, padR = 16, padT = 16, padB = 32;
     const innerW = W - padL - padR;
     const innerH = H - padT - padB;
@@ -308,6 +309,15 @@ async function openPlayerProfile(playerId) {
         <text x="${xPos(i)}" y="${yPos(v) - 10}" text-anchor="middle" fill="#f0f0f5" font-size="10" font-weight="bold">${v.toFixed(1)}</text>
     `).join('');
 
+    const ltAvgY    = yPos(ltAvg);
+    const ltAvgLine = `
+        <line x1="${padL}" y1="${ltAvgY}" x2="${W - padR}" y2="${ltAvgY}"
+              stroke="#60a5fa" stroke-width="1.5" stroke-dasharray="5,4" opacity="0.7"/>
+        <rect x="${W - padR - 52}" y="${ltAvgY - 11}" width="52" height="15" rx="3"
+              fill="#0d0d0f" opacity="0.85"/>
+        <text x="${W - padR - 3}" y="${ltAvgY + 2}" text-anchor="end"
+              fill="#60a5fa" font-size="10" font-weight="bold">Ø ${ltAvg}</text>`;
+
     chartBox.innerHTML = `
 <svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;">
     <defs>
@@ -320,6 +330,7 @@ async function openPlayerProfile(playerId) {
     ${xLabels}
     <path d="${areaPath}" fill="url(#areaGrad)"/>
     <polyline points="${points}" fill="none" stroke="#f5a623" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+    ${ltAvgLine}
     ${dots}
 </svg>`;
 }

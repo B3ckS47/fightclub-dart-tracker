@@ -41,7 +41,17 @@
                     <option value="Event">Event</option>
                     <option value="Gameday">Spieltag</option>
                 </select>
-                <input type="datetime-local" id="appt-date" class="input-field">
+                <input type="date" id="appt-date" class="input-field">
+                <div class="schedule-time-row">
+                    <div class="schedule-time-group">
+                        <label class="schedule-time-label">Startzeit</label>
+                        <input type="time" id="appt-start-time" class="input-field">
+                    </div>
+                    <div class="schedule-time-group">
+                        <label class="schedule-time-label">Endzeit</label>
+                        <input type="time" id="appt-end-time" class="input-field">
+                    </div>
+                </div>
                 <input type="text" id="appt-place" placeholder="Ort" class="input-field">
                 <button onclick="createAppointment()" class="btn btn-accent">HINZUFÜGEN</button>
             </div>

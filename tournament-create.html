@@ -93,8 +93,8 @@
             </div>
         </div>
 
-        <!-- Participants -->
-        <div class="card">
+        <!-- Participants (pool of individual players) -->
+        <div class="card" id="participants-card">
             <h2 class="card-title">TEILNEHMER</h2>
             <div class="divider"></div>
 
@@ -110,7 +110,7 @@
 
                 <!-- Player search -->
                 <div class="settings-field">
-                    <label class="settings-label">SPIELER HINZUFÜGEN</label>
+                    <label class="settings-label" id="add-player-label">SPIELER HINZUFÜGEN</label>
                     <div class="tourn-player-add">
                         <select id="player-search" class="select-field">
                             <option value="">– Spieler wählen –</option>
@@ -125,6 +125,50 @@
             <div id="participant-list" class="participant-list" style="margin-top:12px;"></div>
             <p id="participant-count" class="tourn-hint" style="margin-top:8px;"></p>
 
+        </div>
+
+        <!-- Doubles: Team Builder (shown only for doubles) -->
+        <div class="card" id="teams-card" style="display:none;">
+            <h2 class="card-title">DOPPELTEAMS</h2>
+            <div class="divider"></div>
+
+            <!-- Mode toggle -->
+            <div class="team-mode-toggle">
+                <button id="team-mode-manual" class="team-mode-btn team-mode-btn--active" onclick="setTeamMode('manual')">✋ Manuell</button>
+                <button id="team-mode-random" class="team-mode-btn" onclick="setTeamMode('random')">🎲 Zufällig</button>
+            </div>
+
+            <!-- Manual builder -->
+            <div id="team-manual-section" style="margin-top:14px;">
+                <p class="tourn-hint" style="margin-bottom:14px;">Jeweils zwei Spieler zu einem Team zusammenstellen.</p>
+                <div class="settings-form">
+                    <div class="tourn-form-row">
+                        <div class="settings-field">
+                            <label class="settings-label">SPIELER 1</label>
+                            <select id="team-p1" class="select-field">
+                                <option value="">– wählen –</option>
+                            </select>
+                        </div>
+                        <div class="settings-field">
+                            <label class="settings-label">SPIELER 2</label>
+                            <select id="team-p2" class="select-field">
+                                <option value="">– wählen –</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button class="btn btn-primary btn-full" onclick="addTeam()">TEAM HINZUFÜGEN</button>
+                </div>
+            </div>
+
+            <!-- Random section -->
+            <div id="team-random-section" style="display:none; margin-top:14px;">
+                <p class="tourn-hint" style="margin-bottom:14px;">Das System weist alle Spieler im Pool zufällig zu Teams zu.</p>
+                <button class="btn btn-accent btn-full" onclick="randomizeTeams()">🎲 TEAMS AUSLOSEN</button>
+            </div>
+
+            <!-- Team list -->
+            <div id="team-list" style="margin-top:16px;"></div>
+            <p id="team-count" class="tourn-hint" style="margin-top:8px;"></p>
         </div>
 
         <!-- Error -->
@@ -146,7 +190,8 @@
         let gameType    = 'singles';
         let isOfficial  = true;
         let allPlayers  = [];
-        let participants = []; // { name, player_id, is_guest }
+        let participants = []; // { name, player_id, is_guest }  — individual players
+        let teams        = []; // { name: "A & B", p1, p2 }      — doubles teams only
 
         function toggleTournOfficial() {
             isOfficial = !isOfficial;
@@ -156,16 +201,21 @@
             label.textContent = isOfficial ? '🏆 Offizielles Turnier' : '🎮 Spaßturnier';
         }
 
-        function setMode(m) {
-            mode = m;
-        }
+        function setMode(m) { mode = m; }
 
         function setType(t) {
             gameType = t;
+            const isDoubles = t === 'doubles';
+            document.getElementById('teams-card').style.display = isDoubles ? 'block' : 'none';
+            document.getElementById('add-player-label').textContent =
+                isDoubles ? 'SPIELER ZUM POOL HINZUFÜGEN' : 'SPIELER HINZUFÜGEN';
+            // Reset teams when switching mode
+            teams = [];
+            renderTeams();
+            renderParticipants();
         }
 
         async function init() {
-            // Load players (admin + member)
             const { data: users } = await supa
                 .from('app_users')
                 .select('player_id, username, role')
@@ -176,10 +226,8 @@
                 .select('id, name')
                 .order('name');
 
-            allPlayers = (players || []);
+            allPlayers = players || [];
 
-            // Player select — only those with app_users entry or all players
-            const playerUserIds = new Set((users || []).map(u => u.player_id).filter(Boolean));
             const sel = document.getElementById('player-search');
             allPlayers.forEach(p => {
                 const o = document.createElement('option');
@@ -188,7 +236,6 @@
                 sel.appendChild(o);
             });
 
-            // Load appointments (Training + Tournament type, future or recent)
             const { data: appts } = await supa
                 .from('appointments')
                 .select('id, title, type, date')
@@ -223,12 +270,12 @@
             votes.forEach(v => {
                 const name = v.username;
                 if (participants.find(p => p.name === name)) return;
-                // Find player_id by matching app_users
                 const player = allPlayers.find(p => p.name === name);
                 participants.push({ name, player_id: player ? player.id : null, is_guest: v.is_guest || false });
             });
             renderParticipants();
             refreshPlayerSearch();
+            if (gameType === 'doubles') refreshTeamSelects();
         }
 
         function refreshPlayerSearch() {
@@ -255,10 +302,18 @@
             sel.value = '';
             renderParticipants();
             refreshPlayerSearch();
+            if (gameType === 'doubles') refreshTeamSelects();
         }
 
         function removeParticipant(idx) {
+            const removed = participants[idx];
             participants.splice(idx, 1);
+            // Remove any team containing this player
+            if (gameType === 'doubles') {
+                teams = teams.filter(t => t.p1.player_id !== removed.player_id && t.p2.player_id !== removed.player_id);
+                renderTeams();
+                refreshTeamSelects();
+            }
             renderParticipants();
             refreshPlayerSearch();
         }
@@ -276,11 +331,106 @@
                     <button class="participant-remove" onclick="removeParticipant(${i})">✕</button>
                 </div>
             `).join('');
-            const n = participants.length;
-            const nextPow2 = Math.pow(2, Math.ceil(Math.log2(n)));
+            if (gameType === 'singles') {
+                const n = participants.length;
+                const nextPow2 = Math.pow(2, Math.ceil(Math.log2(n)));
+                const byes = nextPow2 - n;
+                document.getElementById('participant-count').textContent =
+                    `${n} Teilnehmer${byes > 0 ? ` · ${byes} Freilos${byes > 1 ? 'e' : ''}` : ''}`;
+            } else {
+                document.getElementById('participant-count').textContent =
+                    `${participants.length} Spieler im Pool`;
+            }
+        }
+
+        // ── DOUBLES: TEAM MODE ──
+        let teamMode = 'manual';
+
+        function setTeamMode(mode) {
+            teamMode = mode;
+            document.getElementById('team-mode-manual').classList.toggle('team-mode-btn--active', mode === 'manual');
+            document.getElementById('team-mode-random').classList.toggle('team-mode-btn--active', mode === 'random');
+            document.getElementById('team-manual-section').style.display = mode === 'manual' ? 'block' : 'none';
+            document.getElementById('team-random-section').style.display = mode === 'random' ? 'block' : 'none';
+        }
+
+        function randomizeTeams() {
+            if (participants.length < 2) { showError('Mindestens 2 Spieler im Pool benötigt.'); return; }
+            if (participants.length % 2 !== 0) { showError('Für zufällige Teams wird eine gerade Anzahl Spieler benötigt.'); return; }
+            const shuffled = shuffle([...participants]);
+            teams = [];
+            for (let i = 0; i < shuffled.length; i += 2) {
+                const p1 = shuffled[i];
+                const p2 = shuffled[i + 1];
+                teams.push({ name: `${p1.name} & ${p2.name}`, p1, p2 });
+            }
+            renderTeams();
+            refreshTeamSelects();
+        }
+
+        // ── DOUBLES: TEAM BUILDER ──
+
+        // Returns participants not yet assigned to any team
+        function unassignedPlayers() {
+            const assigned = new Set();
+            teams.forEach(t => {
+                if (t.p1.player_id) assigned.add(t.p1.player_id);
+                if (t.p2.player_id) assigned.add(t.p2.player_id);
+            });
+            return participants.filter(p => !assigned.has(p.player_id));
+        }
+
+        function refreshTeamSelects() {
+            const free = unassignedPlayers();
+            const opts = '<option value="">– wählen –</option>' +
+                free.map(p => `<option value="${p.player_id}">${p.name}</option>`).join('');
+            document.getElementById('team-p1').innerHTML = opts;
+            document.getElementById('team-p2').innerHTML = opts;
+        }
+
+        function addTeam() {
+            const p1id = document.getElementById('team-p1').value;
+            const p2id = document.getElementById('team-p2').value;
+            if (!p1id || !p2id) { showError('Bitte zwei Spieler auswählen.'); return; }
+            if (p1id === p2id)   { showError('Bitte zwei verschiedene Spieler auswählen.'); return; }
+
+            const p1 = participants.find(p => p.player_id === p1id);
+            const p2 = participants.find(p => p.player_id === p2id);
+            if (!p1 || !p2) return;
+
+            teams.push({ name: `${p1.name} & ${p2.name}`, p1, p2 });
+            renderTeams();
+            refreshTeamSelects();
+        }
+
+        function removeTeam(idx) {
+            teams.splice(idx, 1);
+            renderTeams();
+            refreshTeamSelects();
+        }
+
+        function renderTeams() {
+            const el = document.getElementById('team-list');
+            if (!el) return;
+            if (teams.length === 0) {
+                el.innerHTML = '<p class="muted-text">Noch keine Teams.</p>';
+                document.getElementById('team-count').textContent = '';
+                return;
+            }
+            el.innerHTML = teams.map((t, i) => `
+                <div class="participant-row">
+                    <span class="participant-name doubles-team-name">
+                        <span class="doubles-team-icon">🎯</span>
+                        ${t.name}
+                    </span>
+                    <button class="participant-remove" onclick="removeTeam(${i})">✕</button>
+                </div>
+            `).join('');
+            const n = teams.length;
+            const nextPow2 = Math.pow(2, Math.ceil(Math.log2(Math.max(n, 2))));
             const byes = nextPow2 - n;
-            document.getElementById('participant-count').textContent =
-                `${n} Teilnehmer${byes > 0 ? ` · ${byes} Freilos${byes > 1 ? 'e' : ''}` : ''}`;
+            document.getElementById('team-count').textContent =
+                `${n} Team${n !== 1 ? 's' : ''}${byes > 0 && n > 1 ? ` · ${byes} Freilos${byes > 1 ? 'e' : ''}` : ''}`;
         }
 
         function showError(msg) {
@@ -301,20 +451,14 @@
         }
 
         async function generateKOBracket(tournId, partIds) {
-            // partIds: array of participant UUIDs (already shuffled, with byes at end)
-            const n        = partIds.length;
-            const rounds   = Math.ceil(Math.log2(n));
-            const total    = Math.pow(2, rounds);
-            const seeded   = [...partIds];
-            // Pad with null (bye) to next power of 2
+            const n      = partIds.length;
+            const rounds = Math.ceil(Math.log2(n));
+            const total  = Math.pow(2, rounds);
+            const seeded = [...partIds];
             while (seeded.length < total) seeded.push(null);
 
-            // Build matches round by round
-            // Round 1: pair seeded[0] vs seeded[total-1], seeded[1] vs seeded[total-2], etc.
             let matchRows = [];
-            let round = 1;
             const r1count = total / 2;
-
             for (let i = 0; i < r1count; i++) {
                 matchRows.push({
                     tournament_id: tournId,
@@ -327,13 +471,11 @@
                 });
             }
 
-            // Insert round 1 and get IDs back
             const { data: r1data } = await supa
                 .from('tournament_matches')
                 .insert(matchRows)
                 .select('id, match_number, p1_id, p2_id');
 
-            // For byes: auto-resolve (where p2_id is null, winner = p1_id, status = done)
             let prevRound = r1data;
             for (const m of prevRound) {
                 if (m.p2_id === null) {
@@ -344,7 +486,6 @@
                 }
             }
 
-            // Build subsequent rounds and wire next_match_id
             let currentRound = r1data;
             for (let r = 2; r <= rounds; r++) {
                 const matchCount = total / Math.pow(2, r);
@@ -365,7 +506,6 @@
                     .insert(nextRows)
                     .select('id, match_number');
 
-                // Wire: pair current round matches to next round
                 for (let i = 0; i < currentRound.length; i++) {
                     const nextMatch = nextData[Math.floor(i / 2)];
                     await supa.from('tournament_matches')
@@ -373,7 +513,6 @@
                         .eq('id', currentRound[i].id);
                 }
 
-                // Advance bye winners into next round immediately
                 for (let i = 0; i < currentRound.length; i++) {
                     const m = currentRound[i];
                     if (m.p2_id === null) {
@@ -408,7 +547,6 @@
                 });
             }
 
-            // Odd player gets a bye — auto-advances to round 2 winners
             if (hasBye) {
                 matchRows.push({
                     tournament_id: tournId,
@@ -423,8 +561,6 @@
             }
 
             await supa.from('tournament_matches').insert(matchRows);
-            // Loser bracket matches and future winner bracket rounds are created
-            // dynamically by saveTournamentResult as results come in
         }
 
         // ── CREATE ──
@@ -433,49 +569,65 @@
             const name = document.getElementById('tourn-name').value.trim();
             if (!name) { showError('Bitte einen Turniernamen eingeben.'); return; }
 
-            const minPlayers = gameType === 'doubles' ? 4 : 2;
-            if (participants.length < minPlayers) {
-                showError(`Mindestens ${minPlayers} Teilnehmer benötigt.`);
-                return;
-            }
-            if (gameType === 'doubles' && participants.length % 2 !== 0) {
-                showError('Für Doppel wird eine gerade Anzahl an Spielern benötigt.');
-                return;
-            }
-
             const score    = parseInt(document.getElementById('tourn-score').value);
             const checkout = document.getElementById('tourn-checkout').value;
             const legs     = parseInt(document.getElementById('tourn-legs').value);
 
-            // Create tournament
+            // For doubles: use teams as the participant entries
+            const isDoubles = gameType === 'doubles';
+            let finalEntries; // { name, player_id (null for doubles teams) }
+
+            if (isDoubles) {
+                if (teams.length < 2) {
+                    showError('Mindestens 2 Doppelteams benötigt.');
+                    return;
+                }
+                const unassigned = unassignedPlayers();
+                if (unassigned.length > 0) {
+                    const names = unassigned.map(p => p.name).join(', ');
+                    showError(`Folgende Spieler sind noch keinem Team zugewiesen: ${names}`);
+                    return;
+                }
+                finalEntries = teams.map(t => ({
+                    name:      t.name,       // "Spieler1 & Spieler2"
+                    player_id: null,         // teams have no single player_id
+                    is_guest:  false
+                }));
+            } else {
+                if (participants.length < 2) {
+                    showError('Mindestens 2 Teilnehmer benötigt.');
+                    return;
+                }
+                finalEntries = participants;
+            }
+
+            // Create tournament record
             const { data: tourn, error: tErr } = await supa
                 .from('tournaments')
                 .insert([{
                     name,
-                    mode:       mode,
-                    game_type:  gameType,
+                    mode:        mode,
+                    game_type:   gameType,
                     start_score: score,
                     checkout,
                     legs,
-                    status:     'active',
+                    status:      'active',
                     is_official: isOfficial,
-                    created_by: user.username
+                    created_by:  user.username
                 }])
                 .select('id')
                 .single();
 
             if (tErr || !tourn) { showError('Fehler beim Erstellen des Turniers.'); return; }
 
-            const tournId = tourn.id;
+            const tournId  = tourn.id;
+            const shuffled = shuffle([...finalEntries]);
 
-            // Shuffle participants and insert
-            const shuffled = shuffle([...participants]);
             const partRows = shuffled.map((p, i) => ({
                 tournament_id: tournId,
                 player_id:     p.player_id || null,
                 name:          p.name,
                 seed:          i + 1,
-                
             }));
 
             const { data: partData, error: pErr } = await supa
@@ -485,19 +637,17 @@
 
             if (pErr || !partData) { showError('Fehler beim Speichern der Teilnehmer.'); return; }
 
-            // Sort by seed and get IDs
             const sortedIds = partData.sort((a, b) => a.seed - b.seed).map(p => p.id);
 
-            // Generate bracket
             if (mode === 'ko') {
                 await generateKOBracket(tournId, sortedIds);
             } else {
                 await generateSwissBracket(tournId, sortedIds);
             }
 
-            // Success — go to tournament view
             window.location.href = `tournament-view.html?id=${tournId}`;
         }
+
 
         init();
     </script>
