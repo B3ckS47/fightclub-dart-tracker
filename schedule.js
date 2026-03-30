@@ -17,6 +17,7 @@ let memberPlayerIds = new Set();
 let _upcomingRaw = [];
 let _pastRaw     = [];
 let _allVotesRaw = [];
+let _allFinesRaw = [];
 let _scheduleFilter = '';
 
 function setScheduleFilter(type) {
@@ -54,11 +55,12 @@ function getApptStatus(appt) {
 
 // ── LOAD ALL APPOINTMENTS ──
 async function loadAppointments() {
-    const [apptRes, votesRes, playersRes, usersRes] = await Promise.all([
+    const [apptRes, votesRes, playersRes, usersRes, finesRes] = await Promise.all([
         supa.from('appointments').select('*').order('date', { ascending: true }),
         supa.from('appointment_votes').select('*'),
         supa.from('players').select('id, name').order('name'),
-        supa.from('app_users').select('id, player_id, role')
+        supa.from('app_users').select('id, player_id, role'),
+        supa.from('fines_ledger').select('amount, note, type').eq('type', 'fine').like('note', 'appt:%')
     ]);
 
     if (apptRes.error) {
@@ -84,6 +86,7 @@ async function loadAppointments() {
     _upcomingRaw = upcomingSection;
     _pastRaw     = past;
     _allVotesRaw = allVotes;
+    _allFinesRaw = finesRes.data || [];
 
     renderAppointments(upcomingSection, allVotes, 'upcoming-list', false);
     renderAppointments(past,            allVotes, 'past-list',     true);
@@ -259,6 +262,23 @@ function renderAppointments(appointments, allVotes, containerId, isPast) {
 
         const activeBadge = isActive ? `<span class="appt-active-badge">● LÄUFT</span>` : '';
 
+        // Fines summary for past Training appointments
+        let finesSummary = '';
+        if (isPast && appt.type === 'Training') {
+            const apptFines    = _allFinesRaw.filter(f => f.note === `appt:${appt.id}`);
+            const totalFines   = apptFines.reduce((s, f) => s + parseFloat(f.amount), 0);
+            const attendeeCount = attending.length;
+            const avgFine      = attendeeCount > 0 ? (totalFines / attendeeCount) : 0;
+            if (totalFines > 0) {
+                finesSummary = `
+                <div class="appt-fines-summary">
+                    <span class="appt-fines-item">💸 Gesamt <strong>${totalFines.toFixed(2)} €</strong></span>
+                    <span class="appt-fines-divider">·</span>
+                    <span class="appt-fines-item">Ø pro Kopf <strong>${avgFine.toFixed(2)} €</strong></span>
+                </div>`;
+            }
+        }
+
         const guestVotedIds   = new Set(votes.filter(v => v.is_guest).map(v => v.user_id));
         const availableGuests = guests.filter(g => !guestVotedIds.has(g.id));
 
@@ -332,6 +352,8 @@ function renderAppointments(appointments, allVotes, containerId, isPast) {
         </button>
     </div>` : ''}` : isVoteLocked && !isPast ? `
     <div class="appt-vote-locked">🔒 Abstimmung geschlossen – Termin läuft</div>` : ''}
+
+    ${finesSummary}
 
     ${currentUser && currentUser.role === 'admin' ? `
     <div class="appt-admin-actions">
