@@ -79,3 +79,25 @@
         return new Promise(resolve => { _resolve = () => resolve(); });
     };
 })();
+
+// ── THEME MANAGER ──
+(function () {
+    const THEME_KEY = 'fc47_theme';
+
+    function applyTheme(theme) {
+        document.documentElement.setAttribute('data-theme', theme || 'dark');
+        // Update meta theme-color for PWA chrome
+        const meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) meta.content = theme === 'light' ? '#e4e7ef' : '#0d0d0f';
+    }
+
+    // Apply immediately on script load (before paint)
+    const saved = localStorage.getItem(THEME_KEY) || 'dark';
+    applyTheme(saved);
+
+    window.getTheme    = () => localStorage.getItem(THEME_KEY) || 'dark';
+    window.setTheme    = (theme) => {
+        localStorage.setItem(THEME_KEY, theme);
+        applyTheme(theme);
+    };
+})();

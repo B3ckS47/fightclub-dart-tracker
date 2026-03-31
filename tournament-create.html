@@ -14,6 +14,7 @@
     <script src="config.js"></script>
     <script src="ui-utils.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>document.documentElement.setAttribute("data-theme",localStorage.getItem("fc47_theme")||"dark");</script>
 </head>
 <body>
     <nav id="nav-tournament-create">
@@ -136,6 +137,7 @@
             <div class="team-mode-toggle">
                 <button id="team-mode-manual" class="team-mode-btn team-mode-btn--active" onclick="setTeamMode('manual')">✋ Manuell</button>
                 <button id="team-mode-random" class="team-mode-btn" onclick="setTeamMode('random')">🎲 Zufällig</button>
+                <button id="team-mode-clever" class="team-mode-btn" onclick="setTeamMode('clever')">🧠 Clever</button>
             </div>
 
             <!-- Manual builder -->
@@ -164,6 +166,13 @@
             <div id="team-random-section" style="display:none; margin-top:14px;">
                 <p class="tourn-hint" style="margin-bottom:14px;">Das System weist alle Spieler im Pool zufällig zu Teams zu.</p>
                 <button class="btn btn-accent btn-full" onclick="randomizeTeams()">🎲 TEAMS AUSLOSEN</button>
+            </div>
+
+            <!-- Clever section -->
+            <div id="team-clever-section" style="display:none; margin-top:14px;">
+                <p class="tourn-hint" style="margin-bottom:14px;">Das System paart den stärksten mit dem schwächsten Spieler, den zweitstärksten mit dem zweitschw&auml;chsten usw. – basierend auf dem Lifetime Average.</p>
+                <div id="team-clever-preview" style="margin-bottom:12px;"></div>
+                <button class="btn btn-accent btn-full" onclick="cleverizeTeams()">🧠 TEAMS AUSBALANCIEREN</button>
             </div>
 
             <!-- Team list -->
@@ -350,8 +359,10 @@
             teamMode = mode;
             document.getElementById('team-mode-manual').classList.toggle('team-mode-btn--active', mode === 'manual');
             document.getElementById('team-mode-random').classList.toggle('team-mode-btn--active', mode === 'random');
-            document.getElementById('team-manual-section').style.display = mode === 'manual' ? 'block' : 'none';
-            document.getElementById('team-random-section').style.display = mode === 'random' ? 'block' : 'none';
+            document.getElementById('team-mode-clever').classList.toggle('team-mode-btn--active', mode === 'clever');
+            document.getElementById('team-manual-section').style.display  = mode === 'manual'  ? 'block' : 'none';
+            document.getElementById('team-random-section').style.display  = mode === 'random'  ? 'block' : 'none';
+            document.getElementById('team-clever-section').style.display  = mode === 'clever'  ? 'block' : 'none';
         }
 
         function randomizeTeams() {
@@ -366,6 +377,66 @@
             }
             renderTeams();
             refreshTeamSelects();
+        }
+
+        async function cleverizeTeams() {
+            if (participants.length < 2) { showError('Mindestens 2 Spieler im Pool benötigt.'); return; }
+            if (participants.length % 2 !== 0) { showError('Für ausgeglichene Teams wird eine gerade Anzahl Spieler benötigt.'); return; }
+
+            // Fetch lifetime avg for each participant from game_history
+            const playerIds = participants.map(p => p.player_id).filter(Boolean);
+            const { data: history } = await supa
+                .from('game_history')
+                .select('player_id, avg_game')
+                .in('player_id', playerIds);
+
+            // Build avg map: player_id → lifetime avg (0 if no history)
+            const avgMap = {};
+            if (history) {
+                history.forEach(h => {
+                    if (!avgMap[h.player_id]) avgMap[h.player_id] = { sum: 0, count: 0 };
+                    avgMap[h.player_id].sum   += h.avg_game || 0;
+                    avgMap[h.player_id].count += 1;
+                });
+            }
+
+            // Sort participants by lifetime avg descending (best first)
+            const sorted = [...participants].sort((a, b) => {
+                const aAvg = avgMap[a.player_id] ? avgMap[a.player_id].sum / avgMap[a.player_id].count : 0;
+                const bAvg = avgMap[b.player_id] ? avgMap[b.player_id].sum / avgMap[b.player_id].count : 0;
+                return bAvg - aAvg;
+            });
+
+            // Min-max pairing: best with worst, 2nd best with 2nd worst, ...
+            teams = [];
+            const n = sorted.length;
+            for (let i = 0; i < n / 2; i++) {
+                const p1 = sorted[i];           // strong end
+                const p2 = sorted[n - 1 - i];   // weak end
+                const p1Avg = avgMap[p1.player_id] ? (avgMap[p1.player_id].sum / avgMap[p1.player_id].count).toFixed(1) : '–';
+                const p2Avg = avgMap[p2.player_id] ? (avgMap[p2.player_id].sum / avgMap[p2.player_id].count).toFixed(1) : '–';
+                teams.push({
+                    name: `${p1.name} & ${p2.name}`,
+                    p1, p2,
+                    _p1Avg: p1Avg,
+                    _p2Avg: p2Avg
+                });
+            }
+
+            renderTeams();
+            refreshTeamSelects();
+
+            // Show avg preview in clever section
+            const preview = document.getElementById('team-clever-preview');
+            if (preview) {
+                preview.innerHTML = teams.map(t => `
+                    <div class="clever-team-row">
+                        <span class="clever-team-name">${t.p1.name} <span class="clever-avg">${t._p1Avg}</span></span>
+                        <span class="clever-team-amp">&</span>
+                        <span class="clever-team-name">${t.p2.name} <span class="clever-avg">${t._p2Avg}</span></span>
+                    </div>
+                `).join('');
+            }
         }
 
         // ── DOUBLES: TEAM BUILDER ──

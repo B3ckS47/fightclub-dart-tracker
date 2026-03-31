@@ -16,6 +16,7 @@
     <script src="config.js"></script>
     <script src="ui-utils.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>document.documentElement.setAttribute("data-theme",localStorage.getItem("fc47_theme")||"dark");</script>
 </head>
 <body>
 
@@ -44,7 +45,24 @@
             <h2 class="card-title">EINSTELLUNGEN</h2>
             <div class="divider"></div>
 
-            <h3 class="section-label">Passwort ändern</h3>
+            <!-- THEME -->
+            <h3 class="section-label">Design</h3>
+            <div class="theme-toggle-wrap">
+                <button id="theme-btn-dark" class="theme-btn" onclick="selectTheme('dark')">
+                    <div class="theme-btn-preview theme-btn-preview--dark"></div>
+                    <span class="theme-btn-icon">🌑</span>
+                    DARK
+                </button>
+                <button id="theme-btn-light" class="theme-btn" onclick="selectTheme('light')">
+                    <div class="theme-btn-preview theme-btn-preview--light"></div>
+                    <span class="theme-btn-icon">☀️</span>
+                    LIGHT
+                </button>
+            </div>
+
+            <div class="divider" style="margin-top:20px;"></div>
+
+            <h3 class="section-label" style="margin-top:16px;">Passwort ändern</h3>
             <div class="settings-form">
                 <div class="settings-field">
                     <label class="settings-label">Aktuelles Passwort</label>
@@ -85,6 +103,16 @@
         const SUPABASE_KEY = window.SUPABASE_KEY;
         const supa = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         const SESSION_KEY = 'fc47_user';
+
+        // ── THEME TOGGLE ──
+        function selectTheme(theme) {
+            setTheme(theme);
+            document.getElementById('theme-btn-dark').classList.toggle('theme-btn--active',  theme === 'dark');
+            document.getElementById('theme-btn-light').classList.toggle('theme-btn--active', theme === 'light');
+        }
+
+        // Set initial active state
+        selectTheme(getTheme());
 
         // ── AUTH GUARD ──
         const raw = sessionStorage.getItem(SESSION_KEY);
