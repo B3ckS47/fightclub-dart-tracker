@@ -60,7 +60,7 @@ async function loadAppointments() {
         supa.from('appointment_votes').select('*'),
         supa.from('players').select('id, name').order('name'),
         supa.from('app_users').select('id, player_id, role'),
-        supa.from('fines_ledger').select('amount, note, type').eq('type', 'fine').like('note', 'appt:%')
+        supa.from('fines_ledger').select('amount, note, type').eq('type', 'fine').like('note', 'appt:%').not('reason', 'like', 'Bountyeinsatz%')
     ]);
 
     if (apptRes.error) {
@@ -127,7 +127,8 @@ async function applyAverageFine(appt, allVotes, allUsers) {
         .eq('type', 'fine')
         .gte('created_at', appt.start_time || appt.date)
         .lte('created_at', appt.end_time)
-        .neq('reason', `Durchschnitt ${appt.title}`);
+        .neq('reason', `Durchschnitt ${appt.title}`)
+        .not('reason', 'like', 'Bountyeinsatz%');
 
     if (!finesDuring || finesDuring.length === 0) return;
 
