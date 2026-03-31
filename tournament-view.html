@@ -73,6 +73,19 @@
             <div id="swiss-standings"></div>
         </div>
 
+        <!-- Bounty Hunter: aktuelle Partien -->
+        <div id="bounty-matches-section" style="display:none;">
+            <h2 class="section-title" id="bounty-matches-title">AKTUELLE RUNDE</h2>
+            <div id="bounty-matches-list"></div>
+        </div>
+
+        <!-- Bounty Hunter: Standings -->
+        <div id="bounty-standings-card" class="card" style="display:none; margin-top:24px;">
+            <h2 class="card-title">💰 BOUNTY HUNTER · STANDINGS</h2>
+            <div class="divider"></div>
+            <div id="bounty-standings"></div>
+        </div>
+
     </div>
 
     <script>
@@ -88,7 +101,7 @@
         let participants = [];
         let matches = [];
 
-        const MODE_LABEL  = { ko: 'K.O.', swiss: 'Swiss' };
+        const MODE_LABEL  = { ko: 'K.O.', swiss: 'Swiss', bounty: 'Bounty Hunter' };
         const TYPE_LABEL  = { singles: 'Einzel', doubles: 'Doppel' };
         const OUT_LABEL   = { single: 'Single Out', double: 'Double Out' };
         const LEGS_LABEL  = l => `First to ${l} ${l === 1 ? 'Leg' : 'Legs'}`;
@@ -115,7 +128,7 @@
 
             const { data: parts } = await supa
                 .from('tournament_participants')
-                .select('id, name, seed, wins, losses, bye_count')
+                .select('id, name, seed, wins, losses, bye_count, lives, bounty')
                 .eq('tournament_id', tournId)
                 .order('seed');
             participants = parts || [];
@@ -182,17 +195,25 @@
             document.getElementById('bracket-title').textContent =
                 t.mode === 'swiss' ? 'WINNER-POOL · 0 NIEDERLAGEN' : 'TURNIERPLAN';
 
-            renderBracketTree();
-
-            if (t.mode === 'swiss') {
-                renderAllSwissMatches();
-                renderLoserBracket();
-                renderSwissStandings();
-                document.getElementById('swiss-standings-card').style.display = 'block';
-                document.getElementById('current-round-section').style.display = 'none';
+            if (t.mode === 'bounty') {
+                // Hide bracket and swiss sections
+                document.querySelector('.card:has(#bracket-tree)').style.display = 'none';
+                document.getElementById('current-round-section').style.display  = 'none';
+                document.getElementById('all-matches-section').style.display    = 'none';
+                renderBounty();
             } else {
-                renderCurrentRound();
-                document.getElementById('all-matches-section').style.display = 'none';
+                document.querySelector('.card:has(#bracket-tree)').style.display = '';
+                renderBracketTree();
+                if (t.mode === 'swiss') {
+                    renderAllSwissMatches();
+                    renderLoserBracket();
+                    renderSwissStandings();
+                    document.getElementById('swiss-standings-card').style.display = 'block';
+                    document.getElementById('current-round-section').style.display = 'none';
+                } else {
+                    renderCurrentRound();
+                    document.getElementById('all-matches-section').style.display = 'none';
+                }
             }
         }
 
@@ -224,6 +245,69 @@
                 finished_at: new Date().toISOString()
             }).eq('id', tournId);
             window.location.href = 'tournaments.html';
+        }
+
+        function renderBounty() {
+            document.getElementById('bounty-standings-card').style.display = 'block';
+
+            // Sort: alive first (by bounty desc), then eliminated
+            const alive       = [...participants].filter(p => (p.lives || 0) > 0)
+                                                 .sort((a, b) => (b.bounty||0) - (a.bounty||0));
+            const eliminated  = [...participants].filter(p => (p.lives || 0) === 0)
+                                                 .sort((a, b) => (b.bounty||0) - (a.bounty||0));
+            const sorted      = [...alive, ...eliminated];
+            const maxLives    = tournament.initial_lives || Math.max(...participants.map(p => p.lives||0), 1);
+
+            document.getElementById('bounty-standings').innerHTML = sorted.map(p => {
+                const isAlive   = (p.lives || 0) > 0;
+                const hearts    = isAlive
+                    ? '💙'.repeat(p.lives) + '🖤'.repeat(Math.max(0, maxLives - p.lives))
+                    : '💀';
+                const bountyFmt = `${parseFloat(p.bounty||0).toFixed(2).replace('.',',')} €`;
+                return `
+                <div class="bounty-row ${!isAlive ? 'bounty-row--out' : ''}">
+                    <div class="bounty-row-left">
+                        <span class="bounty-name">${p.name}</span>
+                        <span class="bounty-hearts">${hearts}</span>
+                    </div>
+                    <span class="bounty-amount ${!isAlive ? '' : 'bounty-amount--alive'}">💰 ${bountyFmt}</span>
+                </div>`;
+            }).join('');
+
+            // Current round matches
+            const pending = matches.filter(m => m.status === 'pending' && m.p1_id && m.p2_id);
+            const section = document.getElementById('bounty-matches-section');
+            if (pending.length === 0) {
+                section.style.display = 'none';
+                return;
+            }
+            section.style.display = 'block';
+            const currentRound = Math.max(...matches.map(m => m.round));
+            document.getElementById('bounty-matches-title').textContent =
+                `RUNDE ${currentRound} · ${pending.length} ${pending.length === 1 ? 'MATCH' : 'MATCHES'}`;
+
+            document.getElementById('bounty-matches-list').innerHTML = pending.map(m => {
+                const url  = buildGameUrl(m);
+                const p1   = participants.find(p => p.id === m.p1_id);
+                const p2   = participants.find(p => p.id === m.p2_id);
+                const b1   = p1 ? `💰 ${parseFloat(p1.bounty||0).toFixed(2).replace('.',',')} €` : '';
+                const b2   = p2 ? `💰 ${parseFloat(p2.bounty||0).toFixed(2).replace('.',',')} €` : '';
+                return `
+                <a href="${url}" class="tourn-match-card">
+                    <div class="tourn-match-players">
+                        <div class="bounty-match-player">
+                            <span class="tourn-match-player">${partName(m.p1_id)}</span>
+                            <span class="bounty-match-tag">${b1}</span>
+                        </div>
+                        <span class="tourn-match-vs">VS</span>
+                        <div class="bounty-match-player bounty-match-player--right">
+                            <span class="tourn-match-player">${partName(m.p2_id)}</span>
+                            <span class="bounty-match-tag">${b2}</span>
+                        </div>
+                    </div>
+                    <div class="tourn-match-action">🎯 Spiel starten »</div>
+                </a>`;
+            }).join('');
         }
 
         function renderBracketTree() {

@@ -378,3 +378,18 @@ function renderAdvancedStats(fromDate) {
 <div class="adv-box"><div class="adv-label">🏆 Turniersiege</div><div class="adv-value" style="color:#ffd700;">${tournWins}</div></div>
 <div class="adv-box"><div class="adv-label">🥈 Turnierfinale</div><div class="adv-value" style="color:#c0c0c0;">${tournSecond}</div></div>`;
 }
+// ── DELETE MATCH (admin only) ──
+async function deleteMatch(matchId, playerId) {
+    const ok = await showConfirm('Spiel löschen', 'Diesen Eintrag aus der Match History wirklich löschen?');
+    if (!ok) return;
+    const { error } = await supa
+        .from('game_history')
+        .delete()
+        .eq('id', matchId);
+    if (error) {
+        showToast('Fehler: ' + error.message, 'error');
+        return;
+    }
+    showToast('Eintrag gelöscht.', 'success');
+    openPlayerProfile(playerId);
+}

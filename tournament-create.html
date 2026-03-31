@@ -45,6 +45,7 @@
                     <select id="mode-select" class="select-field" onchange="setMode(this.value)">
                         <option value="ko" selected>K.O. – Verlierer scheidet aus</option>
                         <option value="swiss">Swiss – Verlierer-Bracket</option>
+                        <option value="bounty">Bounty Hunter – Leben & Kopfgeld</option>
                     </select>
                 </div>
 
@@ -89,6 +90,27 @@
                         <option value="3">First to 3 Legs</option>
                         <option value="5">First to 5 Legs</option>
                     </select>
+                </div>
+
+                <!-- Bounty Hunter settings (hidden unless bounty mode) -->
+                <div id="bounty-settings" style="display:none;">
+                    <div class="divider" style="margin: 4px 0 12px;"></div>
+                    <div class="tourn-form-row">
+                        <div class="settings-field">
+                            <label class="settings-label">💙 LEBEN</label>
+                            <select id="bounty-lives" class="select-field">
+                                <option value="1">1 Leben</option>
+                                <option value="2">2 Leben</option>
+                                <option value="3" selected>3 Leben</option>
+                                <option value="4">4 Leben</option>
+                                <option value="5">5 Leben</option>
+                            </select>
+                        </div>
+                        <div class="settings-field">
+                            <label class="settings-label">💰 BOUNTY (€)</label>
+                            <input type="number" id="bounty-amount" class="input-field" value="10" min="1" step="1" style="font-family:var(--font-body);">
+                        </div>
+                    </div>
                 </div>
 
             </div>
@@ -210,7 +232,10 @@
             label.textContent = isOfficial ? '🏆 Offizielles Turnier' : '🎮 Spaßturnier';
         }
 
-        function setMode(m) { mode = m; }
+        function setMode(m) {
+            mode = m;
+            document.getElementById('bounty-settings').style.display = m === 'bounty' ? 'block' : 'none';
+        }
 
         function setType(t) {
             gameType = t;
@@ -222,6 +247,7 @@
             teams = [];
             renderTeams();
             renderParticipants();
+            if (isDoubles) refreshTeamSelects();
         }
 
         async function init() {
@@ -697,7 +723,7 @@
                 .select('id')
                 .single();
 
-            if (tErr || !tourn) { showError('Fehler beim Erstellen des Turniers.'); return; }
+            if (tErr || !tourn) { showError('Fehler beim Erstellen des Turniers: ' + (tErr?.message || 'Unbekannt')); return; }
 
             const tournId  = tourn.id;
             const shuffled = shuffle([...finalEntries]);
@@ -707,12 +733,16 @@
                 player_id:     p.player_id || null,
                 name:          p.name,
                 seed:          i + 1,
+                ...(mode === 'bounty' ? {
+                    lives:  parseInt(document.getElementById('bounty-lives').value),
+                    bounty: parseFloat(document.getElementById('bounty-amount').value)
+                } : {})
             }));
 
             const { data: partData, error: pErr } = await supa
                 .from('tournament_participants')
                 .insert(partRows)
-                .select('id, name, seed');
+                .select('id, name, seed, player_id');
 
             if (pErr || !partData) { showError('Fehler beim Speichern der Teilnehmer.'); return; }
 
@@ -720,11 +750,67 @@
 
             if (mode === 'ko') {
                 await generateKOBracket(tournId, sortedIds);
-            } else {
+            } else if (mode === 'swiss') {
                 await generateSwissBracket(tournId, sortedIds);
+            } else if (mode === 'bounty') {
+                await generateBountyRound(tournId, sortedIds, 1);
+                const bountyAmount = parseFloat(document.getElementById('bounty-amount').value);
+                // Store bounty settings on tournament record
+                await supa.from('tournaments').update({
+                    initial_lives:  parseInt(document.getElementById('bounty-lives').value),
+                    initial_bounty: bountyAmount
+                }).eq('id', tournId);
+                // Charge each participant the bounty as a fine "Bountyeinsatz"
+                const fineRows = partData
+                    .filter(p => p.player_id)
+                    .map(p => ({
+                        player_id:  p.player_id,
+                        amount:     bountyAmount,
+                        type:       'fine',
+                        reason:     'Bountyeinsatz: ' + name,
+                        note:       'tournament:' + name,
+                        created_by: 'system'
+                    }));
+                if (fineRows.length > 0) {
+                    await supa.from('fines_ledger').insert(fineRows);
+                }
             }
 
             window.location.href = `tournament-view.html?id=${tournId}`;
+        }
+
+        async function generateBountyRound(tournId, participantIds, round) {
+            const shuffled = shuffle([...participantIds]);
+            const pairs    = Math.floor(shuffled.length / 2);
+            const hasBye   = shuffled.length % 2 !== 0;
+            const rows     = [];
+
+            for (let i = 0; i < pairs; i++) {
+                rows.push({
+                    tournament_id: tournId,
+                    round,
+                    match_number:  i + 1,
+                    bracket:       'winners',
+                    p1_id:         shuffled[i * 2],
+                    p2_id:         shuffled[i * 2 + 1],
+                    status:        'pending'
+                });
+            }
+
+            if (hasBye) {
+                rows.push({
+                    tournament_id: tournId,
+                    round,
+                    match_number:  pairs + 1,
+                    bracket:       'winners',
+                    p1_id:         shuffled[shuffled.length - 1],
+                    p2_id:         null,
+                    winner_id:     shuffled[shuffled.length - 1],
+                    status:        'done'
+                });
+            }
+
+            await supa.from('tournament_matches').insert(rows);
         }
 
 

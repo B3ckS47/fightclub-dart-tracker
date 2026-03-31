@@ -55,7 +55,7 @@
         if (!raw) window.location.href = 'index.html';
         const user = JSON.parse(raw);
 
-        const MODE_LABEL  = { ko: 'K.O.', swiss: 'Swiss' };
+        const MODE_LABEL  = { ko: 'K.O.', swiss: 'Swiss', bounty: 'Bounty Hunter' };
         const TYPE_LABEL  = { singles: 'Einzel', doubles: 'Doppel' };
         const SCORE_LABEL = { 301: '301', 501: '501' };
         const LEGS_LABEL  = l => `First to ${l} ${l === 1 ? 'Leg' : 'Legs'}`;

@@ -71,7 +71,7 @@ async function saveTournamentResult(winnerName) {
 
         // Fetch tournament mode + this match details
         const [{ data: tourn }, { data: thisMatch }] = await Promise.all([
-            supa.from('tournaments').select('mode').eq('id', _tournId).single(),
+            supa.from('tournaments').select('mode, name').eq('id', _tournId).single(),
             supa.from('tournament_matches')
                 .select('bracket, round, match_number')
                 .eq('id', _tournMatchId).single()
@@ -80,8 +80,10 @@ async function saveTournamentResult(winnerName) {
 
         if (tourn.mode === 'ko') {
             await advanceKO(winnerId, thisMatch);
-        } else {
+        } else if (tourn.mode === 'swiss') {
             await advanceSwiss(winnerId, loserId, thisMatch);
+        } else if (tourn.mode === 'bounty') {
+            await advanceBounty(winnerId, loserId, tourn);
         }
     } catch(e) { console.error('[Tournament] Error:', e); }
 }
@@ -218,6 +220,166 @@ async function advanceSwiss(winnerId, loserId, thisMatch) {
     } catch(e) { console.error('[Swiss] Error:', e); }
 }
 
+
+// ── BOUNTY HUNTER MODE ──
+async function advanceBounty(winnerId, loserId, tourn) {
+    try {
+        const tournName = tourn.name || 'Bounty Turnier';
+
+        // 1. Fetch all participants including player_id
+        const { data: parts } = await supa
+            .from('tournament_participants')
+            .select('id, name, lives, bounty, player_id')
+            .eq('tournament_id', _tournId);
+        if (!parts) return;
+
+        const winner = parts.find(p => p.id === winnerId);
+        const loser  = parts.find(p => p.id === loserId);
+        if (!winner || !loser) return;
+
+        const loserNewLives  = (loser.lives || 1) - 1;
+        const loserBounty    = Math.round((parseFloat(loser.bounty) || 0) * 100) / 100;
+        const winnerBounty   = Math.round((parseFloat(winner.bounty) || 0) * 100) / 100;
+
+        // Check if this is the final match (only 2 players still alive before this result)
+        const aliveBeforeResult = parts.filter(p => (p.lives || 0) > 0);
+        const isFinal = aliveBeforeResult.length === 2;
+
+        if (loserNewLives > 0) {
+            // Loser still has lives — just deduct one, no bounty transfer
+            await supa.from('tournament_participants')
+                .update({ lives: loserNewLives })
+                .eq('id', loserId);
+
+        } else if (isFinal) {
+            // FINAL MATCH: winner takes everything — own bounty + loser bounty
+            const totalPayout = Math.round((winnerBounty + loserBounty) * 100) / 100;
+
+            await Promise.all([
+                supa.from('tournament_participants')
+                    .update({ lives: 0, bounty: 0 })
+                    .eq('id', loserId),
+                supa.from('tournament_participants')
+                    .update({ bounty: 0 })
+                    .eq('id', winnerId)
+            ]);
+
+            if (winner.player_id && totalPayout > 0) {
+                await supa.from('fines_ledger').insert([{
+                    player_id:  winner.player_id,
+                    amount:     -totalPayout,
+                    type:       'payment',
+                    reason:     'Bounty Hunter Sieg: ' + tournName,
+                    note:       'tournament:' + tournName,
+                    created_by: 'system'
+                }]);
+            }
+
+            await supa.from('tournaments').update({
+                status:      'finished',
+                winner_id:   winner.id,
+                finished_at: new Date().toISOString()
+            }).eq('id', _tournId);
+            return;
+
+        } else {
+            // REGULAR ELIMINATION: split loser bounty 50/50
+            const halfToWinner = Math.round(loserBounty / 2 * 100) / 100;
+            const halfToBounty = loserBounty - halfToWinner;
+            const winnerNewBounty = Math.round((winnerBounty + halfToBounty) * 100) / 100;
+
+            await Promise.all([
+                supa.from('tournament_participants')
+                    .update({ lives: 0, bounty: 0 })
+                    .eq('id', loserId),
+                supa.from('tournament_participants')
+                    .update({ bounty: winnerNewBounty })
+                    .eq('id', winnerId)
+            ]);
+
+            // Winner gets 50% as direct Fines payment
+            if (winner.player_id && halfToWinner > 0) {
+                await supa.from('fines_ledger').insert([{
+                    player_id:  winner.player_id,
+                    amount:     -halfToWinner,
+                    type:       'payment',
+                    reason:     'Bountygewinn: ' + loser.name,
+                    note:       'tournament:' + tournName,
+                    created_by: 'system'
+                }]);
+            }
+        }
+
+        // 2. Fetch updated participants — who is still alive?
+        const { data: updatedParts } = await supa
+            .from('tournament_participants')
+            .select('id, lives, bounty, player_id, name')
+            .eq('tournament_id', _tournId);
+        if (!updatedParts) return;
+
+        const alive = updatedParts.filter(p => (p.lives || 0) > 0);
+
+        // 3. If only 1 alive and we didn't catch isFinal above (edge case), finalize
+        if (alive.length === 1) {
+            await supa.from('tournaments').update({
+                status:      'finished',
+                winner_id:   alive[0].id,
+                finished_at: new Date().toISOString()
+            }).eq('id', _tournId);
+            return;
+        }
+
+        // 4. Check all current round matches done
+        const { data: allMatches } = await supa
+            .from('tournament_matches')
+            .select('id, round, status')
+            .eq('tournament_id', _tournId)
+            .order('round', { ascending: false });
+        if (!allMatches) return;
+
+        const currentRound  = allMatches[0].round;
+        const thisRoundDone = allMatches
+            .filter(m => m.round === currentRound)
+            .every(m => m.status === 'done' || m.id === _tournMatchId);
+
+        if (!thisRoundDone) return;
+
+        // 5. Generate next round with alive players — shuffled randomly
+        const nextRound = currentRound + 1;
+        const aliveIds  = alive.map(p => p.id);
+        const shuffled  = aliveIds.sort(() => Math.random() - 0.5);
+        const pairs     = Math.floor(shuffled.length / 2);
+        const hasBye    = shuffled.length % 2 !== 0;
+        const rows      = [];
+
+        for (let i = 0; i < pairs; i++) {
+            rows.push({
+                tournament_id: _tournId,
+                round:         nextRound,
+                match_number:  i + 1,
+                bracket:       'winners',
+                p1_id:         shuffled[i * 2],
+                p2_id:         shuffled[i * 2 + 1],
+                status:        'pending'
+            });
+        }
+        if (hasBye) {
+            rows.push({
+                tournament_id: _tournId,
+                round:         nextRound,
+                match_number:  pairs + 1,
+                bracket:       'winners',
+                p1_id:         shuffled[shuffled.length - 1],
+                p2_id:         null,
+                winner_id:     shuffled[shuffled.length - 1],
+                status:        'done'
+            });
+        }
+
+        if (rows.length > 0) await supa.from('tournament_matches').insert(rows);
+
+    } catch(e) { console.error('[Bounty] Error:', e); }
+}
 
 // ── AUTO-FINE CONSTANTS (IDs from fines_reasons table) ──
 const FINE_REASONS = {
