@@ -321,14 +321,20 @@ function processToastQueue() {
 // ── HELPERS ──
 function makePlayerStats() {
     return {
-        oneEighties: 0,
-        twentySixes: 0,
-        totalPoints: 0,
-        dartsThrown: 0,
-        pointsPre170: 0,
-        dartsPre170: 0,
-        dartsToClose: 0,
-        isBelow170: false
+        oneEighties:   0,
+        twentySixes:   0,
+        totalPoints:   0,
+        dartsThrown:   0,
+        pointsPre170:  0,
+        dartsPre170:   0,
+        dartsToClose:  0,
+        isBelow170:    false,
+        highScore:     0,        // highest single visit
+        highFinish:    0,        // highest finishing visit
+        dartsPerLeg:   [],       // darts thrown per leg won (cumulative, for undo)
+        avgPerLeg:     [],       // avg per individual leg won [{ avg, darts }]
+        legPoints:     0,        // points scored in current leg
+        legDarts:      0         // darts thrown in current leg
     };
 }
 
@@ -451,6 +457,9 @@ async function submitTurn() {
 
     pStats.dartsThrown += 3;
     pStats.totalPoints += pts;
+    pStats.legDarts    += 3;
+    pStats.legPoints   += pts;
+    if (pts > pStats.highScore) pStats.highScore = pts;
     if (pts === 180) pStats.oneEighties++;
     if (pts === 26)  pStats.twentySixes++;
     if (!pStats.isBelow170) {
@@ -462,6 +471,31 @@ async function submitTurn() {
     }
 
     if (newScore === 0) {
+        // Track finish score and per-leg avg for the WINNER
+        if (pts > pStats.highFinish) pStats.highFinish = pts;
+        const legAvg = pStats.legDarts > 0
+            ? parseFloat((pStats.legPoints / (pStats.legDarts / 3)).toFixed(2))
+            : 0;
+        pStats.avgPerLeg.push({ avg: legAvg, darts: pStats.legDarts, won: true });
+        pStats.legPoints = 0;
+        pStats.legDarts  = 0;
+        pStats.dartsPerLeg.push(pStats.dartsThrown);
+
+        // Also snapshot the LOSER's avg for this leg
+        const loserTeamIdx  = teamIdx === 0 ? 1 : 0;
+        const loserStatsIdx = gameState.gameType === 'singles'
+            ? loserTeamIdx
+            : loserTeamIdx === 0
+                ? gameState.teamPlayerIdx[0]
+                : 2 + gameState.teamPlayerIdx[1];
+        const lStats = gameState.stats[loserStatsIdx];
+        const loserLegAvg = lStats.legDarts > 0
+            ? parseFloat((lStats.legPoints / (lStats.legDarts / 3)).toFixed(2))
+            : 0;
+        lStats.avgPerLeg.push({ avg: loserLegAvg, darts: lStats.legDarts, won: false });
+        lStats.legPoints = 0;
+        lStats.legDarts  = 0;
+
         gameState.legScore[teamIdx]++;
         gameState.scores[teamIdx] = 0;
         if (typeof refreshDisplay === "function") refreshDisplay();
@@ -572,6 +606,119 @@ function showMatchModal(winnerName) {
     matchWinnerName = winnerName;
     matchLoserName  = gameState.pNames[0] === winnerName ? gameState.pNames[1] : gameState.pNames[0];
     document.getElementById('match-modal-subtitle').textContent = winnerName + ' gewinnt das Match!';
+
+    // ── Build stats table ──
+    const isDoubles = gameState.gameType === 'doubles';
+
+    // Aggregate stats per team (doubles: merge both players)
+    function teamStats(teamIdx) {
+        if (!isDoubles) return gameState.stats[teamIdx];
+        const base = teamIdx === 0 ? 0 : 2;
+        const s0 = gameState.stats[base];
+        const s1 = gameState.stats[base + 1];
+        // Interleave avgPerLeg by leg number (alternating players per leg in doubles)
+        const maxLegs = Math.max(s0.avgPerLeg.length, s1.avgPerLeg.length);
+        const merged = [];
+        for (let i = 0; i < maxLegs; i++) {
+            const a = s0.avgPerLeg[i], b = s1.avgPerLeg[i];
+            if (a && b) merged.push({ avg: parseFloat(((a.avg + b.avg) / 2).toFixed(2)), darts: a.darts + b.darts });
+            else if (a) merged.push(a);
+            else if (b) merged.push(b);
+        }
+        return {
+            totalPoints: s0.totalPoints  + s1.totalPoints,
+            dartsThrown: s0.dartsThrown  + s1.dartsThrown,
+            highScore:   Math.max(s0.highScore,  s1.highScore),
+            highFinish:  Math.max(s0.highFinish, s1.highFinish),
+            avgPerLeg:   merged
+        };
+    }
+
+    const s0 = teamStats(0);
+    const s1 = teamStats(1);
+
+    function totalAvg(s) {
+        return s.dartsThrown > 0 ? (s.totalPoints / (s.dartsThrown / 3)) : 0;
+    }
+
+    // Fixed rows
+    const fixedRows = [
+        {
+            label: 'Avg gesamt',
+            v0: totalAvg(s0).toFixed(2),
+            v1: totalAvg(s1).toFixed(2),
+            higher: true
+        },
+        {
+            label: 'Höchster Wurf',
+            v0: s0.highScore || '–',
+            v1: s1.highScore || '–',
+            higher: true
+        },
+        {
+            label: 'Höchstes Finish',
+            v0: s0.highFinish || '–',
+            v1: s1.highFinish || '–',
+            higher: true
+        }
+    ];
+
+    // Per-leg avg rows — both teams now have entries for every leg
+    const maxLegs = Math.max(s0.avgPerLeg.length, s1.avgPerLeg.length);
+    const legRows = [];
+    for (let i = 0; i < maxLegs; i++) {
+        const l0 = s0.avgPerLeg[i];
+        const l1 = s1.avgPerLeg[i];
+        const v0 = l0 ? l0.avg.toFixed(2) : '–';
+        const v1 = l1 ? l1.avg.toFixed(2) : '–';
+        const n0 = parseFloat(v0), n1 = parseFloat(v1);
+        const valid  = !isNaN(n0) && !isNaN(n1);
+        // Green = higher avg (regardless of who won the leg)
+        const p0best = valid && n0 > n1;
+        const p1best = valid && n1 > n0;
+        // 🎯 icon marks who won the leg
+        const v0str = (l0?.won ? '🎯 ' : '') + v0;
+        const v1str = (l1?.won ? '🎯 ' : '') + v1;
+        legRows.push(`<tr>
+            <td class="mstat-val ${p0best ? 'mstat-val--best' : ''}">${v0str}</td>
+            <td class="mstat-label mstat-label--leg">Leg ${i + 1}</td>
+            <td class="mstat-val ${p1best ? 'mstat-val--best' : ''}">${v1str}</td>
+        </tr>`);
+    }
+
+    function renderRow(row) {
+        const n0 = parseFloat(row.v0);
+        const n1 = parseFloat(row.v1);
+        const valid  = !isNaN(n0) && !isNaN(n1) && row.v0 !== '–' && row.v1 !== '–';
+        const p0wins = valid && (row.higher ? n0 > n1 : n0 < n1);
+        const p1wins = valid && (row.higher ? n1 > n0 : n1 < n0);
+        const labelClass = row.isLeg ? 'mstat-label mstat-label--leg' : 'mstat-label';
+        return `<tr>
+            <td class="mstat-val ${p0wins ? 'mstat-val--best' : ''}">${row.v0}</td>
+            <td class="${labelClass}">${row.label}</td>
+            <td class="mstat-val ${p1wins ? 'mstat-val--best' : ''}">${row.v1}</td>
+        </tr>`;
+    }
+
+    const dividerRow = maxLegs > 0 ? `<tr class="mstat-divider-row"><td colspan="3"><span>AVG PRO LEG</span></td></tr>` : '';
+
+    const tableRows = fixedRows.map(renderRow).join('') + dividerRow + legRows.join('');
+
+    const p0short = gameState.pNames[0].length > 12 ? gameState.pNames[0].slice(0,11)+'…' : gameState.pNames[0];
+    const p1short = gameState.pNames[1].length > 12 ? gameState.pNames[1].slice(0,11)+'…' : gameState.pNames[1];
+
+    document.getElementById('match-modal-stats').innerHTML = `
+        <table class="mstat-table">
+            <thead>
+                <tr>
+                    <th class="mstat-name ${gameState.pNames[0] === winnerName ? 'mstat-name--winner' : ''}">${p0short} ${gameState.pNames[0] === winnerName ? '🏆' : ''}</th>
+                    <th></th>
+                    <th class="mstat-name ${gameState.pNames[1] === winnerName ? 'mstat-name--winner' : ''}">${p1short} ${gameState.pNames[1] === winnerName ? '🏆' : ''}</th>
+                </tr>
+            </thead>
+            <tbody>${tableRows}</tbody>
+        </table>`;
+
     document.getElementById('match-modal-overlay').style.display = 'flex';
 }
 
@@ -586,6 +733,12 @@ async function dismissMatchModal() {
         await saveTournamentResult(matchWinnerName);
     }
     exitGame(true);
+}
+
+function undoFromMatchModal() {
+    if (gameState.logs.length === 0) return;
+    document.getElementById('match-modal-overlay').style.display = 'none';
+    undoMove();
 }
 
 function clearInput() {
@@ -646,6 +799,10 @@ async function selectAusbullenWinner(teamIdx) {
     }
 
     // Award the leg to the chosen team
+    const ausbullenStatsIdx = gameState.gameType === 'singles'
+        ? teamIdx
+        : teamIdx === 0 ? gameState.teamPlayerIdx[0] : 2 + gameState.teamPlayerIdx[1];
+    gameState.stats[ausbullenStatsIdx].dartsPerLeg.push(gameState.stats[ausbullenStatsIdx].dartsThrown);
     gameState.legScore[teamIdx]++;
 
     if (gameState.legScore[teamIdx] >= gameState.targetLegs) {

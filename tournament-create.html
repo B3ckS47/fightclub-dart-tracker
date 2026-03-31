@@ -619,19 +619,27 @@
             }
 
             if (hasBye) {
+                const byeParticipantId = shuffled[n - 1];
                 matchRows.push({
                     tournament_id: tournId,
                     round:         1,
                     match_number:  pairs + 1,
                     bracket:       'winners',
-                    p1_id:         shuffled[n - 1],
+                    p1_id:         byeParticipantId,
                     p2_id:         null,
-                    winner_id:     shuffled[n - 1],
+                    winner_id:     byeParticipantId,
                     status:        'done'
                 });
-            }
 
-            await supa.from('tournament_matches').insert(matchRows);
+                await supa.from('tournament_matches').insert(matchRows);
+
+                // Immediately credit the bye recipient: wins +1, bye_count +1
+                await supa.from('tournament_participants')
+                    .update({ wins: 1, bye_count: 1 })
+                    .eq('id', byeParticipantId);
+            } else {
+                await supa.from('tournament_matches').insert(matchRows);
+            }
         }
 
         // ── CREATE ──

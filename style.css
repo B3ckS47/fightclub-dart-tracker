@@ -1666,9 +1666,10 @@ body {
     background: rgba(0, 0, 0, 0.85);
     backdrop-filter: blur(6px);
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: center;
     padding: 24px;
+    overflow-y: auto;
 }
 
 .ausbullen-modal {
@@ -3940,4 +3941,79 @@ body {
 }
 [data-theme="light"] .checkout-path {
     color: #1a2340;
+}
+
+/* ── Match modal stats table ── */
+.match-modal-stats {
+    width: 100%;
+    margin-top: 16px;
+}
+.mstat-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--font-body);
+    font-size: 0.82rem;
+}
+.mstat-table thead th {
+    padding: 0 4px 8px;
+    font-family: var(--font-condensed);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    text-transform: uppercase;
+}
+.mstat-name--winner {
+    color: var(--accent) !important;
+}
+.mstat-table tbody tr {
+    border-top: 1px solid var(--border);
+}
+.mstat-table tbody tr:last-child {
+    border-bottom: 1px solid var(--border);
+}
+.mstat-val {
+    padding: 7px 4px;
+    text-align: center;
+    font-family: var(--font-condensed);
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    width: 28%;
+}
+.mstat-val--best {
+    color: var(--green);
+}
+.mstat-label {
+    padding: 7px 6px;
+    text-align: center;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+/* ── Match stats: leg divider & leg label ── */
+.mstat-divider-row td {
+    padding: 8px 0 4px;
+    text-align: center;
+}
+.mstat-divider-row span {
+    font-family: var(--font-condensed);
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    text-transform: uppercase;
+}
+.mstat-label--leg {
+    color: var(--text-secondary);
+    font-weight: 600;
+}
+
+/* ── Light mode: active player score visibility ── */
+[data-theme="light"] #active-game-view .score-card--active .score-display {
+    color: var(--accent);
+}
+[data-theme="light"] .spec-card--active .spec-score {
+    color: var(--accent);
 }

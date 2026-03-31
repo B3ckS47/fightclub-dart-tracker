@@ -276,7 +276,9 @@
             <div class="game-notify-icon">🏆</div>
             <div class="game-notify-title">MATCH OVER</div>
             <p class="game-notify-subtitle" id="match-modal-subtitle"></p>
-            <button class="btn btn-primary btn-full" onclick="dismissMatchModal()">ABSCHLUSS</button>
+            <div id="match-modal-stats" class="match-modal-stats"></div>
+            <button class="btn btn-primary btn-full" style="margin-top:16px;" onclick="dismissMatchModal()">ABSCHLUSS</button>
+            <button class="btn btn-full" style="margin-top:8px; background:var(--bg-element); color:var(--red); border:1px solid var(--red);" onclick="undoFromMatchModal()">↩ UNDO LETZTEN WURF</button>
         </div>
     </div>
 
