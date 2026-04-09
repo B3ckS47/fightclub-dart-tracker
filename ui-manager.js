@@ -27,11 +27,14 @@ function updateStatsUI() {
         return;
     }
 
-    box.innerHTML = players.map((p, index) => {
-        const rank = index + 1;
-        const rankBg = rank === 1 ? '#ffd700' : rank === 2 ? '#c0c0c0' : rank === 3 ? '#cd7f32' : '#3a3a48';
+    const members = players.filter(p => p.isMember);
+    const guests  = players.filter(p => !p.isMember);
 
-        return `
+    function renderRows(list, offset = 0) {
+        return list.map((p, index) => {
+            const rank   = offset + index + 1;
+            const rankBg = rank === 1 ? '#ffd700' : rank === 2 ? '#c0c0c0' : rank === 3 ? '#cd7f32' : '#3a3a48';
+            return `
 <div class="lb-row" onclick="openPlayerProfile('${p.id}')">
     <div class="lb-rank" style="background:${rankBg};">${rank}</div>
     <div class="lb-info">
@@ -43,7 +46,22 @@ function updateStatsUI() {
         <div class="lb-winrate-lbl">Win Rate</div>
     </div>
 </div>`;
-    }).join('');
+        }).join('');
+    }
+
+    let html = '';
+
+    if (members.length > 0) {
+        html += `<h3 class="section-label" style="margin:0 0 8px;">Mitglieder</h3>`;
+        html += renderRows(members);
+    }
+
+    if (guests.length > 0) {
+        html += `<h3 class="section-label" style="margin:${members.length > 0 ? '20px' : '0'} 0 8px;">Gäste</h3>`;
+        html += renderRows(guests);
+    }
+
+    box.innerHTML = html;
 }
 
 // Creates the Profile-View with all Statistics

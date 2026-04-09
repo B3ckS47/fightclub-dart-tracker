@@ -141,8 +141,8 @@
                 .order('match_number');
             matches = mts || [];
 
-            // Auto-close if no open matches remain
-            if (tournament.status === 'active') {
+            // Auto-close if no open matches remain (only if not already closed)
+            if (tournament.status === 'active' && !tournament.finished_at) {
                 const open = matches.filter(m => m.status === 'pending' && m.p1_id && m.p2_id);
                 if (open.length === 0) {
                     const done = matches.filter(m => m.status === 'done');

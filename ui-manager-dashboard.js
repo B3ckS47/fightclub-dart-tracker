@@ -10,6 +10,15 @@ function showPage(id) {
 }
 
 function updateDropdowns() {} // Not needed on dashboard
+let _activePlayerTab = 'members';
+
+function setPlayerTab(tab) {
+    _activePlayerTab = tab;
+    document.getElementById('tab-members').classList.toggle('player-tab--active', tab === 'members');
+    document.getElementById('tab-guests').classList.toggle('player-tab--active',  tab === 'guests');
+    updateStatsUI();
+}
+
 function updateStatsUI() {
     const box = document.getElementById('player-list-box');
     if (!box) return;
@@ -19,8 +28,23 @@ function updateStatsUI() {
         return;
     }
 
-    box.innerHTML = players.map((p, index) => {
-        const rank = index + 1;
+    const members = players.filter(p => p.isMember);
+    const guests  = players.filter(p => !p.isMember);
+    const list    = _activePlayerTab === 'guests' ? guests : members;
+
+    // Update tab counters
+    const tabM = document.getElementById('tab-members');
+    const tabG = document.getElementById('tab-guests');
+    if (tabM) tabM.textContent = `Mitglieder (${members.length})`;
+    if (tabG) tabG.textContent = `Gäste (${guests.length})`;
+
+    if (list.length === 0) {
+        box.innerHTML = `<p class="muted-text">Keine ${_activePlayerTab === 'guests' ? 'Gäste' : 'Mitglieder'} vorhanden.</p>`;
+        return;
+    }
+
+    box.innerHTML = list.map((p, index) => {
+        const rank   = index + 1;
         const rankBg = rank === 1 ? '#ffd700' : rank === 2 ? '#c0c0c0' : rank === 3 ? '#cd7f32' : '#3a3a48';
         return `
 <div class="lb-row" onclick="openPlayerProfile('${p.id}')">
@@ -147,17 +171,21 @@ async function openPlayerProfile(playerId) {
         }
     }
 
-    // Fetch finished tournaments where this participant placed 1st or 2nd
+    // Fetch finished tournaments where this player placed 1st or 2nd
+    // winner_id/runner_up_id may reference tournament_participants.id or players.id
     let tournWins   = 0;
     let tournSecond = 0;
-    if (partIds.length > 0) {
+    {
+        const orFilter = partIds.length > 0
+            ? `winner_id.in.(${partIds.join(',')}),runner_up_id.in.(${partIds.join(',')}),winner_id.eq.${playerId},runner_up_id.eq.${playerId}`
+            : `winner_id.eq.${playerId},runner_up_id.eq.${playerId}`;
         const { data: finishedT } = await supa
             .from('tournaments')
             .select('winner_id, runner_up_id')
             .eq('status', 'finished')
-            .or(`winner_id.in.(${partIds.join(',')}),runner_up_id.in.(${partIds.join(',')})`);
-        tournWins   = (finishedT || []).filter(t => partIds.includes(t.winner_id)).length;
-        tournSecond = (finishedT || []).filter(t => partIds.includes(t.runner_up_id)).length;
+            .or(orFilter);
+        tournWins   = (finishedT || []).filter(t => partIds.includes(t.winner_id)    || t.winner_id    === playerId).length;
+        tournSecond = (finishedT || []).filter(t => partIds.includes(t.runner_up_id) || t.runner_up_id === playerId).length;
     }
 
     // Store for re-use by filter

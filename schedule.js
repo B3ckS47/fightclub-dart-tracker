@@ -120,7 +120,21 @@ async function handleStatusTransitions(all, allVotes, allUsers) {
 async function applyAverageFine(appt, allVotes, allUsers) {
     if (!appt.end_time) return;
 
-    // Fines created during the appointment window
+    // All members and admins with a linked player
+    const eligibleUsers = allUsers.filter(u =>
+        (u.role === 'member' || u.role === 'admin') && u.player_id
+    );
+    if (eligibleUsers.length === 0) return;
+
+    // Who was present? (members/admins only, no guests)
+    const apptVotes   = allVotes.filter(v => v.appointment_id === appt.id);
+    const attendeeIds = new Set(apptVotes.filter(v => v.vote === 'yes').map(v => v.user_id));
+    const presentUsers  = eligibleUsers.filter(u =>  attendeeIds.has(u.id));
+    const absentUsers   = eligibleUsers.filter(u => !attendeeIds.has(u.id));
+
+    if (presentUsers.length === 0 || absentUsers.length === 0) return;
+
+    // All fines created during the appointment window (excl. avg-fines and bounty)
     const { data: finesDuring } = await supa
         .from('fines_ledger')
         .select('amount')
@@ -134,22 +148,13 @@ async function applyAverageFine(appt, allVotes, allUsers) {
 
     const totalFines = finesDuring.reduce((s, r) => s + parseFloat(r.amount), 0);
 
-    const apptVotes     = allVotes.filter(v => v.appointment_id === appt.id);
-    const attendeeIds   = new Set(apptVotes.filter(v => v.vote === 'yes').map(v => v.user_id));
-    const attendeeCount = attendeeIds.size;
-    if (attendeeCount === 0) return;
-
-    const avgFine = Math.round((totalFines / attendeeCount) * 100) / 100;
+    // Per-head fine = total ÷ number of present members/admins
+    const avgFine = Math.round((totalFines / presentUsers.length) * 100) / 100;
     if (avgFine <= 0) return;
-
-    const eligibleUsers = allUsers.filter(u =>
-        (u.role === 'member' || u.role === 'admin') && u.player_id
-    );
-    const absentUsers = eligibleUsers.filter(u => !attendeeIds.has(u.id));
-    if (absentUsers.length === 0) return;
 
     const reasonName = `Durchschnitt ${appt.title}`;
 
+    // Duplicate protection
     const { data: existing } = await supa
         .from('fines_ledger')
         .select('player_id')
@@ -268,8 +273,9 @@ function renderAppointments(appointments, allVotes, containerId, isPast) {
         if (isPast && appt.type === 'Training') {
             const apptFines    = _allFinesRaw.filter(f => f.note === `appt:${appt.id}`);
             const totalFines   = apptFines.reduce((s, f) => s + parseFloat(f.amount), 0);
-            const attendeeCount = attending.length;
-            const avgFine      = attendeeCount > 0 ? (totalFines / attendeeCount) : 0;
+            // Only count members/admins (non-guests) — consistent with who gets the avg fine
+            const memberAttendeeCount = attending.filter(v => !v.is_guest).length;
+            const avgFine      = memberAttendeeCount > 0 ? (totalFines / memberAttendeeCount) : 0;
             if (totalFines > 0) {
                 finesSummary = `
                 <div class="appt-fines-summary">

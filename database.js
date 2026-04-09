@@ -51,10 +51,11 @@ function applyFilter(fromDate) {
 
 // --- DB ACTIONS ---
 async function fetchPlayers() {
-    // 1. Fetch Players and History simultaneously
-    const [pRes, hRes] = await Promise.all([
+    // 1. Fetch Players, History and app_users simultaneously
+    const [pRes, hRes, uRes] = await Promise.all([
         supa.from('players').select('*').order('name'),
-        supa.from('game_history').select('*')
+        supa.from('game_history').select('*'),
+        supa.from('app_users').select('player_id').not('player_id', 'is', null)
     ]);
 
     if (pRes.error || hRes.error) {
@@ -62,12 +63,14 @@ async function fetchPlayers() {
         return;
     }
 
-    const rawPlayers = pRes.data || [];
-    rawHistory       = hRes.data || [];
+    const rawPlayers  = pRes.data || [];
+    rawHistory        = hRes.data || [];
+    const linkedIds   = new Set((uRes.data || []).map(u => u.player_id));
 
-    // 2. Attach stats to each player object
+    // 2. Attach stats and member/guest flag to each player
     players = rawPlayers.map(player => ({
         ...player,
+        isMember: linkedIds.has(player.id),
         stats: computeStats(rawHistory.filter(h => h.player_id === player.id))
     }));
 

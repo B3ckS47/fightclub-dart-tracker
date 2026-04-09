@@ -23,7 +23,7 @@
     <!-- ── NAV ── -->
     <nav id="nav-dashboard">
         <div class="nav-inner nav-inner--default">
-            <span class="nav-brand">FLIGHTCLUB</span>
+            <a href="index.html" class="nav-brand" style="text-decoration:none;color:inherit;">FLIGHTCLUB</a>
             <div class="nav-links">
                 <a href="index.html" class="nav-btn">« Menü</a>
             </div>
@@ -45,12 +45,14 @@
                 <div class="divider"></div>
                 <div>
                     <div class="filter-bar">
-                        <button class="filter-btn filter-btn--active" onclick="setFilter('all',    this)">Gesamt</button>
-                        <button class="filter-btn"                    onclick="setFilter('season', this)">Saison</button>
-                        <button class="filter-btn"                    onclick="setFilter('3m',     this)">3 Monate</button>
-                        <button class="filter-btn"                    onclick="setFilter('30d',    this)">30 Tage</button>
+                        <button class="filter-btn filter-btn--active" onclick="setFilter('all',  this)">Gesamt</button>
+                        <button class="filter-btn"                    onclick="setFilter('3m',   this)">3 Monate</button>
+                        <button class="filter-btn"                    onclick="setFilter('30d',  this)">30 Tage</button>
                     </div>
-                    <h3 class="section-label" style="margin-top:14px;">FlightClub Mitglieder</h3>
+                    <div class="player-tab-switch">
+                        <button id="tab-members" class="player-tab player-tab--active" onclick="setPlayerTab('members')">Mitglieder</button>
+                        <button id="tab-guests"  class="player-tab"                   onclick="setPlayerTab('guests')">Gäste</button>
+                    </div>
                     <div id="player-list-box" class="player-list">
                         <p class="muted-text">Lade Mitglieder...</p>
                     </div>

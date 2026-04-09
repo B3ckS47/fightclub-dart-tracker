@@ -4065,3 +4065,29 @@ body {
     font-family: var(--font-condensed);
     font-weight: 700;
 }
+
+/* ── Player tab switch (Mitglieder / Gäste) ── */
+.player-tab-switch {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    margin: 12px 0 4px;
+}
+.player-tab {
+    padding: 8px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--bg-element);
+    color: var(--text-muted);
+    font-family: var(--font-condensed);
+    font-size: 0.88rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.player-tab--active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-dim);
+}

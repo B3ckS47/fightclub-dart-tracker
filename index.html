@@ -14,6 +14,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="apple-touch-icon" href="apple-touch-icon.png">
     <script src="config.js"></script>
+    <script src="ui-utils.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script>document.documentElement.setAttribute("data-theme",localStorage.getItem("fc47_theme")||"dark");</script>
 </head>
@@ -162,8 +163,8 @@
                 return;
             }
 
-            // Store user in sessionStorage
-            sessionStorage.setItem(SESSION_KEY, JSON.stringify({
+            // Store user
+            fcSetUser(JSON.stringify({
                 id:        data.id,
                 username:  data.username,
                 role:      data.role,
@@ -391,13 +392,13 @@
         }
 
         function logOut() {
-            sessionStorage.removeItem(SESSION_KEY);
+            fcRemoveUser();
             window.location.reload();
         }
 
         // ── AUTH HELPER (used by other pages) ──
         function getCurrentUser() {
-            const raw = sessionStorage.getItem(SESSION_KEY);
+            const raw = fcGetUser();
             return raw ? JSON.parse(raw) : null;
         }
 

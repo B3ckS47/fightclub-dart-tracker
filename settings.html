@@ -62,6 +62,18 @@
 
             <div class="divider" style="margin-top:20px;"></div>
 
+            <h3 class="section-label" style="margin-top:16px;">Angemeldet bleiben</h3>
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:8px;">
+                <span id="stay-status-text" style="font-size:0.9rem; color:var(--text-secondary);">Lade...</span>
+                <div class="game-mode-toggle" id="stay-toggle" onclick="toggleStayLoggedIn()" style="justify-content:flex-start; padding:8px 0; cursor:pointer;">
+                    <div class="game-mode-track" id="stay-track"></div>
+                    <span class="game-mode-label" id="stay-label">Deaktiviert</span>
+                </div>
+            </div>
+            <p class="muted-text" style="font-size:0.78rem; margin-top:6px;">Wenn aktiviert, bleibst du auch nach dem Schließen der App eingeloggt.</p>
+
+            <div class="divider" style="margin-top:20px;"></div>
+
             <h3 class="section-label" style="margin-top:16px;">Passwort ändern</h3>
             <div class="settings-form">
                 <div class="settings-field">
@@ -104,6 +116,24 @@
         const supa = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         const SESSION_KEY = 'fc47_user';
 
+        // ── STAY LOGGED IN TOGGLE ──
+        function updateStayUI() {
+            const active = getStayLoggedIn();
+            const track  = document.getElementById('stay-track');
+            const label  = document.getElementById('stay-label');
+            const status = document.getElementById('stay-status-text');
+            track.classList.toggle('game-mode-track--on', active);
+            label.textContent  = active ? 'Aktiviert' : 'Deaktiviert';
+            status.textContent = active ? '🔓 Du bleibst nach dem Schließen eingeloggt.' : '🔒 Sitzung endet beim Schließen der App.';
+        }
+
+        function toggleStayLoggedIn() {
+            setStayLoggedIn(!getStayLoggedIn());
+            updateStayUI();
+        }
+
+        updateStayUI();
+
         // ── THEME TOGGLE ──
         function selectTheme(theme) {
             setTheme(theme);
@@ -115,7 +145,7 @@
         selectTheme(getTheme());
 
         // ── AUTH GUARD ──
-        const raw = sessionStorage.getItem(SESSION_KEY);
+        const raw = fcGetUser();
         const currentUser = raw ? JSON.parse(raw) : null;
         if (!currentUser) window.location.href = 'index.html';
 

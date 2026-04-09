@@ -156,14 +156,16 @@
                     const tIds = nowFinished.map(t => t.id);
                     const { data: parts } = await supa
                         .from('tournament_participants')
-                        .select('id, tournament_id, name, is_bye')
+                        .select('id, tournament_id, name, player_id, is_bye')
                         .in('tournament_id', tIds);
 
                     finEl.innerHTML = nowFinished.map(t => {
                         const tParts      = (parts || []).filter(p => p.tournament_id === t.id);
                         const playerCount = tParts.filter(p => !p.is_bye).length;
-                        const winner      = tParts.find(p => p.id === t.winner_id);
-                        const runner      = tParts.find(p => p.id === t.runner_up_id);
+                        const winner      = tParts.find(p => p.id === t.winner_id)
+                                         || tParts.find(p => p.player_id === t.winner_id);
+                        const runner      = tParts.find(p => p.id === t.runner_up_id)
+                                         || tParts.find(p => p.player_id === t.runner_up_id);
                         const dateStr     = t.finished_at
                             ? new Date(t.finished_at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
                             : '';

@@ -104,8 +104,16 @@ async function advanceKO(winnerId, thisMatch) {
 
 async function advanceSwiss(winnerId, loserId, thisMatch) {
     try {
-        // Final match — tournament is over, let auto-close handle it
-        if (thisMatch.bracket === 'final') return;
+        // Final match — close tournament directly
+        if (thisMatch.bracket === 'final') {
+            await supa.from('tournaments').update({
+                status:       'finished',
+                winner_id:    winnerId,
+                runner_up_id: loserId,
+                finished_at:  new Date().toISOString()
+            }).eq('id', _tournId);
+            return;
+        }
 
         // 1. Fetch current participant records
         const { data: allParts } = await supa

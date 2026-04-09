@@ -101,3 +101,50 @@
         applyTheme(theme);
     };
 })();
+
+// ── SESSION STORAGE HELPER ──
+// Transparently uses localStorage or sessionStorage based on user preference
+(function () {
+    const STAY_KEY = 'fc47_stay_logged_in';
+
+    function getStore() {
+        return localStorage.getItem(STAY_KEY) === '1' ? localStorage : sessionStorage;
+    }
+
+    // Drop-in replacements used everywhere instead of sessionStorage directly
+    window.fcGetUser = function () {
+        // Check both storages — migration: if only in sessionStorage, keep it there
+        return localStorage.getItem('fc47_user') || sessionStorage.getItem('fc47_user');
+    };
+
+    window.fcSetUser = function (value) {
+        // Always write to the active store; clear the other
+        if (localStorage.getItem(STAY_KEY) === '1') {
+            localStorage.setItem('fc47_user', value);
+            sessionStorage.removeItem('fc47_user');
+        } else {
+            sessionStorage.setItem('fc47_user', value);
+            localStorage.removeItem('fc47_user');
+        }
+    };
+
+    window.fcRemoveUser = function () {
+        localStorage.removeItem('fc47_user');
+        sessionStorage.removeItem('fc47_user');
+    };
+
+    window.getStayLoggedIn  = () => localStorage.getItem(STAY_KEY) === '1';
+    window.setStayLoggedIn  = function (val) {
+        if (val) {
+            localStorage.setItem(STAY_KEY, '1');
+            // Migrate session → local if currently logged in
+            const u = sessionStorage.getItem('fc47_user');
+            if (u) { localStorage.setItem('fc47_user', u); sessionStorage.removeItem('fc47_user'); }
+        } else {
+            localStorage.removeItem(STAY_KEY);
+            // Migrate local → session
+            const u = localStorage.getItem('fc47_user');
+            if (u) { sessionStorage.setItem('fc47_user', u); localStorage.removeItem('fc47_user'); }
+        }
+    };
+})();
