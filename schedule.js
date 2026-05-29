@@ -35,12 +35,6 @@ document.addEventListener('DOMContentLoaded', () => {
     loadAppointments();
 });
 
-// ── ABSENCE FINE CONSTANTS ──
-const ABSENCE_FINES = {
-    Training: { id: 'b9c3c0aa-fc23-4106-b6b5-574bcd098450', name: 'Nicht An- oder Abmelden: Training', amount: 5.00  },
-    Gameday:  { id: 'ce73932c-fbc0-4edc-b5fc-ea3327124d77', name: 'Nicht An- oder Abmelden: Spiel',    amount: 20.00 }
-};
-
 // ── APPOINTMENT STATUS ──
 // Returns 'upcoming' | 'active' | 'past'
 function getApptStatus(appt) {
@@ -92,7 +86,6 @@ async function loadAppointments() {
     renderAppointments(past,            allVotes, 'past-list',     true);
 
     await handleStatusTransitions(all, allVotes, allUsers);
-    await checkAbsenceFines(past, allVotes, allUsers);
 }
 
 // ── STATUS TRANSITIONS & AVERAGE FINE ──
@@ -178,53 +171,6 @@ async function applyAverageFine(appt, allVotes, allUsers) {
 
     const { error } = await supa.from('fines_ledger').insert(rowsToInsert);
     if (error) console.error('Avg fine insert error:', error.message);
-}
-
-// ── ABSENCE FINES (no-show / no-vote) ──
-async function checkAbsenceFines(pastAppointments, allVotes, allUsers) {
-    const relevant = pastAppointments.filter(a => a.type === 'Training' || a.type === 'Gameday');
-    if (relevant.length === 0) return;
-
-    const eligibleUsers = allUsers.filter(u =>
-        (u.role === 'member' || u.role === 'admin') && u.player_id
-    );
-    if (eligibleUsers.length === 0) return;
-
-    const { data: existingFines } = await supa
-        .from('fines_ledger')
-        .select('player_id, note')
-        .in('reason', [ABSENCE_FINES.Training.name, ABSENCE_FINES.Gameday.name]);
-
-    const alreadyFined = new Set(
-        (existingFines || [])
-            .filter(f => f.note && f.note.startsWith('appt:'))
-            .map(f => `${f.player_id}:${f.note.replace('appt:', '')}`)
-    );
-
-    const votedSet     = new Set(allVotes.map(v => `${v.user_id}:${v.appointment_id}`));
-    const rowsToInsert = [];
-
-    for (const appt of relevant) {
-        const fine = ABSENCE_FINES[appt.type];
-        for (const user of eligibleUsers) {
-            const hasVoted    = votedSet.has(`${user.id}:${appt.id}`);
-            const hasFinedKey = `${user.player_id}:${appt.id}`;
-            if (!hasVoted && !alreadyFined.has(hasFinedKey)) {
-                rowsToInsert.push({
-                    player_id:  user.player_id,
-                    amount:     fine.amount,
-                    type:       'fine',
-                    reason:     fine.name,
-                    note:       `appt:${appt.id}`,
-                    created_by: 'system'
-                });
-            }
-        }
-    }
-
-    if (rowsToInsert.length === 0) return;
-    const { error } = await supa.from('fines_ledger').insert(rowsToInsert);
-    if (error) console.error('Absence fine insert error:', error.message);
 }
 
 // ── RENDER APPOINTMENT CARDS ──
@@ -445,7 +391,7 @@ async function createAppointment() {
     const { error } = await supa.from('appointments').insert([{
         title,
         type,
-        date:       new Date(dateVal).toISOString(),
+        date:       startISO || new Date(dateVal).toISOString(),
         start_time: startISO,
         end_time:   endISO,
         place:      place || null,

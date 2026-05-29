@@ -67,6 +67,11 @@
         <div id="fines-overview">
             <div class="card">
                 <h2 class="card-title">STRAFEN</h2>
+                <div id="admin-bulk-section" style="display:none;">
+                    <button onclick="openBulkFineModal()" class="btn btn-full" style="background:var(--bg-element); margin-bottom:4px;">
+                        STRAFE FÜR ALLE MITGLIEDER
+                    </button>
+                </div>
                 <div class="divider"></div>
 
                 <!-- Members & Admins -->
@@ -134,6 +139,26 @@
                 </div>
             </div>
 
+        </div>
+    </div>
+
+    <!-- ── BULK FINE MODAL ── -->
+    <div id="bulk-fine-overlay" class="entry-sheet-overlay" onclick="closeBulkFineModal()" style="display:none;"></div>
+    <div id="bulk-fine-modal" class="entry-sheet" style="display:none;">
+        <div class="entry-sheet-handle"></div>
+        <div class="entry-sheet-content">
+            <h2 class="card-title" style="margin-bottom:12px;">STRAFE FÜR ALLE MITGLIEDER</h2>
+            <div class="divider" style="margin-bottom:16px;"></div>
+            <div class="fines-add-form">
+                <select id="bulk-reason" class="select-field" onchange="prefillBulkAmount()">
+                    <option value="" data-amount="">Lade Gründe…</option>
+                </select>
+                <input type="number" id="bulk-amount" placeholder="Betrag (€)" min="0.01" step="0.01" class="input-field fines-amount-input">
+                <input type="text" id="bulk-note" placeholder="Zusätzliche Notiz (optional)" class="input-field">
+                <p id="bulk-msg" class="settings-msg"></p>
+                <button onclick="submitBulkFine()" class="btn btn-primary btn-full">STRAFE EINTRAGEN</button>
+                <button onclick="closeBulkFineModal()" class="btn btn-full" style="margin-top:8px; background:var(--bg-element);">ABBRECHEN</button>
+            </div>
         </div>
     </div>
 
@@ -570,6 +595,97 @@
             await loadLedger();
         }
 
+        // ── BULK FINE (admin only) ──
+        async function openBulkFineModal() {
+            const { data } = await supa.from('fines_reasons').select('*').order('sort_order').order('created_at');
+            const reasons  = data || [];
+            document.getElementById('bulk-reason').innerHTML =
+                '<option value="" data-amount="">Grund auswählen…</option>' +
+                reasons.map(r =>
+                    `<option value="${escHtml(r.name)}" data-amount="${r.amount}">` +
+                    `${escHtml(r.name)} — ${parseFloat(r.amount).toLocaleString('de-DE', { minimumFractionDigits: 2 })} €` +
+                    `</option>`
+                ).join('') +
+                '<option value="Sonstiges" data-amount="">Sonstiges</option>';
+
+            document.getElementById('bulk-amount').value  = '';
+            document.getElementById('bulk-note').value    = '';
+            document.getElementById('bulk-msg').textContent = '';
+
+            document.getElementById('bulk-fine-overlay').style.display = 'block';
+            const modal = document.getElementById('bulk-fine-modal');
+            modal.style.display = 'block';
+            requestAnimationFrame(() => modal.classList.add('entry-sheet--open'));
+        }
+
+        function closeBulkFineModal() {
+            const modal = document.getElementById('bulk-fine-modal');
+            modal.classList.remove('entry-sheet--open');
+            setTimeout(() => {
+                modal.style.display = 'none';
+                document.getElementById('bulk-fine-overlay').style.display = 'none';
+            }, 300);
+        }
+
+        function prefillBulkAmount() {
+            const select = document.getElementById('bulk-reason');
+            const amount = select.options[select.selectedIndex].dataset.amount;
+            if (amount) document.getElementById('bulk-amount').value = amount;
+        }
+
+        async function submitBulkFine() {
+            const reason = document.getElementById('bulk-reason').value;
+            const amount = parseFloat(document.getElementById('bulk-amount').value);
+            const note   = document.getElementById('bulk-note').value.trim();
+            const msgEl  = document.getElementById('bulk-msg');
+
+            const showMsg = (text, color) => {
+                msgEl.textContent = text;
+                msgEl.style.color = color;
+            };
+
+            if (!reason)           return showMsg('Bitte einen Grund auswählen.', 'var(--red)');
+            if (!amount || amount <= 0) return showMsg('Bitte einen gültigen Betrag eingeben.', 'var(--red)');
+
+            const { data: users } = await supa
+                .from('app_users').select('player_id, role')
+                .in('role', ['member', 'admin']);
+            const playerIds = (users || []).map(u => u.player_id).filter(Boolean);
+
+            if (playerIds.length === 0) return showMsg('Keine Mitglieder gefunden.', 'var(--red)');
+
+            const amtFmt = amount.toLocaleString('de-DE', { minimumFractionDigits: 2 });
+            const ok = await showConfirm(
+                'Strafe für alle Mitglieder',
+                `${amtFmt} € (${reason}) wird für ${playerIds.length} Mitglieder eingetragen. Fortfahren?`
+            );
+            if (!ok) return;
+
+            const rows = playerIds.map(pid => ({
+                player_id:  pid,
+                amount:     Math.abs(amount),
+                type:       'fine',
+                reason,
+                note:       note || null,
+                created_by: currentUser.username
+            }));
+
+            const { error } = await supa.from('fines_ledger').insert(rows);
+            if (error) return showMsg('Fehler: ' + error.message, 'var(--red)');
+
+            closeBulkFineModal();
+            showToast(`Strafe für ${playerIds.length} Mitglieder eingetragen.`, 'success');
+            loadOverview();
+        }
+
+        // ── SEED MONATSBEITRAG ──
+        async function seedMonatsbeitrag() {
+            const { data } = await supa.from('fines_reasons').select('id').eq('name', 'Monatsbeitrag').maybeSingle();
+            if (!data) {
+                await supa.from('fines_reasons').insert([{ name: 'Monatsbeitrag', amount: 10.00, sort_order: 0 }]);
+            }
+        }
+
         // ── HELPERS ──
         function formatEur(amount) {
             return Math.abs(amount).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
@@ -584,8 +700,13 @@
         }
 
         // ── INIT ──
+        if (isAdmin) {
+            document.getElementById('admin-bulk-section').style.display = 'block';
+            seedMonatsbeitrag().then(() => loadReasons());
+        } else {
+            loadReasons();
+        }
         loadOverview();
-        loadReasons();
     </script>
     <script>
         if ('serviceWorker' in navigator) {
