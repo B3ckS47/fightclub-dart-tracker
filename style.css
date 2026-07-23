@@ -1874,8 +1874,9 @@ body {
 .fines-col-by     { color: var(--text-muted); font-size: 0.78rem; }
 .fines-col-amount { font-family: var(--font-display); font-weight: 800; font-size: 0.95rem; text-align: right; }
 
-.fines-type--fine    { color: var(--red);   font-size: 0.78rem; }
-.fines-type--payment { color: var(--green); font-size: 0.78rem; }
+.fines-type--fine         { color: var(--red);   font-size: 0.78rem; }
+.fines-type--payment      { color: var(--green); font-size: 0.78rem; }
+.fines-type--contribution { color: #e8a33d;      font-size: 0.78rem; }
 
 @media (max-width: 480px) {
     .fines-table-header,
@@ -2664,6 +2665,7 @@ body {
     font-family: var(--font-display);
     font-size: 1.5rem;
     font-weight: 800;
+    overflow-wrap: anywhere; /* long words wrap instead of overflowing the card */
     letter-spacing: 2px;
     text-transform: uppercase;
     color: var(--text-primary);
@@ -2691,10 +2693,12 @@ body {
 @media (min-width: 768px) {
     .menu-wrapper { max-width: 900px; padding: 60px 32px; gap: 8px; }
     .menu-logo    { width: 200px; }
-    .menu-cards   { flex-direction: row; gap: 24px; }
-    .menu-card    { flex-direction: column; align-items: flex-start; flex: 1; padding: 36px 32px; gap: 16px; }
+    /* Grid: wraps into rows of max 3 cards, never wider than the wrapper.
+       grid-auto-rows keeps all cards the same height across rows. */
+    .menu-cards   { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); grid-auto-rows: 1fr; gap: 24px; }
+    .menu-card    { flex-direction: column; align-items: flex-start; padding: 36px 32px; gap: 16px; }
     .menu-card-icon  { font-size: 3rem; }
-    .menu-card-title { font-size: 1.8rem; }
+    .menu-card-title { font-size: 1.4rem; }
     .menu-card-sub   { font-size: 0.88rem; }
     .menu-card-arrow { align-self: flex-end; font-size: 1.6rem; }
 }

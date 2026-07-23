@@ -71,6 +71,12 @@
                     <button onclick="openBulkFineModal()" class="btn btn-full" style="background:var(--bg-element); margin-bottom:4px;">
                         STRAFE FÜR ALLE MITGLIEDER
                     </button>
+                    <button onclick="openBulkContribModal()" class="btn btn-full" style="background:var(--bg-element); margin-bottom:4px;">
+                        BEITRAG FÜR ALLE MITGLIEDER
+                    </button>
+                    <p class="muted-text" style="font-size:0.78rem; margin:6px 2px 0;">
+                        ℹ️ Der Monatsbeitrag (10&nbsp;€) wird am 1. jedes Monats <strong>automatisch</strong> für alle Mitglieder eingetragen.
+                    </p>
                 </div>
                 <div class="divider"></div>
 
@@ -112,6 +118,7 @@
                         <select id="fine-type" class="select-field" onchange="onTypeChange()">
                             <option value="fine">💸 Strafe</option>
                             <option value="payment">✅ Zahlung</option>
+                            <option value="contribution">📅 Beitrag</option>
                         </select>
                         <input type="number" id="fine-amount" placeholder="Betrag (€)" min="0.01" step="0.01" class="input-field fines-amount-input">
                     </div>
@@ -139,6 +146,28 @@
                 </div>
             </div>
 
+        </div>
+    </div>
+
+    <!-- ── BULK CONTRIBUTION MODAL ── -->
+    <div id="bulk-contrib-overlay" class="entry-sheet-overlay" onclick="closeBulkContribModal()" style="display:none;"></div>
+    <div id="bulk-contrib-modal" class="entry-sheet" style="display:none;">
+        <div class="entry-sheet-handle"></div>
+        <div class="entry-sheet-content">
+            <h2 class="card-title" style="margin-bottom:12px;">BEITRAG FÜR ALLE MITGLIEDER</h2>
+            <div class="divider" style="margin-bottom:16px;"></div>
+            <p class="muted-text" style="font-size:0.82rem; margin-bottom:14px;">
+                ⚠️ Der Monatsbeitrag wird am 1. jedes Monats automatisch eingetragen.
+                Diesen Dialog nur für Sonderbeiträge oder Nachzahlungen verwenden –
+                sonst wird der Beitrag doppelt berechnet!
+            </p>
+            <div class="fines-add-form">
+                <input type="number" id="bulk-contrib-amount" placeholder="Betrag (€)" min="0.01" step="0.01" class="input-field fines-amount-input">
+                <input type="text" id="bulk-contrib-note" placeholder="Zusätzliche Notiz, z.B. Monat (optional)" class="input-field">
+                <p id="bulk-contrib-msg" class="settings-msg"></p>
+                <button onclick="submitBulkContrib()" class="btn btn-primary btn-full">BEITRAG EINTRAGEN</button>
+                <button onclick="closeBulkContribModal()" class="btn btn-full" style="margin-top:8px; background:var(--bg-element);">ABBRECHEN</button>
+            </div>
         </div>
     </div>
 
@@ -176,6 +205,14 @@
         }
 
         const isAdmin = currentUser && currentUser.role === 'admin';
+
+        // ── ENTRY TYPE METADATA ──
+        const TYPE_META = {
+            fine:         { label: '💸 Strafe',  plain: 'Strafe',  css: 'fines-type--fine',         debit: true  },
+            payment:      { label: '✅ Zahlung', plain: 'Zahlung', css: 'fines-type--payment',      debit: false },
+            contribution: { label: '📅 Beitrag', plain: 'Beitrag', css: 'fines-type--contribution', debit: true  }
+        };
+        function typeMeta(t) { return TYPE_META[t] || TYPE_META.fine; }
 
         // Currently open player in detail view
         let detailPlayerId   = null;
@@ -309,7 +346,7 @@
         <span class="fines-col-amount">Betrag</span>
     </div>
     ${entries.map(e => {
-        const isFine  = e.type === 'fine';
+        const meta    = typeMeta(e.type);
         const dateStr = new Date(e.created_at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
         // Resolve note: replace appt:{uuid} with appointment title, hide otherwise
@@ -328,10 +365,10 @@
         return `
 <div class="fines-table-row${isAdmin ? ' fines-table-row--tappable' : ''}" ${clickAttr}>
     <span class="fines-col-date">${dateStr}</span>
-    <span class="fines-col-type ${isFine ? 'fines-type--fine' : 'fines-type--payment'}">${isFine ? '💸 Strafe' : '✅ Zahlung'}</span>
+    <span class="fines-col-type ${meta.css}">${meta.label}</span>
     <span class="fines-col-reason">${escHtml(reason)}</span>
     <span class="fines-col-by">${escHtml(e.created_by)}</span>
-    <span class="fines-col-amount ${isFine ? 'fines-amount--debt' : 'fines-amount--zero'}">${isFine ? '+' : '–'}${formatEur(Math.abs(e.amount))}</span>
+    <span class="fines-col-amount ${meta.debit ? 'fines-amount--debt' : 'fines-amount--zero'}">${meta.debit ? '+' : '–'}${formatEur(Math.abs(e.amount))}</span>
 </div>`;
     }).join('')}
 </div>`;
@@ -363,12 +400,12 @@
         function onTypeChange() {
             const type      = document.getElementById('fine-type').value;
             const reasonSel = document.getElementById('fine-reason');
-            const isPayment = type === 'payment';
-            reasonSel.disabled = isPayment;
-            reasonSel.style.opacity = isPayment ? '0.4' : '1';
-            if (isPayment) {
+            const noReason  = type !== 'fine'; // payment & contribution need no reason
+            reasonSel.disabled = noReason;
+            reasonSel.style.opacity = noReason ? '0.4' : '1';
+            if (noReason) {
                 reasonSel.value = '';
-                document.getElementById('fine-amount').value = '';
+                document.getElementById('fine-amount').value = type === 'contribution' ? '10.00' : '';
             }
         }
 
@@ -396,14 +433,15 @@
             if (!amount || amount <= 0) return showMsg('Bitte einen gültigen Betrag eingeben.', 'var(--red)');
             if (type === 'fine' && !reason) return showMsg('Bitte einen Grund auswählen.', 'var(--red)');
 
-            // Payments are stored as negative amounts
+            // Payments are stored as negative amounts; fines & contributions as positive
             const storedAmount = type === 'payment' ? -Math.abs(amount) : Math.abs(amount);
+            const storedReason = type === 'contribution' ? 'Monatsbeitrag' : reason;
 
             const { error } = await supa.from('fines_ledger').insert([{
                 player_id:  detailPlayerId,
                 amount:     storedAmount,
                 type,
-                reason,
+                reason:     storedReason,
                 note:       note || null,
                 created_by: currentUser.username
             }]);
@@ -439,9 +477,10 @@
 
             const rows = [['Datum', 'Typ', 'Grund', 'Betrag (€)', 'Eingetragen von', 'Notiz']];
             data.forEach(e => {
-                const d   = new Date(e.created_at).toLocaleDateString('de-DE');
-                const amt = (e.type === 'fine' ? '+' : '-') + Math.abs(parseFloat(e.amount)).toFixed(2).replace('.', ',');
-                rows.push([d, e.type === 'fine' ? 'Strafe' : 'Zahlung', e.reason || '', amt, e.created_by || '', e.note || '']);
+                const meta = typeMeta(e.type);
+                const d    = new Date(e.created_at).toLocaleDateString('de-DE');
+                const amt  = (meta.debit ? '+' : '-') + Math.abs(parseFloat(e.amount)).toFixed(2).replace('.', ',');
+                rows.push([d, meta.plain, e.reason || '', amt, e.created_by || '', e.note || '']);
             });
 
             const csv  = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(';')).join('\n');
@@ -522,18 +561,19 @@
                     doc.rect(0, 0, 210, 297, 'F');
                     y = 20;
                 }
-                const isFine = e.type === 'fine';
-                const d      = new Date(e.created_at).toLocaleDateString('de-DE');
-                const amt    = (isFine ? '+' : '–') + Math.abs(parseFloat(e.amount)).toFixed(2).replace('.', ',') + ' €';
+                const meta  = typeMeta(e.type);
+                const d     = new Date(e.created_at).toLocaleDateString('de-DE');
+                const amt   = (meta.debit ? '+' : '–') + Math.abs(parseFloat(e.amount)).toFixed(2).replace('.', ',') + ' €';
+                const color = e.type === 'contribution' ? [232,163,61] : (meta.debit ? [220,90,90] : [80,200,130]);
 
                 doc.setTextColor(180, 180, 200);
                 doc.text(d, 14, y);
-                doc.setTextColor(isFine ? [220,90,90] : [80,200,130]);
-                doc.text(isFine ? 'Strafe' : 'Zahlung', 46, y);
+                doc.setTextColor(color);
+                doc.text(meta.plain, 46, y);
                 doc.setTextColor(180, 180, 200);
                 doc.text(doc.splitTextToSize((e.reason || '–'), 68)[0], 76, y);
                 doc.text((e.created_by || '–').slice(0, 18), 148, y);
-                doc.setTextColor(isFine ? [220,90,90] : [80,200,130]);
+                doc.setTextColor(color);
                 doc.text(amt, 196, y, { align: 'right' });
 
                 doc.setDrawColor(35, 35, 48);
@@ -550,11 +590,11 @@
 
         function openEntrySheet(id, type, reason, note, amount, createdBy, dateStr) {
             _currentEntryId = id;
-            const isFine = type === 'fine';
-            document.getElementById('entry-sheet-type').textContent    = isFine ? '💸 Strafe' : '✅ Zahlung';
-            document.getElementById('entry-sheet-type').className       = 'entry-sheet-type ' + (isFine ? 'fines-type--fine' : 'fines-type--payment');
-            document.getElementById('entry-sheet-amount').textContent  = (isFine ? '+' : '–') + formatEur(Math.abs(parseFloat(amount)));
-            document.getElementById('entry-sheet-amount').className    = 'entry-sheet-amount ' + (isFine ? 'fines-amount--debt' : 'fines-amount--zero');
+            const meta = typeMeta(type);
+            document.getElementById('entry-sheet-type').textContent    = meta.label;
+            document.getElementById('entry-sheet-type').className       = 'entry-sheet-type ' + meta.css;
+            document.getElementById('entry-sheet-amount').textContent  = (meta.debit ? '+' : '–') + formatEur(Math.abs(parseFloat(amount)));
+            document.getElementById('entry-sheet-amount').className    = 'entry-sheet-amount ' + (meta.debit ? 'fines-amount--debt' : 'fines-amount--zero');
             document.getElementById('entry-sheet-date').textContent    = dateStr;
             document.getElementById('entry-sheet-reason').textContent  = reason || '–';
             document.getElementById('entry-sheet-by').textContent      = createdBy || '–';
@@ -678,12 +718,76 @@
             loadOverview();
         }
 
-        // ── SEED MONATSBEITRAG ──
-        async function seedMonatsbeitrag() {
-            const { data } = await supa.from('fines_reasons').select('id').eq('name', 'Monatsbeitrag').maybeSingle();
-            if (!data) {
-                await supa.from('fines_reasons').insert([{ name: 'Monatsbeitrag', amount: 10.00, sort_order: 0 }]);
-            }
+        // ── BULK CONTRIBUTION (admin only) ──
+        function openBulkContribModal() {
+            document.getElementById('bulk-contrib-amount').value  = '10.00';
+            document.getElementById('bulk-contrib-note').value    = '';
+            document.getElementById('bulk-contrib-msg').textContent = '';
+
+            document.getElementById('bulk-contrib-overlay').style.display = 'block';
+            const modal = document.getElementById('bulk-contrib-modal');
+            modal.style.display = 'block';
+            requestAnimationFrame(() => modal.classList.add('entry-sheet--open'));
+        }
+
+        function closeBulkContribModal() {
+            const modal = document.getElementById('bulk-contrib-modal');
+            modal.classList.remove('entry-sheet--open');
+            setTimeout(() => {
+                modal.style.display = 'none';
+                document.getElementById('bulk-contrib-overlay').style.display = 'none';
+            }, 300);
+        }
+
+        async function submitBulkContrib() {
+            const amount = parseFloat(document.getElementById('bulk-contrib-amount').value);
+            const note   = document.getElementById('bulk-contrib-note').value.trim();
+            const msgEl  = document.getElementById('bulk-contrib-msg');
+
+            const showMsg = (text, color) => {
+                msgEl.textContent = text;
+                msgEl.style.color = color;
+            };
+
+            if (!amount || amount <= 0) return showMsg('Bitte einen gültigen Betrag eingeben.', 'var(--red)');
+
+            const { data: users } = await supa
+                .from('app_users').select('player_id, role')
+                .in('role', ['member', 'admin']);
+            const playerIds = (users || []).map(u => u.player_id).filter(Boolean);
+
+            if (playerIds.length === 0) return showMsg('Keine Mitglieder gefunden.', 'var(--red)');
+
+            const amtFmt = amount.toLocaleString('de-DE', { minimumFractionDigits: 2 });
+            const ok = await showConfirm(
+                'Beitrag für alle Mitglieder',
+                `${amtFmt} € Beitrag wird für ${playerIds.length} Mitglieder eingetragen. Fortfahren?`
+            );
+            if (!ok) return;
+
+            const rows = playerIds.map(pid => ({
+                player_id:  pid,
+                amount:     Math.abs(amount),
+                type:       'contribution',
+                reason:     'Monatsbeitrag',
+                note:       note || null,
+                created_by: currentUser.username
+            }));
+
+            const { error } = await supa.from('fines_ledger').insert(rows);
+            if (error) return showMsg('Fehler: ' + error.message, 'var(--red)');
+
+            closeBulkContribModal();
+            showToast(`Beitrag für ${playerIds.length} Mitglieder eingetragen.`, 'success');
+            loadOverview();
+        }
+
+        // ── REMOVE LEGACY "MONATSBEITRAG" FINE REASON ──
+        // Monatsbeitrag is now its own record type ('contribution') and must no
+        // longer be selectable as a fine reason (would count into appointment
+        // average fines otherwise).
+        async function removeMonatsbeitragReason() {
+            await supa.from('fines_reasons').delete().eq('name', 'Monatsbeitrag');
         }
 
         // ── HELPERS ──
@@ -702,7 +806,7 @@
         // ── INIT ──
         if (isAdmin) {
             document.getElementById('admin-bulk-section').style.display = 'block';
-            seedMonatsbeitrag().then(() => loadReasons());
+            removeMonatsbeitragReason().then(() => loadReasons());
         } else {
             loadReasons();
         }

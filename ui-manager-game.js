@@ -122,7 +122,7 @@ function refreshDisplay() {
     renderHist(1, 'p2-history');
 
     // Averages
-    const startScore = parseInt(document.getElementById('start-score-select').value);
+    const startScore = gameState.startScore;
     [0, 1].forEach(teamIdx => {
         const pointsScored = startScore - gameState.scores[teamIdx];
         const turns = gameState.history[teamIdx].filter(val => val !== "BUST").length;
@@ -179,7 +179,7 @@ function renderHist(pIdx, elId) {
 }
 
 function exitGame(isFinished = false) {
-    const startVal = parseInt(document.getElementById('start-score-select').value);
+    const startVal = gameState.startScore;
     const gameInProgress = gameState.scores[0] !== startVal || gameState.scores[1] !== startVal
         || gameState.legScore[0] > 0 || gameState.legScore[1] > 0;
 

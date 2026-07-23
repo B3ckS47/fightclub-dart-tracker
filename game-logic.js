@@ -31,6 +31,7 @@ async function startGameFromTournament() {
         gameState.stats       = [makePlayerStats(), makePlayerStats(), makePlayerStats(), makePlayerStats()];
     }
 
+    gameState.startScore    = startVal;
     gameState.scores        = [startVal, startVal];
     gameState.history       = [[], []];
     gameState.legScore      = [0, 0];
@@ -40,6 +41,10 @@ async function startGameFromTournament() {
     gameState.teamPlayerIdx = [0, 0];
     gameState.mode          = mode;
     gameState.isOfficial    = _isOfficial;
+
+    // Keep the (hidden) setup dropdown in sync so any DOM reads stay consistent
+    const startSelect = document.getElementById('start-score-select');
+    if (startSelect) startSelect.value = String(startVal);
     gameState.logs          = [];
     gameState.ausbullenActive = true;
 
@@ -512,6 +517,7 @@ let gameState = {
     gameType: 'singles',
     isOfficial: true,
     pNames: ["P1", "P2"],
+    startScore: 501,
     scores: [501, 501],
     history: [[], []],
     legScore: [0, 0],
@@ -564,6 +570,7 @@ async function startGame() {
         gameState.stats       = [makePlayerStats(), makePlayerStats(), makePlayerStats(), makePlayerStats()];
     }
 
+    gameState.startScore    = startVal;
     gameState.scores        = [startVal, startVal];
     gameState.history       = [[], []];
     gameState.legScore      = [0, 0];
@@ -894,7 +901,7 @@ function showMatchModal(winnerName) {
 
 async function dismissMatchModal() {
     document.getElementById('match-modal-overlay').style.display = 'none';
-    const startVal = parseInt(document.getElementById('start-score-select').value);
+    const startVal = gameState.startScore;
     gameState.scores   = [startVal, startVal];
     gameState.legScore = [0, 0];
     await clearLiveState();
@@ -917,7 +924,7 @@ function clearInput() {
 }
 
 function resetForNextLeg() {
-    const startVal = parseInt(document.getElementById('start-score-select').value);
+    const startVal = gameState.startScore;
     gameState.scores  = [startVal, startVal];
     gameState.history = [[], []];
     gameState.legStarter = gameState.legStarter === 0 ? 1 : 0;
