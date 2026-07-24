@@ -45,6 +45,9 @@
             <h2 class="card-title">ABGESCHLOSSENE TURNIERE</h2>
             <div class="divider"></div>
             <div id="finished-list"><p class="muted-text">Lade…</p></div>
+            <div id="load-more-wrap" style="display:none; margin-top:12px;">
+                <button id="load-more-btn" class="btn btn-full" style="background:var(--bg-element);" onclick="loadMoreFinished()">WEITERE TURNIERE LADEN</button>
+            </div>
         </div>
 
     </div>
@@ -92,13 +95,16 @@
 
                 let thirdId = null;
 
-                await supa.from('tournaments').update({
+                const { error } = await supa.from('tournaments').update({
                     status:       'finished',
                     winner_id:    finalMatch.winner_id,
                     runner_up_id: finalMatch.loser_id,
                     third_id:     thirdId,
                     finished_at:  new Date().toISOString()
                 }).eq('id', t.id);
+
+                // On failure keep local status 'active' so the tournament stays visible
+                if (error) { console.error('Auto-Close fehlgeschlagen für', t.name, '—', error.message); continue; }
 
                 t.status       = 'finished';
                 t.winner_id    = finalMatch.winner_id;
@@ -108,6 +114,76 @@
             }
         }
 
+        const PAGE_SIZE   = 5;
+        let finishedOffset = 0;
+
+        function renderFinishedRow(t, parts) {
+            const tParts      = (parts || []).filter(p => p.tournament_id === t.id);
+            const playerCount = tParts.filter(p => !p.is_bye).length;
+            const winner      = tParts.find(p => p.id === t.winner_id)
+                             || tParts.find(p => p.player_id === t.winner_id);
+            const runner      = tParts.find(p => p.id === t.runner_up_id)
+                             || tParts.find(p => p.player_id === t.runner_up_id);
+            const dateStr     = t.finished_at
+                ? new Date(t.finished_at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                : '';
+            const footer = t.closed_by
+                ? `<div class="tourn-closed-by">Geschlossen von ${t.closed_by}${dateStr ? ` · ${dateStr}` : ''}</div>`
+                : `<div class="tourn-podium">
+                    <span class="tourn-podium-item">🥇 ${winner ? winner.name : '–'}</span>
+                    <span class="tourn-podium-item">🥈 ${runner  ? runner.name  : '–'}</span>
+                    ${dateStr ? `<span class="tourn-podium-date">${dateStr}</span>` : ''}
+                   </div>`;
+            return `
+                <div class="tourn-row tourn-row--finished">
+                    <div class="tourn-row-top">
+                        <span class="tourn-name">${t.name}</span>
+                        <span class="tourn-tag">👥 ${playerCount}</span>
+                    </div>
+                    <div class="tourn-tags">${setupCard(t)}</div>
+                    ${footer}
+                </div>
+            `;
+        }
+
+        // Loads the next PAGE_SIZE finished tournaments and appends them
+        async function loadMoreFinished() {
+            const btn   = document.getElementById('load-more-btn');
+            const finEl = document.getElementById('finished-list');
+            btn.disabled    = true;
+            btn.textContent = 'LADE…';
+
+            const { data: page } = await supa
+                .from('tournaments')
+                .select('*')
+                .eq('status', 'finished')
+                .order('finished_at', { ascending: false, nullsFirst: false })
+                .range(finishedOffset, finishedOffset + PAGE_SIZE - 1);
+
+            const rows        = page || [];
+            const isFirstPage = finishedOffset === 0;
+            finishedOffset   += rows.length;
+
+            if (isFirstPage) finEl.innerHTML = '';
+
+            if (rows.length === 0) {
+                if (isFirstPage) finEl.innerHTML = '<p class="muted-text">Noch keine abgeschlossenen Turniere.</p>';
+            } else {
+                // Participants only for this page — not for all tournaments
+                const { data: parts } = await supa
+                    .from('tournament_participants')
+                    .select('id, tournament_id, name, player_id, is_bye')
+                    .in('tournament_id', rows.map(t => t.id));
+                finEl.insertAdjacentHTML('beforeend', rows.map(t => renderFinishedRow(t, parts)).join(''));
+            }
+
+            // Show button only if this page was full (there may be more)
+            document.getElementById('load-more-wrap').style.display =
+                rows.length === PAGE_SIZE ? 'block' : 'none';
+            btn.disabled    = false;
+            btn.textContent = 'WEITERE TURNIERE LADEN';
+        }
+
         async function load() {
             // Show create button for member + admin
             if (user.role !== 'ipad') {
@@ -115,21 +191,19 @@
                 document.getElementById('finished-section').style.display = 'block';
             }
 
-            const { data: all } = await supa
+            // Only active tournaments — finished ones are paged separately
+            const { data: active } = await supa
                 .from('tournaments')
                 .select('*')
+                .eq('status', 'active')
                 .order('created_at', { ascending: false });
 
-            const ongoing  = (all || []).filter(t => t.status === 'active');
-            const finished = (all || []).filter(t => t.status === 'finished');
+            const ongoing = active || [];
 
             // Auto-close any active tournament with no open matches
             await checkAndCloseTournaments(ongoing);
 
-            // Re-split after potential status changes
-            const nowOngoing  = ongoing.filter(t => t.status === 'active');
-            const nowFinished = [...finished, ...ongoing.filter(t => t.status === 'finished')]
-                .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+            const nowOngoing = ongoing.filter(t => t.status === 'active');
 
             // Ongoing
             const onEl = document.getElementById('ongoing-list');
@@ -147,47 +221,10 @@
                 `).join('');
             }
 
-            // Finished (member + admin only)
+            // Finished (member + admin only) — first page; runs after auto-close
+            // so freshly closed tournaments appear immediately
             if (user.role !== 'ipad') {
-                const finEl = document.getElementById('finished-list');
-                if (nowFinished.length === 0) {
-                    finEl.innerHTML = '<p class="muted-text">Noch keine abgeschlossenen Turniere.</p>';
-                } else {
-                    const tIds = nowFinished.map(t => t.id);
-                    const { data: parts } = await supa
-                        .from('tournament_participants')
-                        .select('id, tournament_id, name, player_id, is_bye')
-                        .in('tournament_id', tIds);
-
-                    finEl.innerHTML = nowFinished.map(t => {
-                        const tParts      = (parts || []).filter(p => p.tournament_id === t.id);
-                        const playerCount = tParts.filter(p => !p.is_bye).length;
-                        const winner      = tParts.find(p => p.id === t.winner_id)
-                                         || tParts.find(p => p.player_id === t.winner_id);
-                        const runner      = tParts.find(p => p.id === t.runner_up_id)
-                                         || tParts.find(p => p.player_id === t.runner_up_id);
-                        const dateStr     = t.finished_at
-                            ? new Date(t.finished_at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
-                            : '';
-                        const footer = t.closed_by
-                            ? `<div class="tourn-closed-by">Geschlossen von ${t.closed_by}${dateStr ? ` · ${dateStr}` : ''}</div>`
-                            : `<div class="tourn-podium">
-                                <span class="tourn-podium-item">🥇 ${winner ? winner.name : '–'}</span>
-                                <span class="tourn-podium-item">🥈 ${runner  ? runner.name  : '–'}</span>
-                                ${dateStr ? `<span class="tourn-podium-date">${dateStr}</span>` : ''}
-                               </div>`;
-                        return `
-                            <div class="tourn-row tourn-row--finished">
-                                <div class="tourn-row-top">
-                                    <span class="tourn-name">${t.name}</span>
-                                    <span class="tourn-tag">👥 ${playerCount}</span>
-                                </div>
-                                <div class="tourn-tags">${setupCard(t)}</div>
-                                ${footer}
-                            </div>
-                        `;
-                    }).join('');
-                }
+                await loadMoreFinished();
             }
         }
 

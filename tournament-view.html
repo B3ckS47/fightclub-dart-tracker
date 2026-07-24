@@ -151,18 +151,22 @@
                         if (finalMatch?.winner_id && finalMatch?.loser_id) {
                             let thirdId = null;
                             const now = new Date().toISOString();
-                            await supa.from('tournaments').update({
+                            const { error } = await supa.from('tournaments').update({
                                 status:       'finished',
                                 winner_id:    finalMatch.winner_id,
                                 runner_up_id: finalMatch.loser_id,
                                 third_id:     thirdId,
                                 finished_at:  now
                             }).eq('id', tournId);
-                            tournament.status       = 'finished';
-                            tournament.winner_id    = finalMatch.winner_id;
-                            tournament.runner_up_id = finalMatch.loser_id;
-                            tournament.third_id     = thirdId;
-                            tournament.finished_at  = now;
+                            if (error) {
+                                console.error('Auto-Close fehlgeschlagen:', error.message);
+                            } else {
+                                tournament.status       = 'finished';
+                                tournament.winner_id    = finalMatch.winner_id;
+                                tournament.runner_up_id = finalMatch.loser_id;
+                                tournament.third_id     = thirdId;
+                                tournament.finished_at  = now;
+                            }
                         }
                     }
                 }

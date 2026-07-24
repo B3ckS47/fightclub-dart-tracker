@@ -9,24 +9,32 @@ const DOUBLES_SELECTS = ['t1p1-select', 't1p2-select', 't2p1-select', 't2p2-sele
 const ALL_GAME_SELECTS = [...SINGLES_SELECTS, ...DOUBLES_SELECTS];
 
 function updateDropdowns() {
+    // `players` is sorted by win rate (leaderboard order) globally — sort a
+    // copy alphabetically here so the setup dropdowns stay easy to scan.
+    const sortedPlayers = [...players].sort((a, b) => a.name.localeCompare(b.name, 'de'));
+
     // Populate all selects with full player list
     ALL_GAME_SELECTS.forEach(id => {
         const el = document.getElementById(id);
         if (!el) return;
         const prev = el.value;
-        el.innerHTML = players.map(p =>
+        el.innerHTML = sortedPlayers.map(p =>
             `<option value="${p.name}">${p.name}</option>`
         ).join('');
-        if (prev && players.find(p => p.name === prev)) el.value = prev;
+        if (prev && sortedPlayers.find(p => p.name === prev)) el.value = prev;
         el.onchange = refreshGameDropdowns;
     });
     // Default p2 to second player
     const p2 = document.getElementById('p2-select');
-    if (p2 && players.length > 1) p2.selectedIndex = 1;
+    if (p2 && sortedPlayers.length > 1) p2.selectedIndex = 1;
     refreshGameDropdowns();
 }
 
 function refreshGameDropdowns() {
+    // Same alphabetical order as updateDropdowns() — `players` itself stays
+    // sorted by win rate, so re-sort a copy here too.
+    const sortedPlayers = [...players].sort((a, b) => a.name.localeCompare(b.name, 'de'));
+
     // Only filter within the currently active mode's selects
     const isDoubles    = gameState.gameType === 'doubles';
     const activeGroup  = isDoubles ? DOUBLES_SELECTS : SINGLES_SELECTS;
@@ -43,7 +51,7 @@ function refreshGameDropdowns() {
         const el = document.getElementById(id);
         if (!el) return;
         const current = el.value;
-        el.innerHTML = players
+        el.innerHTML = sortedPlayers
             .filter(p => p.name === current || !selected.has(p.name))
             .map(p => `<option value="${p.name}">${p.name}</option>`)
             .join('');
@@ -219,9 +227,7 @@ function doExitGame() {
 
 window.exitGame = exitGame;
 
-function toggleGameMode() {
-    const track = document.getElementById('game-mode-track');
-    const label = document.getElementById('game-mode-label');
-    const isOn  = track.classList.toggle('game-mode-track--on');
-    label.textContent = isOn ? '🏆 Offizielles Spiel' : '🎉 Spaßspiel';
+function setGameMode(official) {
+    document.getElementById('game-official-btn').classList.toggle('game-type-btn--active', official);
+    document.getElementById('game-fun-btn').classList.toggle('game-type-btn--active', !official);
 }

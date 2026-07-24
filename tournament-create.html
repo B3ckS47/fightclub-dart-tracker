@@ -43,26 +43,26 @@
                 <div class="settings-field">
                     <label class="settings-label">TURNIERMODUS</label>
                     <select id="mode-select" class="select-field" onchange="setMode(this.value)">
-                        <option value="ko" selected>K.O. – Verlierer scheidet aus</option>
-                        <option value="swiss">Swiss – Verlierer-Bracket</option>
+                        <option value="swiss" selected>Swiss – Verlierer-Bracket</option>
+                        <option value="ko">K.O. – Verlierer scheidet aus</option>
                         <option value="bounty">Bounty Hunter – Leben & Kopfgeld</option>
                     </select>
                 </div>
 
                 <div class="settings-field">
                     <label class="settings-label">SPIELTYP</label>
-                    <div class="game-mode-toggle" id="tourn-official-toggle" onclick="toggleTournOfficial()" style="justify-content:flex-start; padding:8px 0;">
-                        <div class="game-mode-track game-mode-track--on" id="tourn-official-track"></div>
-                        <span class="game-mode-label" id="tourn-official-label">🏆 Offizielles Turnier</span>
+                    <div class="game-type-selector">
+                        <button type="button" id="official-btn" class="game-type-btn game-type-btn--active" onclick="setOfficial(true)">🏆 Offiziell</button>
+                        <button type="button" id="fun-btn" class="game-type-btn" onclick="setOfficial(false)">🎮 Spaßturnier</button>
                     </div>
                 </div>
 
                 <div class="settings-field">
                     <label class="settings-label">SPIELMODUS</label>
-                    <select id="type-select" class="select-field" onchange="setType(this.value)">
-                        <option value="singles" selected>Einzel</option>
-                        <option value="doubles">Doppel</option>
-                    </select>
+                    <div class="game-type-selector">
+                        <button type="button" id="type-singles" class="game-type-btn game-type-btn--active" onclick="setType('singles')">👤 Einzel</button>
+                        <button type="button" id="type-doubles" class="game-type-btn" onclick="setType('doubles')">👥 Doppel</button>
+                    </div>
                 </div>
 
                 <div class="tourn-form-row">
@@ -217,19 +217,17 @@
         const user = JSON.parse(raw);
         if (user.role === 'ipad') window.location.href = 'tournaments.html';
 
-        let mode        = 'ko';
+        let mode        = 'swiss';
         let gameType    = 'singles';
         let isOfficial  = true;
         let allPlayers  = [];
         let participants = []; // { name, player_id, is_guest }  — individual players
         let teams        = []; // { name: "A & B", p1, p2 }      — doubles teams only
 
-        function toggleTournOfficial() {
-            isOfficial = !isOfficial;
-            const track = document.getElementById('tourn-official-track');
-            const label = document.getElementById('tourn-official-label');
-            track.classList.toggle('game-mode-track--on', isOfficial);
-            label.textContent = isOfficial ? '🏆 Offizielles Turnier' : '🎮 Spaßturnier';
+        function setOfficial(v) {
+            isOfficial = v;
+            document.getElementById('official-btn').classList.toggle('game-type-btn--active', v);
+            document.getElementById('fun-btn').classList.toggle('game-type-btn--active', !v);
         }
 
         function setMode(m) {
@@ -240,6 +238,8 @@
         function setType(t) {
             gameType = t;
             const isDoubles = t === 'doubles';
+            document.getElementById('type-singles').classList.toggle('game-type-btn--active', !isDoubles);
+            document.getElementById('type-doubles').classList.toggle('game-type-btn--active', isDoubles);
             document.getElementById('teams-card').style.display = isDoubles ? 'block' : 'none';
             document.getElementById('add-player-label').textContent =
                 isDoubles ? 'SPIELER ZUM POOL HINZUFÜGEN' : 'SPIELER HINZUFÜGEN';
@@ -321,6 +321,7 @@
             sel.innerHTML  = '<option value="">– Spieler wählen –</option>' +
                 allPlayers
                     .filter(p => !addedIds.has(p.id))
+                    .sort((a, b) => a.name.localeCompare(b.name, 'de'))
                     .map(p => `<option value="${p.id}">${p.name}</option>`)
                     .join('');
             if (current && !addedIds.has(current)) sel.value = current;
@@ -478,7 +479,7 @@
         }
 
         function refreshTeamSelects() {
-            const free = unassignedPlayers();
+            const free = unassignedPlayers().slice().sort((a, b) => a.name.localeCompare(b.name, 'de'));
             const opts = '<option value="">– wählen –</option>' +
                 free.map(p => `<option value="${p.player_id}">${p.name}</option>`).join('');
             document.getElementById('team-p1').innerHTML = opts;

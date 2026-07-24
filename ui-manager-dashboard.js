@@ -44,11 +44,20 @@ function updateStatsUI() {
     }
 
     box.innerHTML = list.map((p, index) => {
-        const rank   = index + 1;
-        const rankBg = rank === 1 ? '#ffd700' : rank === 2 ? '#c0c0c0' : rank === 3 ? '#cd7f32' : '#3a3a48';
+        const rank        = index + 1;
+        const medalClass  = rank === 1 ? 'lb-avatar--gold' : rank === 2 ? 'lb-avatar--silver' : rank === 3 ? 'lb-avatar--bronze' : '';
+        const badgeBg      = rank === 1 ? '#ffd700' : rank === 2 ? '#c0c0c0' : rank === 3 ? '#cd7f32' : 'var(--border-light)';
+        const badgeColor  = rank <= 3 ? '#000' : 'var(--text-primary)';
+        const initials    = (p.name || '?').slice(0, 2).toUpperCase();
+        const avatarInner = p.avatar_url
+            ? `<img src="${p.avatar_url}" alt="">`
+            : `<span>${initials}</span>`;
         return `
 <div class="lb-row" onclick="openPlayerProfile('${p.id}')">
-    <div class="lb-rank" style="background:${rankBg};">${rank}</div>
+    <div class="lb-avatar-wrap">
+        <div class="lb-avatar ${medalClass}">${avatarInner}</div>
+        <div class="lb-rank-badge" style="background:${badgeBg}; color:${badgeColor};">${rank}</div>
+    </div>
     <div class="lb-info">
         <div class="lb-name">${p.name}</div>
         <div class="lb-sub">Avg: ${p.stats.avgGame} &nbsp;·&nbsp; W-L: ${p.stats.gamesWon}–${p.stats.gamesLost}</div>
@@ -75,6 +84,18 @@ async function openPlayerProfile(playerId) {
     const delBtn = document.getElementById('delete-player-btn');
     if (delBtn) delBtn.onclick = () => deletePlayer(playerId, player.name);
 
+    const avatarImg  = document.getElementById('profile-avatar-img');
+    const avatarInit = document.getElementById('profile-avatar-initials');
+    avatarInit.textContent = (player.name || '?').slice(0, 2).toUpperCase();
+    if (player.avatar_url) {
+        avatarImg.src = player.avatar_url;
+        avatarImg.style.display  = 'block';
+        avatarInit.style.display = 'none';
+    } else {
+        avatarImg.style.display  = 'none';
+        avatarInit.style.display = 'flex';
+    }
+
     showPage('player-profile-view');
     historyBox.innerHTML  = '<p class="muted-text" style="padding:10px 0;">Lade Matches…</p>';
     attendList.innerHTML  = '<p class="muted-text">Lade Termine…</p>';
@@ -99,10 +120,13 @@ async function openPlayerProfile(playerId) {
 
     // ── FETCH ALL DATA IN PARALLEL ──
     const [histRes, userRes, tournRes] = await Promise.all([
+        // No .limit() here — Win Rate / Lifetime Avg / Advanced Analytics below
+        // need the player's FULL history, not just the most recent games.
+        // The "Recent Match History" list and chart only display the first
+        // few entries via .slice() further down.
         supa.from('game_history').select('*')
             .eq('player_id', playerId)
-            .order('created_at', { ascending: false })
-            .limit(10),
+            .order('created_at', { ascending: false }),
         supa.from('app_users').select('id')
             .eq('player_id', playerId)
             .maybeSingle(),

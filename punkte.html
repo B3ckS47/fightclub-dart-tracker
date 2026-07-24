@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlightClub · Punkte</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0d0d0f">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <script src="config.js"></script>
+    <script src="ui-utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>document.documentElement.setAttribute("data-theme",localStorage.getItem("fc47_theme")||"dark");</script>
+</head>
+<body>
+
+    <nav id="nav-punkte">
+        <div class="nav-inner nav-inner--default">
+            <a href="index.html" class="nav-brand" style="text-decoration:none;color:inherit;">FLIGHTCLUB</a>
+            <div class="nav-links">
+                <a href="index.html" class="nav-btn">« Menü</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="app-wrapper">
+        <div class="card">
+            <h2 class="card-title">PUNKTE-ÜBERSICHT</h2>
+            <p class="muted-text" style="font-size:0.78rem; margin-bottom:12px;">
+                Punkte für die Spieltagsplanung. Auf einen Spieler tippen für die Aufschlüsselung.
+            </p>
+            <div class="divider"></div>
+            <div id="points-list"><p class="muted-text">Lade Punkte…</p></div>
+        </div>
+
+        <div class="card">
+            <h2 class="card-title">SO GIBT ES PUNKTE</h2>
+            <div class="divider"></div>
+            <div class="points-legend">
+                <div class="points-legend-row"><span>🏋️ Trainingsteilnahme</span><span class="points-legend-val">5 Punkte</span></div>
+                <div class="points-legend-row"><span>🎯 Gewonnenes Spiel (inkl. Winner-Bracket & Finale)</span><span class="points-legend-val">2 Punkte</span></div>
+                <div class="points-legend-row"><span>🥈 Sieg im Loser-Bracket</span><span class="points-legend-val">1 Punkt</span></div>
+                <div class="points-legend-row"><span>💥 Geworfene 180</span><span class="points-legend-val">1 Punkt</span></div>
+                <div class="points-legend-row"><span>🎉 High Finish</span><span class="points-legend-val">1 Punkt</span></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const supa = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
+        const raw  = sessionStorage.getItem('fc47_user');
+        if (!raw) window.location.href = 'index.html';
+        const currentUser = raw ? JSON.parse(raw) : null;
+        if (!currentUser || currentUser.role === 'ipad') window.location.href = 'index.html';
+
+        // Same scoring rules as spieltag-detail.html — keep both in sync!
+        async function loadPoints() {
+            const { data: appUsers } = await supa
+                .from('app_users')
+                .select('id, player_id, role')
+                .in('role', ['member', 'admin']);
+
+            const users           = (appUsers || []).filter(u => u.player_id);
+            const userIds         = users.map(u => u.id);
+            const memberPlayerIds = users.map(u => u.player_id);
+
+            if (memberPlayerIds.length === 0) {
+                document.getElementById('points-list').innerHTML = '<p class="muted-text">Keine Mitglieder gefunden.</p>';
+                return;
+            }
+
+            const userToPlayer = {};
+            users.forEach(u => { userToPlayer[u.id] = u.player_id; });
+
+            const [histRes, playersRes, pastTrainRes, votesRes, loserRes] = await Promise.all([
+                supa.from('game_history')
+                    .select('player_id, is_win, one_eighties, high_finishes')
+                    .in('player_id', memberPlayerIds),
+                supa.from('players')
+                    .select('id, name')
+                    .in('id', memberPlayerIds),
+                supa.from('appointments')
+                    .select('id')
+                    .eq('type', 'Training')
+                    .lt('date', new Date().toISOString()),
+                supa.from('appointment_votes')
+                    .select('user_id, appointment_id')
+                    .eq('vote', 'yes')
+                    .in('user_id', userIds),
+                supa.from('tournament_matches')
+                    .select('winner_id, p1_id, p2_id')
+                    .eq('bracket', 'losers')
+                    .eq('status', 'done')
+            ]);
+
+            const playerName = {};
+            (playersRes.data || []).forEach(p => { playerName[p.id] = p.name; });
+
+            // Training attendance per player (past trainings only)
+            const pastTrainingIds = new Set((pastTrainRes.data || []).map(a => a.id));
+            const trainingCount   = {};
+            (votesRes.data || []).forEach(v => {
+                if (!pastTrainingIds.has(v.appointment_id)) return;
+                const pid = userToPlayer[v.user_id];
+                if (pid) trainingCount[pid] = (trainingCount[pid] || 0) + 1;
+            });
+
+            // Loser-bracket wins per player (byes excluded — both slots must be filled)
+            const lbWinsByPart = {};
+            (loserRes.data || []).forEach(m => {
+                if (!m.winner_id || !m.p1_id || !m.p2_id) return;
+                lbWinsByPart[m.winner_id] = (lbWinsByPart[m.winner_id] || 0) + 1;
+            });
+            const lbPartIds = Object.keys(lbWinsByPart);
+            const { data: loserParts } = lbPartIds.length > 0
+                ? await supa.from('tournament_participants')
+                    .select('id, player_id')
+                    .in('id', lbPartIds)
+                : { data: [] };
+            const lbWinsByPlayer = {};
+            (loserParts || []).forEach(p => {
+                if (!p.player_id) return; // doubles teams can't be attributed to one player
+                lbWinsByPlayer[p.player_id] = (lbWinsByPlayer[p.player_id] || 0) + lbWinsByPart[p.id];
+            });
+
+            const allHistory = histRes.data || [];
+
+            const players = memberPlayerIds.map(pid => {
+                const pHistory  = allHistory.filter(h => h.player_id === pid);
+                const trainings = trainingCount[pid] || 0;
+                const winsTotal = pHistory.filter(h => h.is_win).length;
+                // LB wins count 1 point instead of 2 — all other wins (winner bracket,
+                // final, regular games) stay at 2. Tournament games are also in
+                // game_history, so we split instead of adding to avoid double counting.
+                const lbWins    = Math.min(lbWinsByPlayer[pid] || 0, winsTotal);
+                const wins      = winsTotal - lbWins;
+                const oneEighty = pHistory.reduce((s, h) => s + (h.one_eighties || 0), 0);
+                const highFin   = pHistory.reduce((s, h) => s + (h.high_finishes || 0), 0);
+
+                const trainPts = trainings * 5;
+                const winPts   = wins * 2;
+                const total    = trainPts + winPts + lbWins + oneEighty + highFin;
+
+                return { pid, name: playerName[pid] || '?', trainings, trainPts, wins, winPts, lbWins, oneEighty, highFin, total };
+            }).sort((a, b) => b.total - a.total);
+
+            render(players);
+        }
+
+        function render(players) {
+            const medals = ['🥇', '🥈', '🥉'];
+            document.getElementById('points-list').innerHTML = players.map((p, i) => {
+                const isMe = currentUser.player_id === p.pid;
+                return `
+<div class="points-row${isMe ? ' points-row--me' : ''}" onclick="toggleBreakdown('${p.pid}')">
+    <div class="points-row-main">
+        <span class="points-rank">${medals[i] || '#' + (i + 1)}</span>
+        <span class="points-name">${escHtml(p.name)}</span>
+        <span class="points-total">${p.total}</span>
+    </div>
+    <div class="points-breakdown" id="breakdown-${p.pid}" style="display:none;">
+        <div class="points-breakdown-row"><span>🏋️ Trainings</span><span>${p.trainings} × 5</span><span class="points-breakdown-val">${p.trainPts}</span></div>
+        <div class="points-breakdown-row"><span>🎯 Siege</span><span>${p.wins} × 2</span><span class="points-breakdown-val">${p.winPts}</span></div>
+        <div class="points-breakdown-row"><span>🥈 Loser-Bracket-Siege</span><span>${p.lbWins} × 1</span><span class="points-breakdown-val">${p.lbWins}</span></div>
+        <div class="points-breakdown-row"><span>💥 180er</span><span>${p.oneEighty} × 1</span><span class="points-breakdown-val">${p.oneEighty}</span></div>
+        <div class="points-breakdown-row"><span>🎉 High Finishes</span><span>${p.highFin} × 1</span><span class="points-breakdown-val">${p.highFin}</span></div>
+    </div>
+</div>`;
+            }).join('');
+        }
+
+        function toggleBreakdown(pid) {
+            const el = document.getElementById('breakdown-' + pid);
+            el.style.display = el.style.display === 'none' ? 'block' : 'none';
+        }
+
+        function escHtml(str) {
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        loadPoints();
+    </script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/fightclub-dart-tracker/sw.js').catch(() => {});
+        }
+    </script>
+</body>
+</html>

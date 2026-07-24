@@ -248,6 +248,20 @@
                     });
             }
 
+            // points card — member + admin
+            const pointsCard = document.createElement('a');
+            pointsCard.href      = 'punkte.html';
+            pointsCard.className = 'menu-card menu-card--points';
+            pointsCard.innerHTML = `
+                <div class="menu-card-icon">🏅</div>
+                <div class="menu-card-body">
+                    <div class="menu-card-title">PUNKTE</div>
+                    <div class="menu-card-sub">Rangliste · Aufschlüsselung</div>
+                </div>
+                <div class="menu-card-arrow">»</div>
+            `;
+            cards.appendChild(pointsCard);
+
             // admin: add admin card + Spieltagsplanung
             if (user.role === 'admin') {
                 const cards = document.getElementById('menu-cards');

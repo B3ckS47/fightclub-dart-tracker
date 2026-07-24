@@ -105,11 +105,9 @@
             </div>
 
             <!-- Official / Fun Game Toggle -->
-            <div class="game-mode-toggle" onclick="toggleGameMode()">
-                <div class="game-mode-track game-mode-track--on" id="game-mode-track">
-                    <div class="game-mode-thumb" id="game-mode-thumb"></div>
-                </div>
-                <span class="game-mode-label" id="game-mode-label">🏆 Offizielles Spiel</span>
+            <div class="game-type-selector" id="game-mode-selector">
+                <button type="button" id="game-official-btn" class="game-type-btn game-type-btn--active" onclick="setGameMode(true)">🏆 Offiziell</button>
+                <button type="button" id="game-fun-btn" class="game-type-btn" onclick="setGameMode(false)">🎉 Spaßspiel</button>
             </div>
 
             <button onclick="startGame()" class="btn btn-primary btn-full btn-lg">SPIEL STARTEN</button>
@@ -223,16 +221,29 @@
         </div>
     </div>
 
-    <!-- ── STARTER MODAL ── -->
-    <div id="starter-modal-overlay" class="ausbullen-overlay" style="display:none;">
-        <div class="ausbullen-modal">
-            <div class="ausbullen-title">BULL OUT</div>
-            <p class="ausbullen-subtitle">Wer beginnt mit dem ersten Wurf?</p>
-            <div class="ausbullen-buttons">
-                <button class="ausbullen-btn ausbullen-btn--p1" onclick="selectStarter(0)" id="starter-p1">Player 1</button>
-                <button class="ausbullen-btn ausbullen-btn--p2" onclick="selectStarter(1)" id="starter-p2">Player 2</button>
+    <!-- ── VS INTRO / STARTER SELECTION ── -->
+    <!-- Replaces the old separate "Bull Out" button modal — tapping a
+         player's picture here both shows the intro animation and picks
+         who starts the first leg. -->
+    <div id="vs-intro-overlay" class="vs-intro-overlay" style="display:none;">
+        <div class="vs-intro-brand">
+            <img src="Logo.png" alt="" class="vs-intro-logo">
+            <span class="vs-intro-brand-text">DC FLIGHT CLUB 47</span>
+        </div>
+        <div class="vs-intro-title">BULL OUT</div>
+        <div class="vs-intro-row">
+            <div class="vs-intro-side vs-intro-side--left" onclick="pickStarter(0)">
+                <div class="vs-intro-avatars" id="vs-intro-avatars-p1"></div>
+                <div class="vs-intro-name" id="vs-intro-name-p1"></div>
+            </div>
+            <div class="vs-intro-vs">VS</div>
+            <div class="vs-intro-side vs-intro-side--right" onclick="pickStarter(1)">
+                <div class="vs-intro-avatars" id="vs-intro-avatars-p2"></div>
+                <div class="vs-intro-name" id="vs-intro-name-p2"></div>
             </div>
         </div>
+        <p class="vs-intro-subtitle">Wer beginnt mit dem ersten Wurf? Auf das Bild tippen.</p>
+        <div class="vs-intro-tags" id="vs-intro-tags"></div>
     </div>
 
     <!-- ── EXIT CONFIRM MODAL ── -->

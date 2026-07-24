@@ -55,10 +55,8 @@ async function startGameFromTournament() {
     document.getElementById('active-game-view').classList.add('game-active');
     refreshDisplay();
 
-    // Show starter modal immediately
-    document.getElementById('starter-p1').textContent = gameState.pNames[0];
-    document.getElementById('starter-p2').textContent = gameState.pNames[1];
-    document.getElementById('starter-modal-overlay').style.display = 'flex';
+    // VS intro doubles as starter selection — tap a picture to begin
+    await showVsIntro();
 }
 async function saveTournamentResult(winnerName) {
     if (!_tournMatchId || !_tournP1Id || !_tournP2Id) return;
@@ -537,6 +535,59 @@ window.addEventListener('DOMContentLoaded', () => {
     // fetchPlayers is called by ui-manager-game.js
 });
 
+// ── VS INTRO ANIMATION ──
+function vsAvatarHtml(name) {
+    const p        = players.find(pl => pl.name === name);
+    const initials = (name || '?').slice(0, 2).toUpperCase();
+    return p && p.avatar_url
+        ? `<div class="vs-intro-avatar"><img src="${p.avatar_url}" alt=""></div>`
+        : `<div class="vs-intro-avatar"><span>${initials}</span></div>`;
+}
+
+function renderVsSide(avatarsElId, nameElId, names, teamLabel) {
+    const avatarsEl = document.getElementById(avatarsElId);
+    avatarsEl.className = names.length > 1 ? 'vs-intro-avatars vs-intro-avatars--pair' : 'vs-intro-avatars';
+    avatarsEl.innerHTML  = names.map(vsAvatarHtml).join('');
+    document.getElementById(nameElId).textContent = teamLabel;
+}
+
+// Small match-info chips shown under the VS screen — fills the otherwise
+// empty space and doubles as a last glance at the settings before throwing.
+function vsMatchTagsHtml() {
+    const typeLabel     = gameState.gameType === 'doubles' ? '👥 Doppel' : '👤 Einzel';
+    const checkoutLabel = gameState.mode === 'single' ? 'Single Out' : 'Double Out';
+    const legsLabel     = `First to ${gameState.targetLegs} ${gameState.targetLegs === 1 ? 'Leg' : 'Legs'}`;
+    const officialLabel = gameState.isOfficial ? '🏆 Offiziell' : '🎉 Spaßspiel';
+    return [typeLabel, gameState.startScore, checkoutLabel, legsLabel, officialLabel]
+        .map(t => `<span class="vs-intro-tag">${t}</span>`).join('');
+}
+
+// Shows both players'/teams' pictures with a short entrance animation.
+// Doubles as the starter-selection screen — tapping a side picks who
+// begins the first leg (see pickStarter below).
+async function showVsIntro() {
+    if (players.length === 0) { try { await fetchPlayers(); } catch(e) {} }
+
+    renderVsSide('vs-intro-avatars-p1', 'vs-intro-name-p1', gameState.teamPlayers[0], gameState.pNames[0]);
+    renderVsSide('vs-intro-avatars-p2', 'vs-intro-name-p2', gameState.teamPlayers[1], gameState.pNames[1]);
+    document.getElementById('vs-intro-tags').innerHTML = vsMatchTagsHtml();
+
+    const overlay = document.getElementById('vs-intro-overlay');
+    overlay.classList.remove('vs-intro-overlay--out');
+    overlay.style.display = 'flex';
+}
+
+// Tapping a player's/team's picture in the VS screen picks the starter
+function pickStarter(teamIdx) {
+    const overlay = document.getElementById('vs-intro-overlay');
+    overlay.classList.add('vs-intro-overlay--out');
+    setTimeout(() => {
+        overlay.style.display = 'none';
+        overlay.classList.remove('vs-intro-overlay--out');
+    }, 300);
+    selectStarter(teamIdx);
+}
+
 function setGameType(type) {
     gameState.gameType = type;
     document.getElementById('type-singles').classList.toggle('game-type-btn--active', type === 'singles');
@@ -579,7 +630,7 @@ async function startGame() {
     gameState.currentIdx    = 0;
     gameState.teamPlayerIdx = [0, 0];
     gameState.mode          = mode;
-    gameState.isOfficial    = document.getElementById('game-mode-track').classList.contains('game-mode-track--on');
+    gameState.isOfficial    = document.getElementById('game-official-btn').classList.contains('game-type-btn--active');
     gameState.logs          = [];
     gameState.ausbullenActive = true; // block input until starter is chosen
 
@@ -590,10 +641,8 @@ async function startGame() {
     document.getElementById('active-game-view').classList.add('game-active');
     refreshDisplay();
 
-    // Show starter selection modal
-    document.getElementById('starter-p1').textContent = gameState.pNames[0];
-    document.getElementById('starter-p2').textContent = gameState.pNames[1];
-    document.getElementById('starter-modal-overlay').style.display = 'flex';
+    // VS intro doubles as starter selection — tap a picture to begin
+    await showVsIntro();
 }
 
 function pressKey(num) {
@@ -697,24 +746,31 @@ async function submitTurn() {
 
         // ── AUTO FINES (official games only) ──
         if (gameState.isOfficial) {
-            const playerName = gameState.gameType === 'singles'
-                ? gameState.pNames[teamIdx]
-                : gameState.teamPlayers[teamIdx][playerWithinTeam];
+            // Doubles: fines hit both team players — win as a team, lose as a team
+            const finedPlayers = gameState.gameType === 'singles'
+                ? [gameState.pNames[teamIdx]]
+                : gameState.teamPlayers[teamIdx];
+            const fineLabel = finedPlayers.join(' & ');
+            const perPlayer = gameState.gameType === 'doubles' ? 'je ' : '';
 
             const insertedIds = [];
 
             // 26 fine
             if (pts === 26) {
-                const id = await insertFine(playerName, FINE_REASONS.twentySix);
-                if (id) insertedIds.push(id);
-                showToast(`💸 ${playerName}: 26 — ${FINE_REASONS.twentySix.amount.toFixed(2).replace('.',',')} €`);
+                for (const name of finedPlayers) {
+                    const id = await insertFine(name, FINE_REASONS.twentySix);
+                    if (id) insertedIds.push(id);
+                }
+                showToast(`💸 ${fineLabel}: 26 — ${perPlayer}${FINE_REASONS.twentySix.amount.toFixed(2).replace('.',',')} €`);
             }
 
             // Schnapszahl fine
             if (SCHNAPSZAHLEN.has(newScore)) {
-                const id = await insertFine(playerName, FINE_REASONS.schnapszahl);
-                if (id) insertedIds.push(id);
-                showToast(`💸 ${playerName}: Schnapszahl (${newScore}) — ${FINE_REASONS.schnapszahl.amount.toFixed(2).replace('.',',')} €`);
+                for (const name of finedPlayers) {
+                    const id = await insertFine(name, FINE_REASONS.schnapszahl);
+                    if (id) insertedIds.push(id);
+                }
+                showToast(`💸 ${fineLabel}: Schnapszahl (${newScore}) — ${perPlayer}${FINE_REASONS.schnapszahl.amount.toFixed(2).replace('.',',')} €`);
             }
 
             // Store inserted IDs in the most recent log snapshot for undo
@@ -939,7 +995,6 @@ function resetForNextLeg() {
 
 // ── STARTER SELECTION ──
 function selectStarter(teamIdx) {
-    document.getElementById('starter-modal-overlay').style.display = 'none';
     gameState.ausbullenActive = false;
     gameState.legStarter  = teamIdx;
     gameState.currentIdx  = teamIdx;

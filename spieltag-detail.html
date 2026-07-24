@@ -166,7 +166,7 @@
                     .in('user_id', userIds),
                 // Swiss loser bracket wins
                 supa.from('tournament_matches')
-                    .select('winner_id, tournament_id')
+                    .select('winner_id, p1_id, p2_id')
                     .eq('bracket', 'losers')
                     .eq('status', 'done')
             ]);
@@ -187,14 +187,23 @@
                 .eq('vote', 'yes')
                 .in('user_id', userIds);
 
-            // Swiss loser bracket participant mapping
-            const loserWinnerPartIds = new Set((tournRes.data || []).map(m => m.winner_id));
-            const { data: loserParts } = loserWinnerPartIds.size > 0
+            // Loser-bracket wins per player (byes excluded) — same rules as punkte.html, keep in sync!
+            const lbWinsByPart = {};
+            (tournRes.data || []).forEach(m => {
+                if (!m.winner_id || !m.p1_id || !m.p2_id) return;
+                lbWinsByPart[m.winner_id] = (lbWinsByPart[m.winner_id] || 0) + 1;
+            });
+            const lbPartIds = Object.keys(lbWinsByPart);
+            const { data: loserParts } = lbPartIds.length > 0
                 ? await supa.from('tournament_participants')
                     .select('id, player_id')
-                    .in('id', [...loserWinnerPartIds])
+                    .in('id', lbPartIds)
                 : { data: [] };
-            const loserWinPlayerIds = new Set((loserParts || []).map(p => p.player_id));
+            const lbWinsByPlayer = {};
+            (loserParts || []).forEach(p => {
+                if (!p.player_id) return; // doubles teams can't be attributed to one player
+                lbWinsByPlayer[p.player_id] = (lbWinsByPlayer[p.player_id] || 0) + lbWinsByPart[p.id];
+            });
 
             // Build user → player_id map
             const userToPlayer = {};
@@ -228,10 +237,13 @@
                     ? (hist30.reduce((s, h) => s + (h.avg_game || 0), 0) / hist30.length).toFixed(2)
                     : '–';
 
-                // Points
+                // Points — LB wins score 1 instead of 2, all other wins score 2.
+                // Tournament games are also in game_history, so split instead of add.
                 const trainPts   = (trainingCount[pid] || 0) * 5;
-                const winPts     = pHistory.filter(h => h.is_win).length * 2;
-                const loserPts   = loserWinPlayerIds.has(pid) ? 1 : 0;
+                const winsTotal  = pHistory.filter(h => h.is_win).length;
+                const lbWins     = Math.min(lbWinsByPlayer[pid] || 0, winsTotal);
+                const winPts     = (winsTotal - lbWins) * 2;
+                const loserPts   = lbWins;
                 const oneEighty  = pHistory.reduce((s, h) => s + (h.one_eighties || 0), 0);
                 const highFin    = pHistory.reduce((s, h) => s + (h.high_finishes || 0), 0);
                 const points     = trainPts + winPts + loserPts + oneEighty + highFin;

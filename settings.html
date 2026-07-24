@@ -33,12 +33,19 @@
 
         <!-- PROFILE HEADER -->
         <div class="settings-header">
-            <div class="settings-avatar" id="settings-avatar"></div>
-            <div class="settings-user-info">
-                <div class="settings-username" id="settings-username"></div>
-                <div class="settings-role-badge" id="settings-role-badge"></div>
+            <div class="settings-avatar-wrap">
+                <div class="settings-avatar" id="settings-avatar">
+                    <img id="settings-avatar-img" class="settings-avatar-img" style="display:none;" alt="Profilbild">
+                    <span id="settings-avatar-initials"></span>
+                </div>
+                <div class="settings-avatar-badge" id="settings-avatar-badge" style="display:none;">📷</div>
             </div>
+            <div class="settings-username" id="settings-username"></div>
+            <div class="settings-role-badge" id="settings-role-badge"></div>
+            <button type="button" id="avatar-remove-btn" class="settings-avatar-remove" style="display:none;">Bild entfernen</button>
         </div>
+        <input type="file" id="avatar-file-input" accept="image/*" style="display:none;">
+        <p id="avatar-msg" class="settings-msg" style="margin: 0 0 12px; text-align:center;"></p>
 
         <!-- CHANGE PASSWORD -->
         <div class="card">
@@ -151,12 +158,127 @@
 
         // ── POPULATE HEADER ──
         const initials = currentUser.username.slice(0, 2).toUpperCase();
-        document.getElementById('settings-avatar').textContent   = initials;
+        document.getElementById('settings-avatar-initials').textContent = initials;
         document.getElementById('settings-username').textContent = currentUser.username.toUpperCase();
 
         const roleBadge = document.getElementById('settings-role-badge');
         roleBadge.textContent = currentUser.role.toUpperCase();
         roleBadge.classList.add('role-badge', `role-badge--${currentUser.role}`);
+
+        // ── PROFILE PICTURE ──
+        const avatarImgEl   = document.getElementById('settings-avatar-img');
+        const avatarInitEl  = document.getElementById('settings-avatar-initials');
+        const avatarBadgeEl = document.getElementById('settings-avatar-badge');
+        const avatarRemoveEl = document.getElementById('avatar-remove-btn');
+        const avatarFileEl  = document.getElementById('avatar-file-input');
+        const avatarMsgEl   = document.getElementById('avatar-msg');
+
+        function showAvatarMsg(text, color) {
+            avatarMsgEl.textContent = text;
+            avatarMsgEl.style.color = color;
+            setTimeout(() => avatarMsgEl.textContent = '', 4000);
+        }
+
+        function renderAvatar(url) {
+            if (url) {
+                avatarImgEl.src = url;
+                avatarImgEl.style.display  = 'block';
+                avatarInitEl.style.display = 'none';
+                avatarRemoveEl.style.display = currentUser.player_id ? 'block' : 'none';
+            } else {
+                avatarImgEl.style.display  = 'none';
+                avatarInitEl.style.display = 'flex';
+                avatarRemoveEl.style.display = 'none';
+            }
+        }
+
+        // Only members/admins have a linked player — ipad accounts can't upload a picture
+        if (currentUser.player_id) {
+            document.getElementById('settings-avatar').style.cursor = 'pointer';
+            avatarBadgeEl.style.display = 'flex';
+            document.getElementById('settings-avatar').onclick = () => avatarFileEl.click();
+            avatarBadgeEl.onclick = () => avatarFileEl.click();
+
+            supa.from('players').select('avatar_url').eq('id', currentUser.player_id).single()
+                .then(({ data }) => renderAvatar(data?.avatar_url || null));
+
+            // Crop to a centered square and downscale before upload — keeps files
+            // small and guarantees a clean circular crop regardless of source shape.
+            function cropToSquareJpeg(file, size) {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                        const img = new Image();
+                        img.onload = () => {
+                            const side = Math.min(img.width, img.height);
+                            const sx = (img.width - side) / 2;
+                            const sy = (img.height - side) / 2;
+                            const canvas = document.createElement('canvas');
+                            canvas.width = size;
+                            canvas.height = size;
+                            canvas.getContext('2d').drawImage(img, sx, sy, side, side, 0, 0, size, size);
+                            canvas.toBlob(
+                                blob => blob ? resolve(blob) : reject(new Error('Bildverarbeitung fehlgeschlagen')),
+                                'image/jpeg', 0.88
+                            );
+                        };
+                        img.onerror = () => reject(new Error('Bild konnte nicht gelesen werden'));
+                        img.src = reader.result;
+                    };
+                    reader.onerror = () => reject(new Error('Datei konnte nicht gelesen werden'));
+                    reader.readAsDataURL(file);
+                });
+            }
+
+            avatarFileEl.addEventListener('change', async (ev) => {
+                const file = ev.target.files[0];
+                avatarFileEl.value = ''; // allow re-selecting the same file later
+                if (!file) return;
+
+                if (!file.type.startsWith('image/')) {
+                    return showAvatarMsg('Bitte ein Bild auswählen.', 'var(--red)');
+                }
+                if (file.size > 8 * 1024 * 1024) {
+                    return showAvatarMsg('Bild ist zu groß (max. 8 MB).', 'var(--red)');
+                }
+
+                showAvatarMsg('Bild wird hochgeladen…', 'var(--text-secondary)');
+                try {
+                    const blob = await cropToSquareJpeg(file, 480);
+                    const path = `${currentUser.player_id}.jpg`;
+
+                    const { error: upErr } = await supa.storage
+                        .from('avatars')
+                        .upload(path, blob, { contentType: 'image/jpeg', upsert: true });
+                    if (upErr) throw upErr;
+
+                    const { data: pub } = supa.storage.from('avatars').getPublicUrl(path);
+                    const avatarUrl = pub.publicUrl + '?t=' + Date.now();
+
+                    const { error: dbErr } = await supa.from('players')
+                        .update({ avatar_url: avatarUrl })
+                        .eq('id', currentUser.player_id);
+                    if (dbErr) throw dbErr;
+
+                    renderAvatar(avatarUrl);
+                    showAvatarMsg('Profilbild aktualisiert!', 'var(--green)');
+                } catch (e) {
+                    showAvatarMsg('Fehler: ' + e.message, 'var(--red)');
+                }
+            });
+
+            avatarRemoveEl.onclick = async () => {
+                const ok = await showConfirm('Profilbild entfernen', 'Dein Profilbild wirklich entfernen?');
+                if (!ok) return;
+                const { error } = await supa.from('players')
+                    .update({ avatar_url: null })
+                    .eq('id', currentUser.player_id);
+                if (error) return showAvatarMsg('Fehler: ' + error.message, 'var(--red)');
+                await supa.storage.from('avatars').remove([`${currentUser.player_id}.jpg`]);
+                renderAvatar(null);
+                showAvatarMsg('Profilbild entfernt.', 'var(--green)');
+            };
+        }
 
         // ── CHANGE PASSWORD ──
         async function changePassword() {
