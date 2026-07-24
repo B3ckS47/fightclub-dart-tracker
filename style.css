@@ -77,6 +77,13 @@
 /* ── RESET & BASE ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* Kill double-tap-to-zoom on interactive elements (rapid double taps on the
+   same numpad key during scoring were triggering a browser zoom instead of
+   two inputs). Pinch-zoom stays available for accessibility. */
+button, a, input, select, .btn, .key-btn {
+    touch-action: manipulation;
+}
+
 html { scroll-behavior: smooth; }
 
 body {
