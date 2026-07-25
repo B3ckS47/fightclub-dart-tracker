@@ -28,6 +28,128 @@ function updateDropdowns() {
     const p2 = document.getElementById('p2-select');
     if (p2 && sortedPlayers.length > 1) p2.selectedIndex = 1;
     refreshGameDropdowns();
+    if (typeof refreshBotMemberCarousel === 'function') refreshBotMemberCarousel();
+}
+
+// ── TRAINING MODE (vs. bot) ──
+function setOpponentType(type) {
+    const isBot = type === 'bot';
+    document.getElementById('opp-member').classList.toggle('game-type-btn--active', !isBot);
+    document.getElementById('opp-bot').classList.toggle('game-type-btn--active', isBot);
+
+    if (isBot && gameState.gameType !== 'singles') setGameType('singles');
+
+    // Training is always "you vs. the app", 1-on-1 — no need to ask
+    // Einzel/Doppel or show a player picker at all
+    document.getElementById('game-type-selector-wrap').style.display = isBot ? 'none' : '';
+    document.getElementById('game-type-divider').style.display       = isBot ? 'none' : '';
+    document.getElementById('singles-select').style.display = isBot ? 'none' : 'flex';
+
+    document.getElementById('training-config').style.display    = isBot ? '' : 'none';
+    document.getElementById('game-mode-selector').style.display  = isBot ? 'none' : '';
+
+    if (isBot) refreshBotMemberCarousel();
+}
+
+function setBotStrengthMode(mode) {
+    document.getElementById('bot-mode-custom').classList.toggle('game-type-btn--active', mode === 'custom');
+    document.getElementById('bot-mode-member').classList.toggle('game-type-btn--active', mode === 'member');
+    document.getElementById('bot-custom-panel').style.display = mode === 'custom' ? '' : 'none';
+    document.getElementById('bot-member-panel').style.display = mode === 'member' ? '' : 'none';
+}
+
+function syncBotAvgFromSlider(val) {
+    document.getElementById('bot-target-avg-input').value = val;
+}
+function syncBotAvgFromNumber(val) {
+    const clamped = Math.min(100, Math.max(20, parseInt(val) || 20));
+    document.getElementById('bot-target-avg-slider').value = clamped;
+}
+
+// ── "WIE MITGLIED" CARD PICKER (weakest → strongest, left to right) ──
+let selectedBotMemberName = null;
+
+function refreshBotMemberCarousel() {
+    const el = document.getElementById('bot-member-carousel');
+    if (!el) return;
+    const sortedPlayers = players
+        .filter(p => p.isMember) // guests can't be mirrored — same flag used to split Mitglieder/Gäste on the dashboard
+        .sort((a, b) => parseFloat(a.stats.avgGame) - parseFloat(b.stats.avgGame)); // weakest -> strongest
+
+    el.innerHTML = sortedPlayers.map(p => {
+        const avg      = parseFloat(p.stats.avgGame).toFixed(2);
+        const initials = (p.name || '?').slice(0, 2).toUpperCase();
+        const inner    = p.avatar_url ? `<img src="${p.avatar_url}" alt="">` : `<span>${initials}</span>`;
+        return `
+<div class="bot-member-card" data-name="${escHtmlGame(p.name)}">
+    <div class="bot-member-card-avatar">${inner}</div>
+    <div class="bot-member-card-name">${escHtmlGame(p.name)}</div>
+    <div class="bot-member-card-avg">Ø ${avg}</div>
+</div>`;
+    }).join('');
+
+    // Keep the current selection if that member is still in the list, else default to the weakest (leftmost)
+    const stillPresent = sortedPlayers.find(p => p.name === selectedBotMemberName);
+    if (sortedPlayers.length > 0) selectBotMember(stillPresent ? stillPresent.name : sortedPlayers[0].name);
+}
+
+function selectBotMember(name) {
+    selectedBotMemberName = name;
+    document.querySelectorAll('.bot-member-card').forEach(c => {
+        c.classList.toggle('bot-member-card--active', c.dataset.name === name);
+    });
+}
+
+// Click delegation — the container is already in the HTML by the time this
+// script runs (it's loaded at the end of <body>), so no need to wait for
+// DOMContentLoaded here.
+(() => {
+    const carousel = document.getElementById('bot-member-carousel');
+    if (!carousel) return;
+    carousel.addEventListener('click', (e) => {
+        const card = e.target.closest('.bot-member-card');
+        if (card) selectBotMember(card.dataset.name);
+    });
+})();
+
+// "Zufall" — a light chases across the cards, slowing down, and lands on a
+// random member. Same visual idea as a raffle/case-opening reveal, built
+// with plain DOM/CSS (no external assets).
+function spinRandomBotMember() {
+    const cards = [...document.querySelectorAll('.bot-member-card')];
+    if (cards.length === 0) return;
+    const btn = document.getElementById('bot-random-btn');
+    btn.disabled = true;
+
+    const finalIndex = Math.floor(Math.random() * cards.length);
+    const totalSteps = cards.length * 3 + finalIndex; // at least a couple full sweeps before landing
+    let step = 0;
+
+    function tick() {
+        const idx = step % cards.length;
+        cards.forEach(c => c.classList.remove('bot-member-card--active'));
+        cards[idx].classList.add('bot-member-card--active');
+        cards[idx].scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+
+        if (step >= totalSteps) {
+            selectBotMember(cards[finalIndex].dataset.name);
+            btn.disabled = false;
+            return;
+        }
+        step++;
+        const progress = step / totalSteps;
+        const delay = 40 + Math.pow(progress, 3) * 260; // eases out from ~40ms to ~300ms between steps
+        setTimeout(tick, delay);
+    }
+    tick();
+}
+
+function escHtmlGame(str) {
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
 }
 
 function refreshGameDropdowns() {
@@ -209,6 +331,7 @@ function cancelExit() {
 }
 
 function doExitGame() {
+    if (typeof clearPendingBotTurn === 'function') clearPendingBotTurn(); // cancel any pending bot throw when leaving the game
     if (typeof clearLiveState === 'function') clearLiveState();
     // If launched from a tournament, go back to the tournament view
     const tournId = new URLSearchParams(window.location.search).get('tournament_id');

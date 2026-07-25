@@ -511,9 +511,17 @@ function makePlayerStats() {
     };
 }
 
+// ── TRAINING MODE (vs. bot) ──
+const BOT_ICON = '🤖'; // every bot display name starts with this — used to detect the bot side in vsAvatarHtml()
+let pendingBotTurnTimer = null; // setTimeout handle — kept OUTSIDE gameState (not JSON-serializable, not part of undo)
+
 let gameState = {
     gameType: 'singles',
     isOfficial: true,
+    opponentType: 'member',    // 'member' | 'bot'
+    botTargetAvg: null,        // bot's target 3-dart average, when opponentType === 'bot'
+    botStrengthMode: null,     // 'custom' | 'member' — informational only
+    botSourceMemberName: null, // mirrored member's name, when botStrengthMode === 'member'
     pNames: ["P1", "P2"],
     startScore: 501,
     scores: [501, 501],
@@ -537,6 +545,21 @@ window.addEventListener('DOMContentLoaded', () => {
 
 // ── VS INTRO ANIMATION ──
 function vsAvatarHtml(name) {
+    if (name.startsWith(BOT_ICON)) {
+        // Mirroring a member's strength: show THEIR photo/initials with a
+        // small robot badge overlaid, instead of the generic bot icon.
+        const memberObj = gameState.botSourceMemberName
+            ? players.find(pl => pl.name === gameState.botSourceMemberName)
+            : null;
+        if (!memberObj) {
+            return `<div class="vs-intro-avatar vs-intro-avatar--bot"><span>${BOT_ICON}</span></div>`;
+        }
+        const inner = memberObj.avatar_url
+            ? `<img src="${memberObj.avatar_url}" alt="">`
+            : `<span>${memberObj.name.slice(0, 2).toUpperCase()}</span>`;
+        // No badge overlay — the "🤖 " name label already makes it clear this is the bot
+        return `<div class="vs-intro-avatar vs-intro-avatar--bot">${inner}</div>`;
+    }
     const p        = players.find(pl => pl.name === name);
     const initials = (name || '?').slice(0, 2).toUpperCase();
     return p && p.avatar_url
@@ -558,8 +581,9 @@ function vsMatchTagsHtml() {
     const checkoutLabel = gameState.mode === 'single' ? 'Single Out' : 'Double Out';
     const legsLabel     = `First to ${gameState.targetLegs} ${gameState.targetLegs === 1 ? 'Leg' : 'Legs'}`;
     const officialLabel = gameState.isOfficial ? '🏆 Offiziell' : '🎉 Spaßspiel';
-    return [typeLabel, gameState.startScore, checkoutLabel, legsLabel, officialLabel]
-        .map(t => `<span class="vs-intro-tag">${t}</span>`).join('');
+    const tags = [typeLabel, gameState.startScore, checkoutLabel, legsLabel, officialLabel];
+    if (gameState.opponentType === 'bot') tags.push(`🤖 Training Ø${gameState.botTargetAvg}`);
+    return tags.map(t => `<span class="vs-intro-tag">${t}</span>`).join('');
 }
 
 // Shows both players'/teams' pictures with a short entrance animation.
@@ -598,18 +622,33 @@ function setGameType(type) {
 }
 
 async function startGame() {
+    clearPendingBotTurn(); // discard any leftover timer from a previous game
+    const opponentType = document.getElementById('opp-bot').classList.contains('game-type-btn--active') ? 'bot' : 'member';
+
     const startVal  = parseInt(document.getElementById('start-score-select').value);
     const legTarget = parseInt(document.getElementById('legs-to-win-select').value);
     const mode      = document.getElementById('checkout-mode-select').value;
 
     if (gameState.gameType === 'singles') {
-        const p1 = document.getElementById('p1-select').value;
-        const p2 = document.getElementById('p2-select').value;
-        if (!p1 || !p2)  { await showAlert('Spieler fehlt', 'Bitte zwei Spieler auswählen!'); return; }
-        if (p1 === p2)   { await showAlert('Gleicher Spieler', 'Bitte zwei verschiedene Spieler auswählen!'); return; }
-        gameState.pNames      = [p1, p2];
-        gameState.teamPlayers = [[p1], [p2]];
-        gameState.stats       = [makePlayerStats(), makePlayerStats()];
+        if (opponentType === 'bot') {
+            // Training is always "the logged-in member vs. the app" — no opponent picker needed
+            const raw         = fcGetUser();
+            const currentUser = raw ? JSON.parse(raw) : null;
+            const myPlayer    = currentUser && currentUser.player_id ? players.find(p => p.id === currentUser.player_id) : null;
+            if (!myPlayer) { await showAlert('Kein Profil verknüpft', 'Dein Konto ist mit keinem Spieler-Profil verknüpft.'); return; }
+            const p1 = myPlayer.name;
+            gameState.pNames      = [p1, `${BOT_ICON} Training`]; // bot label is finalized below once strength mode is known
+            gameState.teamPlayers = [[p1], [`${BOT_ICON} Training`]];
+            gameState.stats       = [makePlayerStats(), makePlayerStats()];
+        } else {
+            const p1 = document.getElementById('p1-select').value;
+            const p2 = document.getElementById('p2-select').value;
+            if (!p1 || !p2)  { await showAlert('Spieler fehlt', 'Bitte zwei Spieler auswählen!'); return; }
+            if (p1 === p2)   { await showAlert('Gleicher Spieler', 'Bitte zwei verschiedene Spieler auswählen!'); return; }
+            gameState.pNames      = [p1, p2];
+            gameState.teamPlayers = [[p1], [p2]];
+            gameState.stats       = [makePlayerStats(), makePlayerStats()];
+        }
     } else {
         const t1p1 = document.getElementById('t1p1-select').value;
         const t1p2 = document.getElementById('t1p2-select').value;
@@ -630,7 +669,35 @@ async function startGame() {
     gameState.currentIdx    = 0;
     gameState.teamPlayerIdx = [0, 0];
     gameState.mode          = mode;
-    gameState.isOfficial    = document.getElementById('game-official-btn').classList.contains('game-type-btn--active');
+    gameState.opponentType  = opponentType;
+    gameState.isOfficial    = opponentType === 'bot'
+        ? false   // training games are never official — regardless of any stale toggle state
+        : document.getElementById('game-official-btn').classList.contains('game-type-btn--active');
+
+    if (opponentType === 'bot') {
+        const strengthMode = document.getElementById('bot-mode-member').classList.contains('game-type-btn--active') ? 'member' : 'custom';
+        gameState.botStrengthMode = strengthMode;
+        if (strengthMode === 'member') {
+            const memberName = typeof selectedBotMemberName !== 'undefined' ? selectedBotMemberName : null;
+            const memberObj  = players.find(p => p.name === memberName);
+            gameState.botSourceMemberName = memberName || null;
+            gameState.botTargetAvg = memberObj ? parseFloat(memberObj.stats.avgGame) : 45; // avgGame is a string (toFixed) — parseFloat needed
+            if (!gameState.botTargetAvg || isNaN(gameState.botTargetAvg) || gameState.botTargetAvg <= 0) gameState.botTargetAvg = 45;
+            const botLabel = memberName ? `${BOT_ICON} ${memberName}` : `${BOT_ICON} Training`;
+            gameState.pNames[1]      = botLabel;
+            gameState.teamPlayers[1] = [botLabel];
+        } else {
+            gameState.botSourceMemberName = null;
+            gameState.botTargetAvg = parseInt(document.getElementById('bot-target-avg-input').value) || 45;
+            gameState.pNames[1]      = `${BOT_ICON} Training`;
+            gameState.teamPlayers[1] = [`${BOT_ICON} Training`];
+        }
+    } else {
+        gameState.botTargetAvg = null;
+        gameState.botStrengthMode = null;
+        gameState.botSourceMemberName = null;
+    }
+
     gameState.logs          = [];
     gameState.ausbullenActive = true; // block input until starter is chosen
 
@@ -659,6 +726,87 @@ function quickScore(val) {
     gameState.input = String(val);
     document.getElementById('input-preview').innerText = gameState.input;
     submitTurn();
+}
+
+// ── TRAINING MODE: BOT THROW GENERATION ──
+// Produces a plausible 3-dart visit score (0–180). No checkout-route logic —
+// the number goes straight through quickScore() into the existing
+// submitTurn() pipeline, so bust/finish/stats "just work" unchanged.
+function generateBotThrow(targetAvg, remainingScore) {
+    const avg = Math.max(15, Math.min(140, targetAvg || 45));
+
+    function randNormal(mean, sd) {
+        let u = 0, v = 0;
+        while (u === 0) u = Math.random();
+        while (v === 0) v = Math.random();
+        return mean + sd * Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+    }
+
+    // Checkout attempt: only relevant when actually in finishing range (≤170).
+    // Conversion chance scales with skill and drops the further out the
+    // remaining score is — realistically often takes several visits,
+    // especially for weaker players, rather than finishing on the first go.
+    if (remainingScore > 1 && remainingScore <= 170) {
+        let checkoutChance = Math.max(0.12, Math.min(0.55, (avg - 10) / 100));
+        if (remainingScore > 100)      checkoutChance *= 0.3;
+        else if (remainingScore > 60)  checkoutChance *= 0.55;
+        else if (remainingScore > 40)  checkoutChance *= 0.8;
+        if (Math.random() < Math.max(0.06, Math.min(0.65, checkoutChance))) {
+            return remainingScore;
+        }
+    }
+
+    // Normal visit — a small mixture so most throws cluster tightly around
+    // the player's real average (previously the spread was nearly as wide
+    // as the average itself, which made both 0s and huge outliers far too
+    // common). Occasionally a genuinely great or poor visit still happens.
+    const coreSd = Math.max(8, Math.min(16, avg * 0.28));
+    const roll = Math.random();
+    let score;
+    if (roll < 0.05) {
+        // Rare great visit (big treble run, maybe even a ton+)
+        score = randNormal(Math.min(160, avg + 70), 20);
+    } else if (roll < 0.09) {
+        // Rare poor visit (off night, bad miss) — the only realistic path to a very low score
+        score = randNormal(Math.max(8, avg * 0.35), 10);
+    } else {
+        score = randNormal(avg, coreSd);
+    }
+
+    return Math.max(0, Math.min(180, Math.round(score)));
+}
+
+function clearPendingBotTurn() {
+    if (pendingBotTurnTimer) {
+        clearTimeout(pendingBotTurnTimer);
+        pendingBotTurnTimer = null;
+    }
+}
+
+// Call after any state change that might hand the turn to the bot. Fully
+// guarded / safe to call unconditionally from every hook point.
+function maybeTriggerBotTurn() {
+    clearPendingBotTurn(); // never allow two scheduled bot turns to stack
+
+    if (gameState.opponentType !== 'bot') return;
+    if (gameState.currentIdx !== 1) return;               // bot is always teamIdx 1
+    if (gameState.ausbullenActive) return;                  // starter picker open
+    if (gameState.scores[0] === 0 || gameState.scores[1] === 0) return; // a leg just ended, a modal is (about to be) shown
+    if (document.getElementById('leg-modal-overlay').style.display === 'flex') return;
+    if (document.getElementById('match-modal-overlay').style.display === 'flex') return;
+    if (document.getElementById('exit-modal-overlay').style.display === 'flex') return;
+
+    pendingBotTurnTimer = setTimeout(() => {
+        pendingBotTurnTimer = null;
+        // Re-validate right before throwing — cheap extra safety on top of
+        // clearPendingBotTurn(), in case state changed during the delay.
+        if (gameState.opponentType !== 'bot' || gameState.currentIdx !== 1 || gameState.ausbullenActive) return;
+        if (document.getElementById('leg-modal-overlay').style.display === 'flex') return;
+        if (document.getElementById('match-modal-overlay').style.display === 'flex') return;
+        if (document.getElementById('exit-modal-overlay').style.display === 'flex') return;
+
+        quickScore(generateBotThrow(gameState.botTargetAvg, gameState.scores[1]));
+    }, 1000 + Math.random() * 800); // ~1000–1800ms "thinking" delay
 }
 
 async function submitTurn() {
@@ -799,9 +947,12 @@ async function submitTurn() {
 
     // Push live state after every official turn
     if (gameState.isOfficial) pushLiveState();
+
+    maybeTriggerBotTurn();
 }
 
 function undoMove() {
+    clearPendingBotTurn(); // cancel any scheduled bot throw before rewinding state
     if (gameState.logs.length === 0) return;
     const lastSnapshot = gameState.logs.pop();
     const currentLogs  = gameState.logs;
@@ -979,6 +1130,28 @@ function clearInput() {
     document.getElementById('input-preview').innerText = "0";
 }
 
+// ── PHYSICAL KEYBOARD SCORING (numpad digits + Enter/Backspace) ──
+// Mirrors the on-screen numpad: digit keys feed pressKey(), Enter submits,
+// Backspace/Delete clears the current input (same as the "C" button).
+// Only active while a game is actually in progress, and never hijacks a
+// real form field (e.g. the training-setup inputs) that happens to have focus.
+document.addEventListener('keydown', (e) => {
+    if (document.getElementById('active-game-view').style.display === 'none') return;
+    const tag = document.activeElement && document.activeElement.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+
+    if (e.key >= '0' && e.key <= '9') {
+        e.preventDefault();
+        pressKey(e.key);
+    } else if (e.key === 'Enter') {
+        e.preventDefault();
+        submitTurn();
+    } else if (e.key === 'Backspace' || e.key === 'Delete') {
+        e.preventDefault();
+        clearInput();
+    }
+});
+
 function resetForNextLeg() {
     const startVal = gameState.startScore;
     gameState.scores  = [startVal, startVal];
@@ -991,6 +1164,7 @@ function resetForNextLeg() {
     }
     gameState.input = "";
     refreshDisplay();
+    maybeTriggerBotTurn();
 }
 
 // ── STARTER SELECTION ──
@@ -999,6 +1173,7 @@ function selectStarter(teamIdx) {
     gameState.legStarter  = teamIdx;
     gameState.currentIdx  = teamIdx;
     refreshDisplay();
+    maybeTriggerBotTurn();
 }
 
 // ── AUSBULLEN ──

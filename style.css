@@ -1198,6 +1198,121 @@ body {
 }
 .game-type-sub { font-size: 0.7rem; color: var(--text-muted); letter-spacing: 1px; }
 
+/* ── TRAINING MODE (vs. bot) ── */
+.training-subpanel { margin: 4px 0 16px; }
+.training-subpanel-label { display:block; font-size:0.78rem; letter-spacing:1px; color: var(--text-secondary); margin-bottom: 6px; }
+.training-avg-row { display:flex; align-items:center; gap:12px; }
+.training-avg-row #bot-target-avg-input { width: 80px; text-align:center; }
+
+/* Green (easy) → red (hard) gradient track for the bot-strength slider */
+.training-avg-row input[type=range] {
+    flex: 1;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 8px;
+    border-radius: 4px;
+    background: linear-gradient(to right, var(--green) 0%, #f5a623 50%, var(--red) 100%);
+    outline: none;
+    cursor: pointer;
+}
+.training-avg-row input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--text-primary);
+    border: 2px solid var(--bg);
+    box-shadow: 0 0 0 2px var(--accent);
+    cursor: pointer;
+}
+.training-avg-row input[type=range]::-moz-range-track {
+    height: 8px;
+    border-radius: 4px;
+    background: linear-gradient(to right, var(--green) 0%, #f5a623 50%, var(--red) 100%);
+}
+.training-avg-row input[type=range]::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--text-primary);
+    border: 2px solid var(--bg);
+    box-shadow: 0 0 0 2px var(--accent);
+    cursor: pointer;
+}
+/* "Wie Mitglied" card picker — weakest to strongest, left to right */
+.bot-member-carousel {
+    display: flex;
+    gap: 12px;
+    overflow-x: auto;
+    padding: 4px 2px 10px;
+    scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch;
+}
+.bot-member-card {
+    flex: 0 0 auto;
+    width: 84px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 4px;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    scroll-snap-align: center;
+    transition: transform 0.12s ease;
+}
+.bot-member-card:active { transform: scale(0.95); }
+.bot-member-card-avatar {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: var(--bg-card);
+    border: 2px solid var(--border-light);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 0.95rem;
+    color: var(--text-secondary);
+    overflow: hidden;
+    transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+.bot-member-card-avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+.bot-member-card-name {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    max-width: 84px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: center;
+}
+.bot-member-card-avg { font-size: 0.68rem; color: var(--text-muted); }
+
+.bot-member-card--active .bot-member-card-avatar {
+    border-color: var(--accent);
+    box-shadow: 0 0 14px var(--accent-glow);
+}
+.bot-member-card--active .bot-member-card-name { color: var(--text-primary); }
+.vs-intro-avatar--bot { background: var(--accent-dim); }
+
+/* Tablet: wrap into 2-3 rows instead of one long horizontal scroll strip —
+   the right-hand setup column has the width to spare */
+@media (min-width: 768px) {
+    .bot-member-carousel {
+        flex-wrap: wrap;
+        overflow-x: visible;
+        justify-content: flex-start;
+    }
+    .bot-member-card { width: 92px; }
+    .bot-member-card-avatar { width: 68px; height: 68px; font-size: 1.1rem; }
+    .bot-member-card-name { font-size: 0.78rem; max-width: 92px; }
+    .bot-member-card-avg { font-size: 0.72rem; }
+}
+
 /* ── DOUBLES PLAYER SELECT ── */
 .doubles-team-block {
     display: flex;
@@ -1280,45 +1395,46 @@ body {
     .nav-brand  { font-size: 1.35rem; }
     .nav-btn    { font-size: 1rem; padding: 9px 24px; }
 
-    /* ── SETUP PAGE — two-column card ── */
+    /* ── SETUP PAGE — two-column card ──
+       Two independent flex columns (.setup-col-left / .setup-col-right)
+       instead of manually-numbered grid rows — each column just stacks its
+       own content top-to-bottom, so adding/removing items in one column
+       never requires re-numbering anything in the other. */
     #setup-view {
         display: grid;
         grid-template-columns: 1fr 1fr;
-        grid-template-rows: auto;
         column-gap: 40px;
         align-items: start;
         padding: 36px 40px;
     }
 
-    /* Title spans both columns */
-    #setup-view .card-title {
+    /* Title, first divider, and the opponent selector all sit above the
+       two columns and span the full width */
+    #setup-view .card-title,
+    #setup-view > .divider:first-of-type,
+    #opponent-type-selector,
+    #opponent-type-selector + .divider {
         grid-column: 1 / -1;
+    }
+
+    #setup-view .card-title {
         font-size: 2rem;
         margin-bottom: 0;
     }
 
-    /* First divider spans both columns */
-    #setup-view .divider:first-of-type {
-        grid-column: 1 / -1;
+    .setup-col-left, .setup-col-right {
+        display: flex;
+        flex-direction: column;
     }
 
-    /* Game type selector — left column */
-    .game-type-selector { grid-column: 1; margin-bottom: 20px; }
+    /* Only needed when the columns are stacked (mobile) — the grid's
+       column-gap separates them visually at tablet width instead */
+    #columns-divider { display: none; }
 
-    /* Divider after game type — left column only */
-    #setup-view .divider:nth-of-type(2) { grid-column: 1; margin: 16px 0; }
+    .game-type-selector { margin-bottom: 20px; }
 
-    /* Player selects — left column */
-    #singles-select  { grid-column: 1; }
-    #doubles-select  { grid-column: 1; }
-
-    /* Divider before options — right column start */
-    #setup-view .divider:nth-of-type(3) { display: none; }
-
-    /* Options row — right column */
+    /* Options row */
     .options-row {
-        grid-column: 2;
-        grid-row: 3 / 6;
         flex-direction: column;
         align-items: stretch;
         justify-content: flex-start;
@@ -1339,11 +1455,8 @@ body {
         padding: 8px 0 4px;
     }
 
-    /* Start button — right column bottom */
+    /* Start button — bottom of the right column */
     #setup-view .btn-primary {
-        grid-column: 2;
-        grid-row: 6;
-        align-self: end;
         font-size: 1.3rem;
         padding: 18px;
         margin-top: 20px;

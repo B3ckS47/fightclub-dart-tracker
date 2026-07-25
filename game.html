@@ -47,70 +47,125 @@
             <h2 class="card-title">NEUES SPIEL</h2>
             <div class="divider"></div>
 
-            <!-- Game Type Selector -->
-            <div class="game-type-selector">
-                <button id="type-singles" class="game-type-btn game-type-btn--active" onclick="setGameType('singles')">
+            <!-- Opponent Selector -->
+            <div class="game-type-selector" id="opponent-type-selector">
+                <button type="button" id="opp-member" class="game-type-btn game-type-btn--active" onclick="setOpponentType('member')">
                     <span class="game-type-icon">👤</span>
-                    <span class="game-type-label">EINZEL</span>
-                    <span class="game-type-sub">1 vs 1</span>
+                    <span class="game-type-label">MITGLIED</span>
+                    <span class="game-type-sub">vs. Spieler</span>
                 </button>
-                <button id="type-doubles" class="game-type-btn" onclick="setGameType('doubles')">
-                    <span class="game-type-icon">👥</span>
-                    <span class="game-type-label">DOPPEL</span>
-                    <span class="game-type-sub">2 vs 2</span>
+                <button type="button" id="opp-bot" class="game-type-btn" onclick="setOpponentType('bot')">
+                    <span class="game-type-icon">🤖</span>
+                    <span class="game-type-label">TRAINING</span>
+                    <span class="game-type-sub">vs. App</span>
                 </button>
             </div>
-
             <div class="divider"></div>
 
-            <!-- Singles Player Select -->
-            <div id="singles-select" class="vs-block">
-                <select id="p1-select" class="select-field"><option>Loading...</option></select>
-                <span class="vs-label">VS</span>
-                <select id="p2-select" class="select-field"><option>Loading...</option></select>
-            </div>
-
-            <!-- Doubles Player Select -->
-            <div id="doubles-select" style="display:none; flex-direction:column; align-items:center;">
-                <div class="doubles-team-block">
-                    <div class="doubles-team-label team-label--1">TEAM 1</div>
-                    <select id="t1p1-select" class="select-field"><option>Loading...</option></select>
-                    <select id="t1p2-select" class="select-field" style="margin-top:8px;"><option>Loading...</option></select>
+            <!-- Left column (tablet): Einzel/Doppel + player picker -->
+            <div class="setup-col-left">
+                <!-- Game Type Selector — hidden entirely in Training mode, which is always Einzel -->
+                <div class="game-type-selector" id="game-type-selector-wrap">
+                    <button id="type-singles" class="game-type-btn game-type-btn--active" onclick="setGameType('singles')">
+                        <span class="game-type-icon">👤</span>
+                        <span class="game-type-label">EINZEL</span>
+                        <span class="game-type-sub">1 vs 1</span>
+                    </button>
+                    <button id="type-doubles" class="game-type-btn" onclick="setGameType('doubles')">
+                        <span class="game-type-icon">👥</span>
+                        <span class="game-type-label">DOPPEL</span>
+                        <span class="game-type-sub">2 vs 2</span>
+                    </button>
                 </div>
-                <div class="vs-label" style="margin: 12px 0;">VS</div>
-                <div class="doubles-team-block">
-                    <div class="doubles-team-label team-label--2">TEAM 2</div>
-                    <select id="t2p1-select" class="select-field"><option>Loading...</option></select>
-                    <select id="t2p2-select" class="select-field" style="margin-top:8px;"><option>Loading...</option></select>
+
+                <div class="divider" id="game-type-divider"></div>
+
+                <!-- Singles Player Select -->
+                <div id="singles-select" class="vs-block">
+                    <select id="p1-select" class="select-field"><option>Loading...</option></select>
+                    <span class="vs-label">VS</span>
+                    <select id="p2-select" class="select-field"><option>Loading...</option></select>
+                </div>
+
+                <!-- Doubles Player Select -->
+                <div id="doubles-select" style="display:none; flex-direction:column; align-items:center;">
+                    <div class="doubles-team-block">
+                        <div class="doubles-team-label team-label--1">TEAM 1</div>
+                        <select id="t1p1-select" class="select-field"><option>Loading...</option></select>
+                        <select id="t1p2-select" class="select-field" style="margin-top:8px;"><option>Loading...</option></select>
+                    </div>
+                    <div class="vs-label" style="margin: 12px 0;">VS</div>
+                    <div class="doubles-team-block">
+                        <div class="doubles-team-label team-label--2">TEAM 2</div>
+                        <select id="t2p1-select" class="select-field"><option>Loading...</option></select>
+                        <select id="t2p2-select" class="select-field" style="margin-top:8px;"><option>Loading...</option></select>
+                    </div>
+                </div>
+
+                <!-- Training-Modus (nur sichtbar bei Gegner = App) — replaces
+                     the player picker above in this same column -->
+                <div id="training-config" style="display:none;">
+                    <div class="game-type-selector" id="bot-strength-mode-selector">
+                        <button type="button" id="bot-mode-custom" class="game-type-btn game-type-btn--active" onclick="setBotStrengthMode('custom')">
+                            <span class="game-type-icon">🎚️</span>
+                            <span class="game-type-label">EIGENE STÄRKE</span>
+                        </button>
+                        <button type="button" id="bot-mode-member" class="game-type-btn" onclick="setBotStrengthMode('member')">
+                            <span class="game-type-icon">👤</span>
+                            <span class="game-type-label">WIE MITGLIED</span>
+                        </button>
+                    </div>
+
+                    <div id="bot-custom-panel" class="training-subpanel">
+                        <label class="training-subpanel-label" for="bot-target-avg-input">Ziel-Average</label>
+                        <div class="training-avg-row">
+                            <input type="range" id="bot-target-avg-slider" min="20" max="100" step="1" value="45" oninput="syncBotAvgFromSlider(this.value)">
+                            <input type="number" id="bot-target-avg-input" class="select-field select-small" min="20" max="100" step="1" value="45" oninput="syncBotAvgFromNumber(this.value)">
+                        </div>
+                    </div>
+
+                    <div id="bot-member-panel" class="training-subpanel" style="display:none;">
+                        <label class="training-subpanel-label">Spielt wie...</label>
+                        <button type="button" id="bot-random-btn" class="btn btn-full" style="background:var(--bg-element); margin-bottom:10px;" onclick="spinRandomBotMember()">
+                            🎲 Zufälligen Gegner auslosen
+                        </button>
+                        <div id="bot-member-carousel" class="bot-member-carousel"></div>
+                    </div>
                 </div>
             </div>
 
-            <div class="divider"></div>
+            <!-- Only visible when the columns are stacked (mobile) — the tablet
+                 layout separates them with the grid's column gap instead. -->
+            <div class="divider" id="columns-divider"></div>
 
-            <div class="options-row">
-                <select id="start-score-select" class="select-field select-small">
-                    <option value="501">501</option>
-                    <option value="301">301</option>
-                </select>
-                <select id="checkout-mode-select" class="select-field select-small">
-                    <option value="double">Double Out</option>
-                    <option value="single">Single Out</option>
-                </select>
-                <select id="legs-to-win-select" class="select-field select-small">
-                    <option value="1">First to 1 Leg</option>
-                    <option value="2">First to 2 Legs</option>
-                    <option value="3">First to 3 Legs</option>
-                    <option value="5">First to 5 Legs</option>
-                </select>
+            <!-- Right column (tablet): score options + start — constant across
+                 both "Mitglied" and "Training" modes -->
+            <div class="setup-col-right">
+                <div class="options-row">
+                    <select id="start-score-select" class="select-field select-small">
+                        <option value="501">501</option>
+                        <option value="301">301</option>
+                    </select>
+                    <select id="checkout-mode-select" class="select-field select-small">
+                        <option value="double">Double Out</option>
+                        <option value="single">Single Out</option>
+                    </select>
+                    <select id="legs-to-win-select" class="select-field select-small">
+                        <option value="1">First to 1 Leg</option>
+                        <option value="2">First to 2 Legs</option>
+                        <option value="3">First to 3 Legs</option>
+                        <option value="5">First to 5 Legs</option>
+                    </select>
+                </div>
+
+                <!-- Official / Fun Game Toggle -->
+                <div class="game-type-selector" id="game-mode-selector">
+                    <button type="button" id="game-official-btn" class="game-type-btn game-type-btn--active" onclick="setGameMode(true)">🏆 Offiziell</button>
+                    <button type="button" id="game-fun-btn" class="game-type-btn" onclick="setGameMode(false)">🎉 Spaßspiel</button>
+                </div>
+
+                <button onclick="startGame()" class="btn btn-primary btn-full btn-lg">SPIEL STARTEN</button>
             </div>
-
-            <!-- Official / Fun Game Toggle -->
-            <div class="game-type-selector" id="game-mode-selector">
-                <button type="button" id="game-official-btn" class="game-type-btn game-type-btn--active" onclick="setGameMode(true)">🏆 Offiziell</button>
-                <button type="button" id="game-fun-btn" class="game-type-btn" onclick="setGameMode(false)">🎉 Spaßspiel</button>
-            </div>
-
-            <button onclick="startGame()" class="btn btn-primary btn-full btn-lg">SPIEL STARTEN</button>
         </div>
 
         <!-- ACTIVE GAME VIEW -->
