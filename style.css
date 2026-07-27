@@ -1397,6 +1397,100 @@ body {
 .bot-member-card--active .bot-member-card-name { color: var(--text-primary); }
 .vs-intro-avatar--bot { background: var(--accent-dim); }
 
+/* ── TRAINING MODE: CS:GO-style case-opening reel ("Zufälligen Gegner auslosen") ──
+   A long strip of avatars scrolls behind a masked viewport and decelerates to a
+   stop with the winner centered under the pointer — replaces the earlier
+   highlight-cycling-in-place animation. */
+.spin-reel { margin: 4px 0 10px; }
+
+.spin-reel-viewport {
+    position: relative;
+    height: 108px;
+    overflow: hidden;
+    border-radius: var(--radius-md);
+    background: var(--bg-element);
+    border: 1px solid var(--border);
+    mask-image: linear-gradient(to right, transparent 0%, black 12%, black 88%, transparent 100%);
+    -webkit-mask-image: linear-gradient(to right, transparent 0%, black 12%, black 88%, transparent 100%);
+}
+
+.spin-reel-track {
+    position: absolute;
+    top: 0;
+    left: 0;
+    display: flex;
+    height: 100%;
+    align-items: center;
+    will-change: transform;
+}
+
+.spin-reel-item {
+    flex: 0 0 84px;
+    margin: 0 6px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+}
+
+.spin-reel-item-avatar {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: var(--bg-card);
+    border: 2px solid var(--border-light);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 1rem;
+    color: var(--text-secondary);
+    overflow: hidden;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.spin-reel-item-avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+
+.spin-reel-item-name {
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    max-width: 84px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.spin-reel-item--winner .spin-reel-item-avatar {
+    border-color: var(--accent);
+    box-shadow: 0 0 20px var(--accent-glow);
+}
+.spin-reel-item--winner .spin-reel-item-name { color: var(--text-primary); }
+
+.spin-reel-pointer {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 2px;
+    height: 100%;
+    background: var(--accent);
+    box-shadow: 0 0 10px var(--accent-glow);
+    z-index: 2;
+    pointer-events: none;
+}
+.spin-reel-pointer::before,
+.spin-reel-pointer::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+}
+.spin-reel-pointer::before { top: -1px; border-top: 7px solid var(--accent); }
+.spin-reel-pointer::after  { bottom: -1px; border-bottom: 7px solid var(--accent); }
+
 /* Tablet: wrap into 2-3 rows instead of one long horizontal scroll strip —
    the right-hand setup column has the width to spare */
 @media (min-width: 768px) {

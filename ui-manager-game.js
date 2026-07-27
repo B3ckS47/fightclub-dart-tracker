@@ -132,36 +132,73 @@ function selectBotMember(name) {
     });
 })();
 
-// "Zufall" — a light chases across the cards, slowing down, and lands on a
-// random member. Same visual idea as a raffle/case-opening reveal, built
-// with plain DOM/CSS (no external assets).
+// "Zufall" — CS:GO-style case-opening reel: a long strip of avatars scrolls
+// past a fixed center pointer and decelerates to a stop exactly on the
+// (pre-determined) winner. Runs in its own masked viewport, swapped in for
+// the manual carousel for the duration of the spin.
+const SPIN_REEL_ITEM_W  = 96; // px — must match .spin-reel-item flex-basis (84) + margin (2×6)
+const SPIN_REEL_LENGTH  = 40; // total items rendered in the strip
+const SPIN_REEL_WINSLOT = SPIN_REEL_LENGTH - 6; // winner sits a few items before the end, not literally last
+
+function reelItemHtml(p) {
+    const initials = (p.name || '?').slice(0, 2).toUpperCase();
+    const inner    = p.avatar_url ? `<img src="${p.avatar_url}" alt="">` : `<span>${initials}</span>`;
+    return `
+<div class="spin-reel-item">
+    <div class="spin-reel-item-avatar">${inner}</div>
+    <div class="spin-reel-item-name">${escHtmlGame(p.name)}</div>
+</div>`;
+}
+
 function spinRandomBotMember() {
-    const cards = [...document.querySelectorAll('.bot-member-card')];
-    if (cards.length === 0) return;
+    const pool = players.filter(p => p.isMember);
+    if (pool.length === 0) return;
     const btn = document.getElementById('bot-random-btn');
+    if (btn.disabled) return; // already spinning
     btn.disabled = true;
 
-    const finalIndex = Math.floor(Math.random() * cards.length);
-    const totalSteps = cards.length * 3 + finalIndex; // at least a couple full sweeps before landing
-    let step = 0;
-
-    function tick() {
-        const idx = step % cards.length;
-        cards.forEach(c => c.classList.remove('bot-member-card--active'));
-        cards[idx].classList.add('bot-member-card--active');
-        cards[idx].scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
-
-        if (step >= totalSteps) {
-            selectBotMember(cards[finalIndex].dataset.name);
-            btn.disabled = false;
-            return;
-        }
-        step++;
-        const progress = step / totalSteps;
-        const delay = 40 + Math.pow(progress, 3) * 260; // eases out from ~40ms to ~300ms between steps
-        setTimeout(tick, delay);
+    const winner = pool[Math.floor(Math.random() * pool.length)];
+    const sequence = [];
+    for (let i = 0; i < SPIN_REEL_LENGTH; i++) {
+        sequence.push(i === SPIN_REEL_WINSLOT ? winner : pool[Math.floor(Math.random() * pool.length)]);
     }
-    tick();
+
+    const reelEl     = document.getElementById('bot-spin-reel');
+    const carouselEl = document.getElementById('bot-member-carousel');
+    const track       = document.getElementById('spin-reel-track');
+    const viewport    = reelEl.querySelector('.spin-reel-viewport');
+
+    track.style.transition = 'none';
+    track.style.transform  = 'translateX(0)';
+    track.innerHTML = sequence.map(reelItemHtml).join('');
+
+    carouselEl.style.display = 'none';
+    reelEl.style.display     = '';
+
+    const viewportW = viewport.clientWidth;
+    // Small random offset within the item so it doesn't stop at the exact
+    // same pixel every time — feels less mechanical.
+    const jitter  = (Math.random() - 0.5) * (SPIN_REEL_ITEM_W * 0.4);
+    const targetX = -(SPIN_REEL_WINSLOT * SPIN_REEL_ITEM_W + SPIN_REEL_ITEM_W / 2 - viewportW / 2) + jitter;
+
+    void track.offsetWidth; // force reflow so the transition below animates from translateX(0)
+
+    requestAnimationFrame(() => {
+        track.style.transition = 'transform 4.2s cubic-bezier(0.12, 0.85, 0.15, 1)';
+        track.style.transform  = `translateX(${targetX}px)`;
+    });
+
+    track.addEventListener('transitionend', function onEnd() {
+        track.removeEventListener('transitionend', onEnd);
+        const winnerEl = track.children[SPIN_REEL_WINSLOT];
+        if (winnerEl) winnerEl.classList.add('spin-reel-item--winner');
+        setTimeout(() => {
+            reelEl.style.display     = 'none';
+            carouselEl.style.display = '';
+            selectBotMember(winner.name);
+            btn.disabled = false;
+        }, 500); // brief pause on the winner before revealing, same beat as a real case opening
+    }, { once: true });
 }
 
 // ── ONLINE MODE: member invite picker (alphabetical, no averages) ──
