@@ -368,6 +368,8 @@ function refreshDisplay() {
             c.classList.toggle('controls--waiting', isOnline && !myTurn);
         });
     }
+    const reactionBar = document.getElementById('online-reaction-bar');
+    if (reactionBar) reactionBar.style.display = gameState.opponentType === 'online' ? 'flex' : 'none';
 }
 
 function renderHist(pIdx, elId) {

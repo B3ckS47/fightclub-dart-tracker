@@ -543,7 +543,8 @@ let gameState = {
     ausbullenActive: false,   // blocks input while modal is open
     onlineGameId: null,          // online_games.id, when opponentType === 'online'
     onlineMyTeamIdx: null,       // which team index (0/1) is "me" on this device
-    onlineAppliedVersion: 0      // highest online_games.version already applied locally
+    onlineAppliedVersion: 0,     // highest online_games.version already applied locally
+    onlineLastReactionTs: 0      // timestamp of the last emoji reaction already shown/sent
 };
 
 window.addEventListener('DOMContentLoaded', () => {
@@ -1328,6 +1329,7 @@ async function startOnlineGameFromRow(row, me) {
     gameState.onlineGameId         = row.id;
     gameState.onlineMyTeamIdx      = row.inviter_user_id === me.id ? 0 : 1;
     gameState.onlineAppliedVersion = row.version;
+    gameState.onlineLastReactionTs = (row.last_reaction && row.last_reaction.ts) || 0;
 
     const startSelect = document.getElementById('start-score-select');
     if (startSelect) startSelect.value = String(gameState.startScore);

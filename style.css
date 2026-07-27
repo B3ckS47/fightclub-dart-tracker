@@ -777,6 +777,74 @@ body {
     50%      { opacity: 1;   transform: scale(1); }
 }
 
+/* ── ONLINE MODE: emoji quick-reactions ── */
+.online-reaction-bar {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin: 12px 0 4px;
+}
+
+.reaction-btn {
+    font-size: 1.4rem;
+    line-height: 1;
+    padding: 8px 14px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--bg-element);
+    cursor: pointer;
+    transition: transform 0.1s ease, border-color 0.15s ease;
+}
+
+.reaction-btn:hover  { border-color: var(--border-light); }
+.reaction-btn:active { transform: scale(0.88); }
+
+.online-reaction-bar--cooldown .reaction-btn {
+    opacity: 0.35;
+    cursor: default;
+    transform: none;
+}
+
+/* Transient toast shown to the RECIPIENT of a reaction — deliberately not a
+   modal, so it never blocks input or steals focus while someone is throwing */
+.online-reaction-popup {
+    position: fixed;
+    top: 84px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-12px);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--accent);
+    border-radius: var(--radius-md);
+    padding: 10px 18px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.online-reaction-popup--visible {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+
+.online-reaction-popup-emoji {
+    font-size: 1.8rem;
+    line-height: 1;
+}
+
+.online-reaction-popup-name {
+    font-family: var(--font-display);
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary);
+}
+
 .input-preview-row {
     font-size: 0.9rem;
     color: var(--text-muted);

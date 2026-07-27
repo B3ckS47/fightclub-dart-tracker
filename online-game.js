@@ -199,7 +199,7 @@ async function pollOnlineGame() {
     if (!gameState.onlineGameId) return;
     const { data } = await supa
         .from('online_games')
-        .select('version,status,game_state')
+        .select('version,status,game_state,last_reaction')
         .eq('id', gameState.onlineGameId)
         .single();
     if (!data) return;
@@ -211,6 +211,17 @@ async function pollOnlineGame() {
         doExitGame();
         return;
     }
+
+    // Emoji reactions have nothing to do with move sync — checked regardless
+    // of whether the move version advanced this tick.
+    const reaction = data.last_reaction;
+    if (reaction && reaction.ts > gameState.onlineLastReactionTs) {
+        gameState.onlineLastReactionTs = reaction.ts;
+        if (reaction.teamIdx !== gameState.onlineMyTeamIdx) {
+            showOnlineReactionPopup(reaction.emoji, reaction.teamIdx);
+        }
+    }
+
     if (data.status === 'finished') { stopOnlinePolling(); return; }
     if (data.version <= gameState.onlineAppliedVersion) return;
 
@@ -260,6 +271,54 @@ async function pushOnlineState(pts, teamIdx) {
         if (error || !data) { console.warn('[Online] push conflict — next poll will reconcile'); return; }
         gameState.onlineAppliedVersion = nextVersion;
     } catch(e) { console.error('Online push error:', e); }
+}
+
+// ── EMOJI QUICK-REACTIONS ──
+// Independent of the move/version sync in pushOnlineState()/pollOnlineGame()
+// above — a reaction can happen at any time, not just on your turn, so it
+// lives in its own column instead of piggybacking on game_state/version.
+const REACTION_COOLDOWN_MS = 5000;
+let _lastReactionSentAt = 0;
+
+async function sendOnlineReaction(emoji) {
+    if (!gameState.onlineGameId) return;
+    const now = Date.now();
+    if (now - _lastReactionSentAt < REACTION_COOLDOWN_MS) return; // spam guard
+
+    _lastReactionSentAt = now;
+    setReactionBarCooldown(true);
+    setTimeout(() => setReactionBarCooldown(false), REACTION_COOLDOWN_MS);
+
+    gameState.onlineLastReactionTs = now; // don't re-show our own reaction when the next poll echoes it back
+    showOnlineReactionPopup(emoji, gameState.onlineMyTeamIdx); // instant local feedback, don't wait for the round trip
+
+    try {
+        await supa.from('online_games')
+            .update({ last_reaction: { emoji, teamIdx: gameState.onlineMyTeamIdx, ts: now } })
+            .eq('id', gameState.onlineGameId);
+    } catch(e) { console.error('Reaction send error:', e); }
+}
+
+function setReactionBarCooldown(active) {
+    const bar = document.getElementById('online-reaction-bar');
+    if (!bar) return;
+    bar.classList.toggle('online-reaction-bar--cooldown', active);
+    bar.querySelectorAll('.reaction-btn').forEach(btn => { btn.disabled = active; });
+}
+
+// Small transient toast, deliberately not a modal — reactions must never
+// block or steal focus from the numpad while someone is mid-throw.
+function showOnlineReactionPopup(emoji, teamIdx) {
+    const name = (gameState.pNames && gameState.pNames[teamIdx]) || '';
+    const el = document.createElement('div');
+    el.className = 'online-reaction-popup';
+    el.innerHTML = `<span class="online-reaction-popup-emoji">${emoji}</span><span class="online-reaction-popup-name">${_escHtmlOnline(name)}</span>`;
+    document.body.appendChild(el);
+    requestAnimationFrame(() => el.classList.add('online-reaction-popup--visible'));
+    setTimeout(() => {
+        el.classList.remove('online-reaction-popup--visible');
+        setTimeout(() => el.remove(), 350);
+    }, 1800);
 }
 
 // ── STARTSEITE (index.html): discover invites + resume active games ──
