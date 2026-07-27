@@ -59,6 +59,11 @@
                     <span class="game-type-label">TRAINING</span>
                     <span class="game-type-sub">vs. App</span>
                 </button>
+                <button type="button" id="opp-online" class="game-type-btn" onclick="setOpponentType('online')">
+                    <span class="game-type-icon">🌐</span>
+                    <span class="game-type-label">ONLINE</span>
+                    <span class="game-type-sub">vs. Fernduell</span>
+                </button>
             </div>
             <div class="divider"></div>
 
@@ -132,6 +137,20 @@
                         <div id="bot-member-carousel" class="bot-member-carousel"></div>
                     </div>
                 </div>
+
+                <!-- Online-Modus (nur sichtbar bei Gegner = Online) — replaces
+                     the player picker above in this same column -->
+                <div id="online-config" style="display:none;">
+                    <div id="online-invite-picker">
+                        <label class="training-subpanel-label">Mitglied einladen</label>
+                        <div id="online-invite-list" class="bot-member-carousel"></div>
+                    </div>
+                    <div id="online-waiting-panel" style="display:none; text-align:center; padding: 8px 0 0;">
+                        <div class="online-waiting-spinner">⏳</div>
+                        <p id="online-waiting-text" class="training-subpanel-label" style="margin-top:8px;"></p>
+                        <button type="button" class="btn btn-full" style="background:var(--bg-element); color:var(--red); border:1px solid var(--red);" onclick="cancelOnlineInvite()">EINLADUNG ABBRECHEN</button>
+                    </div>
+                </div>
             </div>
 
             <!-- Only visible when the columns are stacked (mobile) — the tablet
@@ -164,7 +183,7 @@
                     <button type="button" id="game-fun-btn" class="game-type-btn" onclick="setGameMode(false)">🎉 Spaßspiel</button>
                 </div>
 
-                <button onclick="startGame()" class="btn btn-primary btn-full btn-lg">SPIEL STARTEN</button>
+                <button id="start-game-btn" onclick="onStartButtonClick()" class="btn btn-primary btn-full btn-lg">SPIEL STARTEN</button>
             </div>
         </div>
 
@@ -230,6 +249,7 @@
 
             <!-- RIGHT: Input Pad -->
             <div class="input-pad">
+                <div id="online-waiting-banner" class="online-waiting-banner" style="display:none;">⏳ Warte auf Gegner…</div>
                 <div class="input-preview-row">
                     Eingabe: <span id="input-preview" class="input-preview-value">0</span>
                 </div>
@@ -297,7 +317,7 @@
                 <div class="vs-intro-name" id="vs-intro-name-p2"></div>
             </div>
         </div>
-        <p class="vs-intro-subtitle">Wer beginnt mit dem ersten Wurf? Auf das Bild tippen.</p>
+        <p class="vs-intro-subtitle" id="vs-intro-subtitle">Wer beginnt mit dem ersten Wurf? Auf das Bild tippen.</p>
         <div class="vs-intro-tags" id="vs-intro-tags"></div>
     </div>
 
@@ -329,7 +349,7 @@
     <!-- ── LEG WON MODAL ── -->
     <div id="leg-modal-overlay" class="ausbullen-overlay" style="display:none;">
         <div class="ausbullen-modal game-notify-modal">
-            <div class="game-notify-icon">🎯</div>
+            <div id="leg-modal-avatar" class="game-notify-avatar"></div>
             <div class="game-notify-title" id="leg-modal-title">LEG GEWONNEN</div>
             <p class="game-notify-subtitle" id="leg-modal-subtitle"></p>
             <button class="btn btn-primary btn-full" onclick="dismissLegModal()">WEITER</button>
@@ -339,18 +359,19 @@
     <!-- ── MATCH OVER MODAL ── -->
     <div id="match-modal-overlay" class="ausbullen-overlay" style="display:none;">
         <div class="ausbullen-modal game-notify-modal">
-            <div class="game-notify-icon">🏆</div>
+            <div id="match-modal-avatar" class="game-notify-avatar"></div>
             <div class="game-notify-title">MATCH OVER</div>
             <p class="game-notify-subtitle" id="match-modal-subtitle"></p>
             <div id="match-modal-stats" class="match-modal-stats"></div>
             <button class="btn btn-primary btn-full" style="margin-top:16px;" onclick="dismissMatchModal()">ABSCHLUSS</button>
-            <button class="btn btn-full" style="margin-top:8px; background:var(--bg-element); color:var(--red); border:1px solid var(--red);" onclick="undoFromMatchModal()">↩ UNDO LETZTEN WURF</button>
+            <button id="match-modal-undo-btn" class="btn btn-full" style="margin-top:8px; background:var(--bg-element); color:var(--red); border:1px solid var(--red);" onclick="undoFromMatchModal()">↩ UNDO LETZTEN WURF</button>
         </div>
     </div>
 
     <script src="database.js"></script>
     <script src="game-logic.js"></script>
     <script src="ui-manager-game.js"></script>
+    <script src="online-game.js"></script>
 
     <script>
         (function() {
@@ -389,6 +410,23 @@
                     if (typeof setGameType === 'function') setGameType(gtype);
                 });
             }
+        })();
+    </script>
+    <script>
+        // Handle Online-Modus URL param — invitee arrives here via
+        // game.html?online_game_id=<id> from the index.html invite card
+        (function() {
+            var p = new URLSearchParams(window.location.search);
+            var onlineId = p.get('online_game_id');
+            if (!onlineId) return;
+            window.addEventListener('DOMContentLoaded', function() {
+                var interval = setInterval(function() {
+                    if (typeof startOnlineGameFromUrl === 'function') {
+                        clearInterval(interval);
+                        startOnlineGameFromUrl(onlineId);
+                    }
+                }, 100);
+            });
         })();
     </script>
     <script>

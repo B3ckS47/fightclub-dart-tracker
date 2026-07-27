@@ -515,10 +515,14 @@ function makePlayerStats() {
 const BOT_ICON = '🤖'; // every bot display name starts with this — used to detect the bot side in vsAvatarHtml()
 let pendingBotTurnTimer = null; // setTimeout handle — kept OUTSIDE gameState (not JSON-serializable, not part of undo)
 
+// ── ONLINE MODE (two devices, one throw each) ──
+let _applyingRemoteOnlineMove = false; // re-entrancy guard while replaying the opponent's move locally
+let vsIntroTapDisabled = false;        // blocks pickStarter() during the automatic Bull-Out reveal
+
 let gameState = {
     gameType: 'singles',
     isOfficial: true,
-    opponentType: 'member',    // 'member' | 'bot'
+    opponentType: 'member',    // 'member' | 'bot' | 'online'
     botTargetAvg: null,        // bot's target 3-dart average, when opponentType === 'bot'
     botStrengthMode: null,     // 'custom' | 'member' — informational only
     botSourceMemberName: null, // mirrored member's name, when botStrengthMode === 'member'
@@ -536,7 +540,10 @@ let gameState = {
     teamPlayers: [["A","B"], ["X","Y"]],
     teamPlayerIdx: [0, 0],
     stats: [makePlayerStats(), makePlayerStats()],
-    ausbullenActive: false   // blocks input while modal is open
+    ausbullenActive: false,   // blocks input while modal is open
+    onlineGameId: null,          // online_games.id, when opponentType === 'online'
+    onlineMyTeamIdx: null,       // which team index (0/1) is "me" on this device
+    onlineAppliedVersion: 0      // highest online_games.version already applied locally
 };
 
 window.addEventListener('DOMContentLoaded', () => {
@@ -546,8 +553,9 @@ window.addEventListener('DOMContentLoaded', () => {
 // ── VS INTRO ANIMATION ──
 function vsAvatarHtml(name) {
     if (name.startsWith(BOT_ICON)) {
-        // Mirroring a member's strength: show THEIR photo/initials with a
-        // small robot badge overlaid, instead of the generic bot icon.
+        // Mirroring a member's strength: show THEIR photo/initials instead
+        // of the generic bot icon — the "🤖 " name label already makes it
+        // clear this is the bot.
         const memberObj = gameState.botSourceMemberName
             ? players.find(pl => pl.name === gameState.botSourceMemberName)
             : null;
@@ -572,6 +580,15 @@ function renderVsSide(avatarsElId, nameElId, names, teamLabel) {
     avatarsEl.className = names.length > 1 ? 'vs-intro-avatars vs-intro-avatars--pair' : 'vs-intro-avatars';
     avatarsEl.innerHTML  = names.map(vsAvatarHtml).join('');
     document.getElementById(nameElId).textContent = teamLabel;
+}
+
+// Winner avatar for the leg-won / match-over popups — reuses the same
+// avatar circles as the Bull-Out screen (single photo, or an overlapping
+// pair for a doubles team).
+function notifyAvatarHtml(teamIdx) {
+    const names = gameState.teamPlayers[teamIdx];
+    const cls   = names.length > 1 ? 'vs-intro-avatars vs-intro-avatars--pair' : 'vs-intro-avatars';
+    return `<div class="${cls}">${names.map(vsAvatarHtml).join('')}</div>`;
 }
 
 // Small match-info chips shown under the VS screen — fills the otherwise
@@ -603,6 +620,7 @@ async function showVsIntro() {
 
 // Tapping a player's/team's picture in the VS screen picks the starter
 function pickStarter(teamIdx) {
+    if (vsIntroTapDisabled) return; // Online mode: Bull Out is decided by the automatic reveal, not a tap
     const overlay = document.getElementById('vs-intro-overlay');
     overlay.classList.add('vs-intro-overlay--out');
     setTimeout(() => {
@@ -610,6 +628,36 @@ function pickStarter(teamIdx) {
         overlay.classList.remove('vs-intro-overlay--out');
     }, 300);
     selectStarter(teamIdx);
+}
+
+// Online mode: Bull Out result is decided once (by whichever device transitions
+// the invite to 'active') and both devices just play back the same reveal
+// animation toward that predetermined winner — nobody actually "chooses" here.
+async function showVsIntroOnlineReveal(winnerIdx) {
+    if (players.length === 0) { try { await fetchPlayers(); } catch(e) {} }
+    renderVsSide('vs-intro-avatars-p1', 'vs-intro-name-p1', gameState.teamPlayers[0], gameState.pNames[0]);
+    renderVsSide('vs-intro-avatars-p2', 'vs-intro-name-p2', gameState.teamPlayers[1], gameState.pNames[1]);
+    document.getElementById('vs-intro-tags').innerHTML = vsMatchTagsHtml();
+    document.getElementById('vs-intro-subtitle').textContent = 'Bull Out läuft…';
+    vsIntroTapDisabled = true;
+
+    const overlay = document.getElementById('vs-intro-overlay');
+    overlay.classList.remove('vs-intro-overlay--out');
+    overlay.style.display = 'flex';
+
+    const sides = [document.querySelector('.vs-intro-side--left'), document.querySelector('.vs-intro-side--right')];
+    await new Promise(resolve => {
+        const totalSteps = 10 + winnerIdx;
+        let step = 0;
+        (function tick() {
+            sides.forEach(s => s.classList.remove('vs-intro-side--highlight'));
+            sides[step % 2].classList.add('vs-intro-side--highlight');
+            if (step >= totalSteps) { resolve(); return; }
+            step++;
+            setTimeout(tick, 60 + Math.pow(step / totalSteps, 3) * 260);
+        })();
+    });
+    setTimeout(() => { vsIntroTapDisabled = false; pickStarter(winnerIdx); }, 400);
 }
 
 function setGameType(type) {
@@ -714,6 +762,8 @@ async function startGame() {
 
 function pressKey(num) {
     if (gameState.ausbullenActive) return;
+    if (gameState.opponentType === 'online' && !_applyingRemoteOnlineMove
+        && gameState.currentIdx !== gameState.onlineMyTeamIdx) return;
     if (gameState.input.length < 3) {
         gameState.input += num;
         document.getElementById('input-preview').innerText = gameState.input;
@@ -811,6 +861,8 @@ function maybeTriggerBotTurn() {
 
 async function submitTurn() {
     if (gameState.ausbullenActive) return;
+    if (gameState.opponentType === 'online' && !_applyingRemoteOnlineMove
+        && gameState.currentIdx !== gameState.onlineMyTeamIdx) return;
     const pts = parseInt(gameState.input) || 0;
     if (pts > 180) { showToast('⚠️ Maximum ist 180!'); clearInput(); return; }
 
@@ -882,6 +934,7 @@ async function submitTurn() {
         } else {
             showLegModal(gameState.pNames[teamIdx]);
         }
+        if (gameState.opponentType === 'online' && !_applyingRemoteOnlineMove) pushOnlineState(pts, teamIdx);
         return;
     }
 
@@ -947,11 +1000,13 @@ async function submitTurn() {
 
     // Push live state after every official turn
     if (gameState.isOfficial) pushLiveState();
+    if (gameState.opponentType === 'online' && !_applyingRemoteOnlineMove) pushOnlineState(pts, teamIdx);
 
     maybeTriggerBotTurn();
 }
 
 function undoMove() {
+    if (gameState.opponentType === 'online') return; // no undo online — the opponent may have already replayed this throw
     clearPendingBotTurn(); // cancel any scheduled bot throw before rewinding state
     if (gameState.logs.length === 0) return;
     const lastSnapshot = gameState.logs.pop();
@@ -973,6 +1028,8 @@ function undoMove() {
 
 // ── LEG MODAL ──
 function showLegModal(winnerName) {
+    const teamIdx = gameState.pNames[0] === winnerName ? 0 : 1;
+    document.getElementById('leg-modal-avatar').innerHTML = notifyAvatarHtml(teamIdx);
     document.getElementById('leg-modal-subtitle').textContent = winnerName;
     document.getElementById('leg-modal-overlay').style.display = 'flex';
 }
@@ -988,7 +1045,9 @@ let matchWinnerName = '';
 let matchLoserName  = '';
 function showMatchModal(winnerName) {
     matchWinnerName = winnerName;
-    matchLoserName  = gameState.pNames[0] === winnerName ? gameState.pNames[1] : gameState.pNames[0];
+    const winnerTeamIdx = gameState.pNames[0] === winnerName ? 0 : 1;
+    matchLoserName  = winnerTeamIdx === 0 ? gameState.pNames[1] : gameState.pNames[0];
+    document.getElementById('match-modal-avatar').innerHTML = notifyAvatarHtml(winnerTeamIdx);
     document.getElementById('match-modal-subtitle').textContent = winnerName + ' gewinnt das Match!';
 
     // ── Build stats table ──
@@ -1116,10 +1175,23 @@ async function dismissMatchModal() {
     if (_tournMatchId) {
         await saveTournamentResult(matchWinnerName);
     }
+    if (gameState.opponentType === 'online' && gameState.onlineGameId) {
+        try {
+            await supa.from('online_games')
+                .update({ status: 'finished', finished_at: new Date().toISOString() })
+                .eq('id', gameState.onlineGameId);
+        } catch(e) { console.error('Online finish write error:', e); }
+        if (typeof stopOnlinePolling === 'function') stopOnlinePolling();
+        // Clear BEFORE exitGame()->doExitGame() runs, so its abandon-write
+        // (guarded on onlineGameId) doesn't immediately overwrite this
+        // clean 'finished' status back to 'abandoned'.
+        gameState.onlineGameId = null;
+    }
     exitGame(true);
 }
 
 function undoFromMatchModal() {
+    if (gameState.opponentType === 'online') return; // no undo online
     if (gameState.logs.length === 0) return;
     document.getElementById('match-modal-overlay').style.display = 'none';
     undoMove();
@@ -1220,4 +1292,58 @@ async function selectAusbullenWinner(teamIdx) {
     } else {
         showLegModal(gameState.pNames[teamIdx] + ' (Ausbullen)');
     }
-            }
+}
+
+// ── ONLINE MODE: enter the active game view from an online_games row ──
+// Called both when the invitee first accepts (row was just written to
+// 'active') and when either device resumes an already-running game
+// (reload, crash recovery, or the inviter's own waiting-panel poll
+// noticing the invitee accepted). `me` is the parsed fc47_user object.
+async function startOnlineGameFromRow(row, me) {
+    clearPendingBotTurn();
+    const s = row.game_state;
+
+    gameState.gameType             = s.gameType;
+    gameState.isOfficial           = false; // online games never count toward stats/fines
+    gameState.opponentType         = 'online';
+    gameState.botTargetAvg         = null;
+    gameState.botStrengthMode      = null;
+    gameState.botSourceMemberName  = null;
+    gameState.pNames               = s.pNames;
+    gameState.startScore           = s.startScore;
+    gameState.scores               = s.scores;
+    gameState.history              = s.history;
+    gameState.legScore             = s.legScore;
+    gameState.targetLegs           = s.targetLegs;
+    gameState.legStarter           = s.legStarter;
+    gameState.currentIdx           = s.currentIdx;
+    gameState.mode                 = s.mode;
+    gameState.teamPlayers          = s.teamPlayers;
+    gameState.teamPlayerIdx        = s.teamPlayerIdx;
+    gameState.stats                = s.stats;
+    gameState.logs                 = [];
+    gameState.input                = "";
+    gameState.ausbullenActive      = row.version <= 1; // blocks input until the Bull-Out reveal picks a starter
+
+    gameState.onlineGameId         = row.id;
+    gameState.onlineMyTeamIdx      = row.inviter_user_id === me.id ? 0 : 1;
+    gameState.onlineAppliedVersion = row.version;
+
+    const startSelect = document.getElementById('start-score-select');
+    if (startSelect) startSelect.value = String(gameState.startScore);
+
+    document.getElementById('nav-setup').style.display        = 'none';
+    document.getElementById('nav-game-active').style.display  = 'block';
+    document.getElementById('setup-view').style.display        = 'none';
+    document.getElementById('active-game-view').style.display  = '';
+    document.getElementById('active-game-view').classList.add('game-active');
+    if (typeof toggleOnlineUndoButtons === 'function') toggleOnlineUndoButtons(false);
+    refreshDisplay();
+
+    if (typeof startOnlinePolling === 'function') startOnlinePolling();
+
+    if (row.version <= 1) {
+        // Fresh game — nobody has thrown yet, run the Bull-Out reveal
+        await showVsIntroOnlineReveal(gameState.legStarter);
+    }
+}

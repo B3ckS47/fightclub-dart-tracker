@@ -29,26 +29,46 @@ function updateDropdowns() {
     if (p2 && sortedPlayers.length > 1) p2.selectedIndex = 1;
     refreshGameDropdowns();
     if (typeof refreshBotMemberCarousel === 'function') refreshBotMemberCarousel();
+    if (typeof renderOnlineMemberList === 'function') renderOnlineMemberList();
 }
 
-// ── TRAINING MODE (vs. bot) ──
+// ── OPPONENT TYPE: Mitglied / Training / Online ──
 function setOpponentType(type) {
-    const isBot = type === 'bot';
-    document.getElementById('opp-member').classList.toggle('game-type-btn--active', !isBot);
+    const isBot    = type === 'bot';
+    const isOnline = type === 'online';
+    const isSolo   = isBot || isOnline; // both force Einzel, no player picker
+
+    document.getElementById('opp-member').classList.toggle('game-type-btn--active', type === 'member');
     document.getElementById('opp-bot').classList.toggle('game-type-btn--active', isBot);
+    document.getElementById('opp-online').classList.toggle('game-type-btn--active', isOnline);
 
-    if (isBot && gameState.gameType !== 'singles') setGameType('singles');
+    if (isSolo && gameState.gameType !== 'singles') setGameType('singles');
 
-    // Training is always "you vs. the app", 1-on-1 — no need to ask
-    // Einzel/Doppel or show a player picker at all
-    document.getElementById('game-type-selector-wrap').style.display = isBot ? 'none' : '';
-    document.getElementById('game-type-divider').style.display       = isBot ? 'none' : '';
-    document.getElementById('singles-select').style.display = isBot ? 'none' : 'flex';
+    // Training/Online are always "you vs. one opponent", 1-on-1 — no need to
+    // ask Einzel/Doppel or show a player picker at all
+    document.getElementById('game-type-selector-wrap').style.display = isSolo ? 'none' : '';
+    document.getElementById('game-type-divider').style.display       = isSolo ? 'none' : '';
+    document.getElementById('singles-select').style.display = isSolo ? 'none' : 'flex';
 
-    document.getElementById('training-config').style.display    = isBot ? '' : 'none';
-    document.getElementById('game-mode-selector').style.display  = isBot ? 'none' : '';
+    document.getElementById('training-config').style.display   = isBot    ? '' : 'none';
+    document.getElementById('online-config').style.display     = isOnline ? '' : 'none';
+    document.getElementById('game-mode-selector').style.display = isSolo  ? 'none' : '';
 
-    if (isBot) refreshBotMemberCarousel();
+    document.getElementById('start-game-btn').textContent = isOnline ? 'EINLADEN' : 'SPIEL STARTEN';
+
+    if (isBot)    refreshBotMemberCarousel();
+    if (isOnline) renderOnlineMemberList();
+}
+
+// Dispatcher for the setup screen's single primary button — starts a local
+// game normally, or sends an online invite instead when Online mode is active.
+function onStartButtonClick() {
+    const isOnline = document.getElementById('opp-online').classList.contains('game-type-btn--active');
+    if (isOnline) {
+        if (typeof sendOnlineInvite === 'function') sendOnlineInvite();
+    } else {
+        startGame();
+    }
 }
 
 function setBotStrengthMode(mode) {
@@ -142,6 +162,58 @@ function spinRandomBotMember() {
         setTimeout(tick, delay);
     }
     tick();
+}
+
+// ── ONLINE MODE: member invite picker (alphabetical, no averages) ──
+let selectedOnlineInviteeName = null;
+
+function renderOnlineMemberList() {
+    const el = document.getElementById('online-invite-list');
+    if (!el) return;
+    const raw = fcGetUser();
+    const me  = raw ? JSON.parse(raw) : null;
+    const sortedPlayers = players
+        .filter(p => p.isMember && (!me || p.id !== me.player_id)) // can't invite yourself
+        .sort((a, b) => a.name.localeCompare(b.name, 'de'));
+
+    el.innerHTML = sortedPlayers.map(p => {
+        const initials = (p.name || '?').slice(0, 2).toUpperCase();
+        const inner    = p.avatar_url ? `<img src="${p.avatar_url}" alt="">` : `<span>${initials}</span>`;
+        return `
+<div class="bot-member-card" data-name="${escHtmlGame(p.name)}">
+    <div class="bot-member-card-avatar">${inner}</div>
+    <div class="bot-member-card-name">${escHtmlGame(p.name)}</div>
+</div>`;
+    }).join('');
+
+    const stillPresent = sortedPlayers.find(p => p.name === selectedOnlineInviteeName);
+    selectOnlineInvitee(stillPresent ? stillPresent.name : null);
+}
+
+function selectOnlineInvitee(name) {
+    selectedOnlineInviteeName = name;
+    document.querySelectorAll('#online-invite-list .bot-member-card').forEach(c => {
+        c.classList.toggle('bot-member-card--active', c.dataset.name === name);
+    });
+}
+
+// Click delegation — same reasoning as the bot-member-carousel one above:
+// the container already exists by the time this script runs.
+(() => {
+    const list = document.getElementById('online-invite-list');
+    if (!list) return;
+    list.addEventListener('click', (e) => {
+        const card = e.target.closest('.bot-member-card');
+        if (card) selectOnlineInvitee(card.dataset.name);
+    });
+})();
+
+// Shows/hides the numpad's undo button and the match-modal undo button —
+// online games disable undo entirely (see game-logic.js undoMove()).
+function toggleOnlineUndoButtons(show) {
+    document.querySelectorAll('.key-undo').forEach(btn => { btn.style.display = show ? '' : 'none'; });
+    const matchUndo = document.getElementById('match-modal-undo-btn');
+    if (matchUndo) matchUndo.style.display = show ? '' : 'none';
 }
 
 function escHtmlGame(str) {
@@ -285,6 +357,17 @@ function refreshDisplay() {
             box.style.display = 'none';
         }
     });
+
+    // ── ONLINE MODE: "waiting for opponent" banner + disabled input ──
+    const onlineBanner = document.getElementById('online-waiting-banner');
+    if (onlineBanner) {
+        const isOnline = gameState.opponentType === 'online';
+        const myTurn   = gameState.currentIdx === gameState.onlineMyTeamIdx;
+        onlineBanner.style.display = (isOnline && !myTurn) ? 'block' : 'none';
+        document.querySelectorAll('.controls').forEach(c => {
+            c.classList.toggle('controls--waiting', isOnline && !myTurn);
+        });
+    }
 }
 
 function renderHist(pIdx, elId) {
@@ -333,6 +416,16 @@ function cancelExit() {
 function doExitGame() {
     if (typeof clearPendingBotTurn === 'function') clearPendingBotTurn(); // cancel any pending bot throw when leaving the game
     if (typeof clearLiveState === 'function') clearLiveState();
+    if (gameState.opponentType === 'online' && gameState.onlineGameId) {
+        supa.from('online_games')
+            .update({ status: 'abandoned', finished_at: new Date().toISOString() })
+            .eq('id', gameState.onlineGameId)
+            .then(() => {})
+            .catch(e => console.error('Online abandon write error:', e));
+        if (typeof stopOnlinePolling === 'function') stopOnlinePolling();
+        gameState.onlineGameId = null;
+    }
+    if (typeof toggleOnlineUndoButtons === 'function') toggleOnlineUndoButtons(true); // restore undo for the next (non-online) game
     // If launched from a tournament, go back to the tournament view
     const tournId = new URLSearchParams(window.location.search).get('tournament_id');
     if (tournId) {

@@ -747,6 +747,36 @@ body {
     padding: 16px;
 }
 
+/* ── ONLINE MODE: "waiting for opponent" state ── */
+.online-waiting-banner {
+    text-align: center;
+    font-family: var(--font-display);
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary);
+    background: var(--bg-element);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 8px 12px;
+    margin-bottom: 10px;
+}
+
+.controls--waiting {
+    opacity: 0.4;
+    pointer-events: none;
+}
+
+.online-waiting-spinner {
+    font-size: 1.8rem;
+    animation: onlineWaitingPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes onlineWaitingPulse {
+    0%, 100% { opacity: 0.4; transform: scale(0.92); }
+    50%      { opacity: 1;   transform: scale(1); }
+}
+
 .input-preview-row {
     font-size: 0.9rem;
     color: var(--text-muted);
@@ -1796,6 +1826,19 @@ body {
     margin-bottom: 12px;
 }
 
+/* Winner's photo/initials (or team pair for doubles) shown at the top of the
+   leg-won and match-over popups — reuses the .vs-intro-avatar circle from
+   the Bull-Out screen, just scaled down for this more compact modal. */
+.game-notify-avatar {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 12px;
+}
+.game-notify-avatar .vs-intro-avatars { width: 80px; height: 80px; }
+.game-notify-avatar .vs-intro-avatar { width: 80px; height: 80px; font-size: 1.8rem; border-width: 2px; }
+.game-notify-avatar .vs-intro-avatars--pair .vs-intro-avatar { width: 52px; height: 52px; font-size: 1.1rem; top: 14px; }
+.game-notify-avatar .vs-intro-avatars--pair .vs-intro-avatar:nth-child(2) { left: 28px; }
+
 .game-notify-title {
     font-family: var(--font-display);
     font-size: 2rem;
@@ -1960,6 +2003,14 @@ body {
 .vs-intro-side--right { animation: vsSlideInRight 0.55s cubic-bezier(.2,.9,.25,1) 0.1s forwards; }
 .vs-intro-side:active { transform: scale(0.94); }
 .vs-intro-side:hover .vs-intro-avatar { border-color: #fff; }
+
+/* Online mode: automatic Bull-Out reveal — a light chases between the two
+   sides before landing on the predetermined winner (same idea as the
+   Training-mode "Zufälligen Gegner" card picker, applied to just 2 targets) */
+.vs-intro-side--highlight .vs-intro-avatar {
+    border-color: var(--green);
+    box-shadow: 0 0 30px rgba(41,216,124,0.5);
+}
 
 @keyframes vsSlideInLeft  { from { opacity: 0; transform: translateX(-60px) scale(0.85); } to { opacity: 1; transform: translateX(0) scale(1); } }
 @keyframes vsSlideInRight { from { opacity: 0; transform: translateX(60px)  scale(0.85); } to { opacity: 1; transform: translateX(0) scale(1); } }
@@ -3515,6 +3566,19 @@ body {
 .next-appt-arrow {
     font-size: 1rem;
     color: var(--text-muted);
+}
+
+/* ── ONLINE MODE: invite card actions (on the Startseite) ── */
+.online-invite-card .next-appt-row { flex-wrap: wrap; gap: 12px; }
+.online-invite-actions {
+    display: flex;
+    gap: 10px;
+    flex-shrink: 0;
+}
+.online-invite-actions .btn {
+    padding: 8px 16px;
+    font-size: 0.82rem;
+    width: auto;
 }
 
 /* ── SCHEDULE MENU CARD ── */
