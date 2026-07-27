@@ -56,8 +56,13 @@ function setOpponentType(type) {
 
     document.getElementById('start-game-btn').textContent = isOnline ? 'EINLADEN' : 'SPIEL STARTEN';
 
-    if (isBot)    refreshBotMemberCarousel();
-    if (isOnline) renderOnlineMemberList();
+    if (isBot) refreshBotMemberCarousel();
+    if (isOnline) {
+        renderOnlineMemberList();
+        startOnlineMemberListRefresh();
+    } else if (typeof stopOnlineMemberListRefresh === 'function') {
+        stopOnlineMemberListRefresh();
+    }
 }
 
 // Dispatcher for the setup screen's single primary button — starts a local
@@ -203,8 +208,13 @@ function spinRandomBotMember() {
 
 // ── ONLINE MODE: member invite picker (alphabetical, no averages) ──
 let selectedOnlineInviteeName = null;
+let _onlineMemberListRefreshTimer = null;
+// "Recently active anywhere in the app" — more generous than the strict
+// in-game presence check, since this is about whether someone is around to
+// notice an invite at all, not whether they're mid-match right now.
+const ONLINE_MEMBER_PRESENCE_TIMEOUT_MS = 5 * 60 * 1000;
 
-function renderOnlineMemberList() {
+async function renderOnlineMemberList() {
     const el = document.getElementById('online-invite-list');
     if (!el) return;
     const raw = fcGetUser();
@@ -213,18 +223,37 @@ function renderOnlineMemberList() {
         .filter(p => p.isMember && (!me || p.id !== me.player_id)) // can't invite yourself
         .sort((a, b) => a.name.localeCompare(b.name, 'de'));
 
+    let lastSeenByPlayerId = {};
+    if (sortedPlayers.length > 0 && typeof supa !== 'undefined') {
+        const { data } = await supa.from('app_users')
+            .select('player_id, last_seen')
+            .in('player_id', sortedPlayers.map(p => p.id));
+        (data || []).forEach(row => { lastSeenByPlayerId[row.player_id] = row.last_seen; });
+    }
+
     el.innerHTML = sortedPlayers.map(p => {
         const initials = (p.name || '?').slice(0, 2).toUpperCase();
         const inner    = p.avatar_url ? `<img src="${p.avatar_url}" alt="">` : `<span>${initials}</span>`;
+        const lastSeen = lastSeenByPlayerId[p.id];
+        const isOnline = !!lastSeen && (Date.now() - new Date(lastSeen).getTime()) < ONLINE_MEMBER_PRESENCE_TIMEOUT_MS;
+        const dot      = isOnline ? '<span class="member-presence-dot"></span>' : '';
         return `
 <div class="bot-member-card" data-name="${escHtmlGame(p.name)}">
     <div class="bot-member-card-avatar">${inner}</div>
-    <div class="bot-member-card-name">${escHtmlGame(p.name)}</div>
+    <div class="bot-member-card-name">${dot}${escHtmlGame(p.name)}</div>
 </div>`;
     }).join('');
 
     const stillPresent = sortedPlayers.find(p => p.name === selectedOnlineInviteeName);
     selectOnlineInvitee(stillPresent ? stillPresent.name : null);
+}
+
+function startOnlineMemberListRefresh() {
+    stopOnlineMemberListRefresh();
+    _onlineMemberListRefreshTimer = setInterval(renderOnlineMemberList, 20000);
+}
+function stopOnlineMemberListRefresh() {
+    if (_onlineMemberListRefreshTimer) { clearInterval(_onlineMemberListRefreshTimer); _onlineMemberListRefreshTimer = null; }
 }
 
 function selectOnlineInvitee(name) {
@@ -465,6 +494,9 @@ function doExitGame() {
         gameState.onlineGameId = null;
     }
     if (typeof toggleOnlineUndoButtons === 'function') toggleOnlineUndoButtons(true); // restore undo for the next (non-online) game
+    // Presence dots are online-only — clear them so they don't bleed into the next game
+    document.getElementById('p1-name-display').classList.remove('player-name--online');
+    document.getElementById('p2-name-display').classList.remove('player-name--online');
     // If launched from a tournament, go back to the tournament view
     const tournId = new URLSearchParams(window.location.search).get('tournament_id');
     if (tournId) {

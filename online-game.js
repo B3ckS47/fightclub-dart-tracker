@@ -134,6 +134,11 @@ async function startOnlineGameFromUrl(onlineId) {
         window.location.href = 'index.html';
         return;
     }
+    if (row.status === 'timed_out') {
+        await showAlert('Spiel abgelaufen', 'Dieses Online-Spiel wurde wegen Inaktivität automatisch beendet.');
+        window.location.href = 'index.html';
+        return;
+    }
 
     if (row.status === 'pending') {
         if (row.invitee_user_id !== me.id) { window.location.href = 'index.html'; return; }
@@ -162,7 +167,7 @@ async function startOnlineGameFromUrl(onlineId) {
         };
 
         const { data: updated, error: updErr } = await supa.from('online_games')
-            .update({ status: 'active', game_state: initialState, version: 1, responded_at: new Date().toISOString() })
+            .update({ status: 'active', game_state: initialState, version: 1, responded_at: new Date().toISOString(), updated_at: new Date().toISOString() })
             .eq('id', onlineId)
             .eq('status', 'pending') // optimistic lock — guards against a double-accept race
             .select('*')
@@ -195,22 +200,40 @@ function stopOnlinePolling() {
     if (_onlinePollTimer) { clearInterval(_onlinePollTimer); _onlinePollTimer = null; }
 }
 
+const ONLINE_PRESENCE_TIMEOUT_MS = 12000; // ~4 missed poll ticks before the opponent counts as "offline"
+
 async function pollOnlineGame() {
     if (!gameState.onlineGameId) return;
     const { data } = await supa
         .from('online_games')
-        .select('version,status,game_state,last_reaction')
+        .select('version,status,game_state,last_reaction,inviter_last_seen,invitee_last_seen')
         .eq('id', gameState.onlineGameId)
         .single();
     if (!data) return;
 
-    if (data.status === 'abandoned' || data.status === 'cancelled') {
+    if (data.status === 'abandoned' || data.status === 'cancelled' || data.status === 'timed_out') {
         stopOnlinePolling();
         gameState.onlineGameId = null; // already gone server-side — doExitGame() must not write to it again
-        await showAlert('Spiel beendet', 'Dein Gegner hat das Spiel verlassen.');
+        const msg = data.status === 'timed_out'
+            ? 'Das Spiel wurde nach 60 Minuten ohne Eingabe automatisch beendet.'
+            : 'Dein Gegner hat das Spiel verlassen.';
+        await showAlert('Spiel beendet', msg);
         doExitGame();
         return;
     }
+
+    // Presence dot: bump my own heartbeat (fire-and-forget — a missed one
+    // just delays detection by a poll cycle, harmless) and check whether the
+    // opponent's last heartbeat is still fresh.
+    const myColumn = gameState.onlineMyTeamIdx === 0 ? 'inviter_last_seen' : 'invitee_last_seen';
+    supa.from('online_games').update({ [myColumn]: new Date().toISOString() })
+        .eq('id', gameState.onlineGameId).then(() => {}).catch(() => {});
+
+    const opponentTs = gameState.onlineMyTeamIdx === 0 ? data.invitee_last_seen : data.inviter_last_seen;
+    const opponentOnline = !!opponentTs && (Date.now() - new Date(opponentTs).getTime()) < ONLINE_PRESENCE_TIMEOUT_MS;
+    const opponentSlot = gameState.onlineMyTeamIdx === 0 ? 2 : 1;
+    const opponentNameEl = document.getElementById(`p${opponentSlot}-name-display`);
+    if (opponentNameEl) opponentNameEl.classList.toggle('player-name--online', opponentOnline);
 
     // Emoji reactions have nothing to do with move sync — checked regardless
     // of whether the move version advanced this tick.
@@ -306,19 +329,36 @@ function setReactionBarCooldown(active) {
     bar.querySelectorAll('.reaction-btn').forEach(btn => { btn.disabled = active; });
 }
 
-// Small transient toast, deliberately not a modal — reactions must never
-// block or steal focus from the numpad while someone is mid-throw.
+// Emoji "rain" — a shower of the sent emoji drifts down across the screen.
+// Experiment: pointer-events:none on the container means it never blocks or
+// steals focus from the numpad, even while it's raining mid-throw.
 function showOnlineReactionPopup(emoji, teamIdx) {
-    const name = (gameState.pNames && gameState.pNames[teamIdx]) || '';
-    const el = document.createElement('div');
-    el.className = 'online-reaction-popup';
-    el.innerHTML = `<span class="online-reaction-popup-emoji">${emoji}</span><span class="online-reaction-popup-name">${_escHtmlOnline(name)}</span>`;
-    document.body.appendChild(el);
-    requestAnimationFrame(() => el.classList.add('online-reaction-popup--visible'));
-    setTimeout(() => {
-        el.classList.remove('online-reaction-popup--visible');
-        setTimeout(() => el.remove(), 350);
-    }, 1800);
+    const container = document.createElement('div');
+    container.className = 'online-reaction-rain';
+    document.body.appendChild(container);
+
+    const PARTICLE_COUNT = 16;
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+        const span = document.createElement('span');
+        span.className = 'online-reaction-rain-particle';
+        span.textContent = emoji;
+
+        const duration = 2.6 + Math.random() * 1.6; // s
+        const delay    = Math.random() * 0.9;        // s — staggers the spawn instead of one single burst
+        const size     = 1.4 + Math.random() * 1.6;  // rem
+        const drift    = (Math.random() - 0.5) * 120; // px sideways sway while falling
+        const spin     = (Math.random() - 0.5) * 360; // deg tumble
+
+        span.style.left               = (Math.random() * 100) + 'vw';
+        span.style.fontSize           = size + 'rem';
+        span.style.animationDuration  = duration + 's';
+        span.style.animationDelay     = delay + 's';
+        span.style.setProperty('--drift', drift + 'px');
+        span.style.setProperty('--spin', spin + 'deg');
+        container.appendChild(span);
+    }
+
+    setTimeout(() => container.remove(), 5200); // covers the longest particle's delay+duration with margin
 }
 
 // ── STARTSEITE (index.html): discover invites + resume active games ──
@@ -408,15 +448,46 @@ async function loadActiveOnlineGame() {
     wrapper.insertBefore(card, schedCard);
 }
 
-// Best-effort housekeeping — old finished/declined/abandoned rows have no
-// further use. No cron in this project, so this runs opportunistically
-// whenever the Startseite loads instead.
+// Best-effort housekeeping — old finished/declined/abandoned/timed-out rows
+// have no further use. Runs opportunistically whenever the Startseite loads
+// (separate from the pg_cron job that actually closes stale 'active' games —
+// see the SQL given to the user for that).
 async function cleanupOldOnlineGames() {
     const cutoff = new Date(Date.now() - 48 * 3600 * 1000).toISOString();
     try {
         await supa.from('online_games')
             .delete()
-            .in('status', ['declined', 'cancelled', 'finished', 'abandoned'])
+            .in('status', ['declined', 'cancelled', 'finished', 'abandoned', 'timed_out'])
             .lt('updated_at', cutoff);
     } catch(e) { /* best-effort — ignore */ }
 }
+
+// ── APP-WIDE PRESENCE HEARTBEAT ──
+// Powers the "recently active" dot in the Online-mode invite picker
+// (renderOnlineMemberList() in ui-manager-game.js). Writes app_users.last_seen
+// every 60s for as long as this page is open — game.html or index.html,
+// wherever a logged-in member happens to be browsing.
+let _presenceHeartbeatTimer = null;
+
+function startGlobalPresenceHeartbeat() {
+    if (_presenceHeartbeatTimer) return; // already running
+    if (typeof supa === 'undefined') return; // not defined yet on this page — the caller retries later
+    const raw = fcGetUser();
+    const me  = raw ? JSON.parse(raw) : null;
+    if (!me) return;
+
+    const beat = () => {
+        supa.from('app_users').update({ last_seen: new Date().toISOString() }).eq('id', me.id)
+            .then(() => {}).catch(() => {});
+    };
+    beat();
+    _presenceHeartbeatTimer = setInterval(beat, 60000);
+}
+
+// Safe to call unconditionally at load time: on game.html, supa (from
+// database.js) is already defined by the time this script runs, so it starts
+// immediately. On index.html, supa isn't defined until the inline login
+// script further down runs showMenu() — that call site invokes this again,
+// and the _presenceHeartbeatTimer guard above makes the repeat call a no-op
+// everywhere it isn't actually needed.
+startGlobalPresenceHeartbeat();

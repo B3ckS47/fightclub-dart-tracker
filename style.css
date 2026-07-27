@@ -610,6 +610,22 @@ body {
     color: var(--text-secondary);
 }
 
+/* ── ONLINE MODE: presence dot ──
+   A ::before pseudo-element survives the .innerText overwrites refreshDisplay()
+   does on this same div every turn, so no HTML/markup changes are needed —
+   just toggle this modifier class. */
+.player-name--online::before {
+    content: '';
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    margin-right: 6px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 6px rgba(41,216,124,0.7);
+    vertical-align: middle;
+}
+
 .score-card {
     width: 100%;
     padding: 14px 8px;
@@ -805,44 +821,34 @@ body {
     transform: none;
 }
 
-/* Transient toast shown to the RECIPIENT of a reaction — deliberately not a
-   modal, so it never blocks input or steals focus while someone is throwing */
-.online-reaction-popup {
+/* Emoji "rain" shown to the RECIPIENT of a reaction — a shower of the sent
+   emoji drifts down across the whole screen. pointer-events:none on the
+   container is what keeps this from blocking the numpad underneath; taps
+   pass straight through the animation to whatever's beneath it. */
+.online-reaction-rain {
     position: fixed;
-    top: 84px;
-    left: 50%;
-    transform: translateX(-50%) translateY(-12px);
-    z-index: 9999;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-left: 4px solid var(--accent);
-    border-radius: var(--radius-md);
-    padding: 10px 18px;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-    opacity: 0;
+    inset: 0;
+    z-index: 9998;
     pointer-events: none;
-    transition: opacity 0.3s ease, transform 0.3s ease;
+    overflow: hidden;
 }
 
-.online-reaction-popup--visible {
-    opacity: 1;
-    transform: translateX(-50%) translateY(0);
-}
-
-.online-reaction-popup-emoji {
-    font-size: 1.8rem;
+.online-reaction-rain-particle {
+    position: absolute;
+    top: -10%;
     line-height: 1;
+    opacity: 0;
+    animation-name: onlineReactionFall;
+    animation-timing-function: linear;
+    animation-fill-mode: forwards;
+    will-change: transform, opacity;
 }
 
-.online-reaction-popup-name {
-    font-family: var(--font-display);
-    font-size: 0.85rem;
-    font-weight: 700;
-    letter-spacing: 0.5px;
-    color: var(--text-secondary);
+@keyframes onlineReactionFall {
+    0%   { transform: translateY(0) translateX(0) rotate(0deg); opacity: 0; }
+    8%   { opacity: 1; }
+    92%  { opacity: 1; }
+    100% { transform: translateY(115vh) translateX(var(--drift)) rotate(var(--spin)); opacity: 0; }
 }
 
 .input-preview-row {
@@ -1389,6 +1395,18 @@ body {
     text-align: center;
 }
 .bot-member-card-avg { font-size: 0.68rem; color: var(--text-muted); }
+
+/* ── ONLINE MODE: "recently active in the app" dot in the invite picker ── */
+.member-presence-dot {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    margin-right: 4px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 6px rgba(41,216,124,0.7);
+    vertical-align: middle;
+}
 
 .bot-member-card--active .bot-member-card-avatar {
     border-color: var(--accent);

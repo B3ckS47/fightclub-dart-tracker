@@ -221,9 +221,14 @@
 
             // Online-Modus: pending invites + resumable active game, plus a
             // recurring check so an incoming invite is noticed without a reload
-            if (typeof loadPendingInvites === 'function')    loadPendingInvites();
-            if (typeof loadActiveOnlineGame === 'function')  loadActiveOnlineGame();
-            if (typeof cleanupOldOnlineGames === 'function') cleanupOldOnlineGames();
+            if (typeof loadPendingInvites === 'function')        loadPendingInvites();
+            if (typeof loadActiveOnlineGame === 'function')      loadActiveOnlineGame();
+            if (typeof cleanupOldOnlineGames === 'function')     cleanupOldOnlineGames();
+            // supa isn't defined yet when online-game.js first tries this on
+            // this page (see startGlobalPresenceHeartbeat's own comment) — by
+            // now (inside showMenu, after login) it is, so this call is the
+            // one that actually starts the heartbeat here.
+            if (typeof startGlobalPresenceHeartbeat === 'function') startGlobalPresenceHeartbeat();
             setInterval(() => {
                 if (typeof loadPendingInvites === 'function')   loadPendingInvites();
                 if (typeof loadActiveOnlineGame === 'function') loadActiveOnlineGame();

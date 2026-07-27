@@ -1342,6 +1342,12 @@ async function startOnlineGameFromRow(row, me) {
     if (typeof toggleOnlineUndoButtons === 'function') toggleOnlineUndoButtons(false);
     refreshDisplay();
 
+    // I know I'm here right now — show my own presence dot immediately
+    // instead of waiting for the first heartbeat round trip. The opponent's
+    // dot is toggled by pollOnlineGame() once their heartbeats start arriving.
+    const myNameEl = document.getElementById(`p${gameState.onlineMyTeamIdx + 1}-name-display`);
+    if (myNameEl) myNameEl.classList.add('player-name--online');
+
     if (typeof startOnlinePolling === 'function') startOnlinePolling();
 
     if (row.version <= 1) {
