@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlightClub · Bob's 27</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0d0d0f">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <script src="config.js"></script>
+    <script src="ui-utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>document.documentElement.setAttribute("data-theme",localStorage.getItem("fc47_theme")||"dark");</script>
+</head>
+<body>
+
+    <nav id="nav-training-bobs27">
+        <div class="nav-inner nav-inner--default">
+            <a href="index.html" class="nav-brand" style="text-decoration:none;color:inherit;">FLIGHTCLUB</a>
+            <div class="nav-links">
+                <a href="training.html" class="nav-btn">« Training</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="app-wrapper">
+
+        <div class="card">
+            <h2 class="card-title">BOB'S 27</h2>
+            <div class="divider"></div>
+            <p class="muted-text" style="font-size:0.85rem;">20 Runden, jede Runde 3 Darts auf das jeweilige Doppel. Treffer bringen den Doppelwert je Dart, 0 Treffer kosten den Doppelwert. Im 2-Spieler-Modus verliert, wer zuerst unter 0 gerät — schaffen es beide bis zum Ende, gewinnt der höhere Punktestand.</p>
+        </div>
+
+        <!-- MEMBER LEADERBOARD -->
+        <div class="card" id="bobs-leaderboard-card">
+            <h3 class="section-label">Bestenliste · Mitglieder</h3>
+            <div class="training-leaderboard" id="bobs-leaderboard-list">
+                <p class="muted-text" style="font-size:0.8rem;">Lade…</p>
+            </div>
+        </div>
+
+        <!-- SETUP -->
+        <div class="card" id="bobs-setup-view">
+            <h3 class="section-label">Modus</h3>
+            <div class="game-type-selector" style="margin-top:10px;">
+                <button type="button" id="bobs-mode-solo" class="game-type-btn game-type-btn--active" onclick="setBobsMode('solo')">
+                    <span class="game-type-icon">🎯</span>
+                    <span class="game-type-label">ALLEIN</span>
+                    <span class="game-type-sub">Solo-Training</span>
+                </button>
+                <button type="button" id="bobs-mode-vs" class="game-type-btn" onclick="setBobsMode('vs')">
+                    <span class="game-type-icon">⚔️</span>
+                    <span class="game-type-label">GEGENEINANDER</span>
+                    <span class="game-type-sub">2 Spieler</span>
+                </button>
+            </div>
+
+            <div id="bobs-opponent-wrap" style="display:none; margin-top:18px;">
+                <h3 class="section-label">Gegner</h3>
+                <select id="bobs-opponent-select" class="select-field" style="display:block; width:100%; margin-top:8px;">
+                    <option value="">– Mitglied wählen –</option>
+                </select>
+            </div>
+
+            <button class="btn btn-primary btn-full" style="margin-top:20px;" onclick="startBobsGame()">START</button>
+        </div>
+
+        <!-- PLAY -->
+        <div class="card training-target-card" id="play-view" style="display:none;">
+            <div class="training-target-label" id="round-label">RUNDE 1 / 20</div>
+            <div class="training-target-number training-target-number--text" id="target-number">DOPPEL 1</div>
+            <div class="training-target-sub" id="bobs-turn-info" style="display:none;"></div>
+
+            <!-- Solo: centered score/double boxes -->
+            <div class="stats-grid" id="bobs-stats">
+                <div class="stat-box">
+                    <div class="stat-label">Punktestand</div>
+                    <div class="stat-value" id="score-value">27</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">Doppelwert</div>
+                    <div class="stat-value" id="double-value">2</div>
+                </div>
+            </div>
+
+            <!-- Vs: two-player scoreboard -->
+            <div class="clock-players" id="bobs-players" style="display:none;"></div>
+
+            <p class="muted-text" style="margin-top:12px; text-align:center;">Wie viele der 3 Darts haben getroffen?</p>
+            <div class="training-action-buttons training-action-buttons--four">
+                <button class="btn btn-danger-outline training-action-btn" onclick="recordRound(0)">0</button>
+                <button class="btn btn-ghost training-action-btn" onclick="recordRound(1)">1</button>
+                <button class="btn btn-ghost training-action-btn" onclick="recordRound(2)">2</button>
+                <button class="btn btn-accent training-action-btn" onclick="recordRound(3)">3</button>
+            </div>
+        </div>
+
+        <!-- RESULT -->
+        <div class="card training-result-card" id="result-view" style="display:none;">
+            <h2 class="card-title" id="result-title">FERTIG!</h2>
+            <div class="divider"></div>
+            <div class="training-result-number" id="result-score">0</div>
+            <div class="training-result-label" id="result-label">Endstand</div>
+            <div id="result-vs-summary" style="display:none; margin-top:14px;"></div>
+            <p class="muted-text" id="result-best" style="margin-top:12px;"></p>
+            <div class="training-action-buttons" style="margin-top:20px;">
+                <button class="btn btn-primary training-action-btn" onclick="resetGame()">Nochmal</button>
+                <button class="btn btn-full training-action-btn" onclick="window.location.href='training.html'">Fertig</button>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const supa = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
+
+        let currentUser = null;
+        (function() {
+            var raw = sessionStorage.getItem('fc47_user');
+            if (!raw) { window.location.href = 'index.html'; return; }
+            currentUser = JSON.parse(raw);
+            if (currentUser.role === 'ipad') { window.location.href = 'index.html'; return; }
+        })();
+
+        // ── SETUP STATE ──
+        let bobsMode   = 'solo';
+        let allMembers = [];
+        let myPlayer   = null;
+
+        // ── GAME STATE ──
+        // players: [{ id, name, avatarUrl, score, round, busted, finished }]
+        let players      = [];
+        let activeIdx    = 0;
+        let personalBest = null;
+
+        async function loadMembers() {
+            const [playersRes, usersRes] = await Promise.all([
+                supa.from('players').select('id, name, avatar_url').order('name'),
+                supa.from('app_users').select('player_id').in('role', ['admin', 'member'])
+            ]);
+            const memberIds = new Set((usersRes.data || []).map(u => u.player_id).filter(Boolean));
+            allMembers = (playersRes.data || []).filter(p => memberIds.has(p.id));
+
+            myPlayer = allMembers.find(p => p.id === currentUser.player_id)
+                || { id: currentUser.player_id, name: currentUser.username, avatar_url: null };
+
+            const sel = document.getElementById('bobs-opponent-select');
+            allMembers
+                .filter(p => p.id !== currentUser.player_id)
+                .forEach(p => {
+                    const opt = document.createElement('option');
+                    opt.value = p.id;
+                    opt.textContent = p.name;
+                    sel.appendChild(opt);
+                });
+        }
+
+        async function loadPersonalBest() {
+            if (!currentUser.player_id) return;
+            const { data } = await supa
+                .from('training_results')
+                .select('score')
+                .eq('player_id', currentUser.player_id)
+                .eq('game', 'bobs27');
+            if (data && data.length > 0) {
+                personalBest = Math.max(...data.map(r => r.score));
+            }
+        }
+
+        // ── MEMBER LEADERBOARD (other members' best score) ──
+        async function loadLeaderboard() {
+            const listEl = document.getElementById('bobs-leaderboard-list');
+            const { data } = await supa
+                .from('training_results')
+                .select('player_id, score, created_at')
+                .eq('game', 'bobs27')
+                .neq('player_id', currentUser.player_id || '');
+
+            const bestByPlayer = {};
+            (data || []).forEach(r => {
+                const cur = bestByPlayer[r.player_id];
+                if (!cur || r.score > cur.score) bestByPlayer[r.player_id] = r;
+            });
+
+            const rows = Object.entries(bestByPlayer)
+                .map(([playerId, r]) => ({ playerId, ...r }))
+                .sort((a, b) => b.score - a.score)
+                .slice(0, 5);
+
+            if (rows.length === 0) {
+                listEl.innerHTML = '<p class="muted-text" style="font-size:0.8rem;">Noch keine Einträge von anderen Mitgliedern.</p>';
+                return;
+            }
+
+            listEl.innerHTML = rows.map((r, i) => {
+                const p        = allMembers.find(m => m.id === r.playerId);
+                const name     = p ? p.name : '?';
+                const initials = name.slice(0, 2).toUpperCase();
+                const avatar   = p && p.avatar_url
+                    ? `<span class="lb-avatar lb-avatar--sm"><img src="${p.avatar_url}" alt=""></span>`
+                    : `<span class="lb-avatar lb-avatar--sm">${initials}</span>`;
+                const date = new Date(r.created_at).toLocaleDateString('de-DE');
+                return `
+<div class="training-leader-row">
+    <span class="training-leader-rank">${i + 1}</span>
+    ${avatar}
+    <div class="training-leader-info">
+        <div class="training-leader-name">${name}</div>
+        <div class="training-leader-date">${date}</div>
+    </div>
+    <div class="training-leader-score">${r.score}</div>
+</div>`;
+            }).join('');
+        }
+
+        (async function init() {
+            await loadMembers();
+            loadPersonalBest();
+            loadLeaderboard();
+        })();
+
+        // ── SETUP UI ──
+        function setBobsMode(mode) {
+            bobsMode = mode;
+            document.getElementById('bobs-mode-solo').classList.toggle('game-type-btn--active', mode === 'solo');
+            document.getElementById('bobs-mode-vs').classList.toggle('game-type-btn--active', mode === 'vs');
+            document.getElementById('bobs-opponent-wrap').style.display = mode === 'vs' ? 'block' : 'none';
+        }
+
+        function startBobsGame() {
+            const mkPlayer = p => ({
+                id: p.id, name: p.name, avatarUrl: p.avatar_url || null,
+                score: 27, round: 1, busted: false, finished: false, perRound: {}
+            });
+
+            players = [mkPlayer(myPlayer)];
+            if (bobsMode === 'vs') {
+                const oppId = document.getElementById('bobs-opponent-select').value;
+                if (!oppId) { showToast('Bitte einen Gegner auswählen.', 'error'); return; }
+                players.push(mkPlayer(allMembers.find(p => p.id === oppId)));
+            }
+            activeIdx = 0;
+
+            document.getElementById('bobs-setup-view').style.display       = 'none';
+            document.getElementById('bobs-leaderboard-card').style.display = 'none';
+            document.getElementById('play-view').style.display             = 'block';
+            document.getElementById('result-view').style.display     = 'none';
+            document.getElementById('bobs-stats').style.display   = bobsMode === 'solo' ? 'grid' : 'none';
+            document.getElementById('bobs-players').style.display = bobsMode === 'vs' ? 'grid' : 'none';
+            document.getElementById('bobs-turn-info').style.display = bobsMode === 'vs' ? 'block' : 'none';
+
+            updateDisplay();
+        }
+
+        // ── GAMEPLAY ──
+        function recordRound(hits) {
+            const p = players[activeIdx];
+            if (p.finished || p.busted) return;
+
+            const doubleValue = p.round * 2;
+            p.perRound[p.round] = hits;
+            p.score += hits > 0 ? hits * doubleValue : -doubleValue;
+
+            // Vs rule: dropping below 0 loses the game immediately
+            if (bobsMode === 'vs' && p.score < 0) {
+                p.busted = true;
+                finishGame();
+                return;
+            }
+
+            if (p.round === 20) {
+                p.finished = true;
+            } else {
+                p.round++;
+            }
+
+            if (bobsMode === 'solo') {
+                if (players[0].finished) { finishGame(); return; }
+                updateDisplay();
+                return;
+            }
+
+            const other = 1 - activeIdx;
+            if (players[activeIdx].finished && players[other].finished) { finishGame(); return; }
+
+            // Alternate — unless the other player is already done, then the
+            // remaining player keeps throwing alone
+            if (!players[other].finished) activeIdx = other;
+            updateDisplay();
+        }
+
+        // ── DISPLAY ──
+        function updateDisplay() {
+            const p = players[activeIdx];
+            document.getElementById('round-label').textContent   = `RUNDE ${p.round} / 20`;
+            document.getElementById('target-number').textContent = `DOPPEL ${p.round}`;
+
+            if (bobsMode === 'solo') {
+                document.getElementById('score-value').textContent  = p.score;
+                document.getElementById('double-value').textContent = p.round * 2;
+                return;
+            }
+
+            document.getElementById('bobs-turn-info').textContent = `${p.name} ist dran`;
+
+            document.getElementById('bobs-players').innerHTML = players.map((pl, idx) => {
+                const initials = (pl.name || '?').slice(0, 2).toUpperCase();
+                const avatar   = pl.avatarUrl
+                    ? `<span class="lb-avatar lb-avatar--sm"><img src="${pl.avatarUrl}" alt=""></span>`
+                    : `<span class="lb-avatar lb-avatar--sm">${initials}</span>`;
+                const cls = 'clock-player'
+                    + (idx === activeIdx && !pl.finished && !pl.busted ? ' clock-player--active' : '')
+                    + (pl.finished ? ' clock-player--done' : '')
+                    + (pl.busted ? ' clock-player--bust' : '');
+                const meta = pl.finished
+                    ? 'Fertig'
+                    : pl.busted
+                        ? `Unter 0 in Runde ${pl.round}`
+                        : `Runde ${pl.round}/20 · Doppel ${pl.round * 2}`;
+                return `
+<div class="${cls}">
+    <div class="clock-player-name">${avatar}<span>${pl.name}</span></div>
+    <div class="clock-player-target">${pl.score}</div>
+    <div class="clock-player-meta">${meta}</div>
+</div>`;
+            }).join('');
+        }
+
+        // ── FINISH & SAVE ──
+        async function finishGame() {
+            document.getElementById('play-view').style.display   = 'none';
+            document.getElementById('result-view').style.display = 'block';
+
+            const bestEl = document.getElementById('result-best');
+            const me     = players[0];
+            let winner   = null; // vs mode only — null also covers "tie"
+
+            if (bobsMode === 'solo') {
+                document.getElementById('result-title').textContent = 'FERTIG!';
+                document.getElementById('result-score').textContent = me.score;
+                document.getElementById('result-label').textContent = 'Endstand';
+                document.getElementById('result-vs-summary').style.display = 'none';
+
+                if (personalBest === null) {
+                    bestEl.textContent = 'Erste gespeicherte Runde!';
+                } else if (me.score > personalBest) {
+                    bestEl.textContent = `Neuer Highscore! (vorher: ${personalBest})`;
+                } else {
+                    bestEl.textContent = `Persönlicher Highscore: ${personalBest}`;
+                }
+                personalBest = personalBest === null ? me.score : Math.max(personalBest, me.score);
+            } else {
+                const busted = players.find(pl => pl.busted);
+                if (busted) {
+                    winner = players.find(pl => !pl.busted);
+                } else if (players[0].score !== players[1].score) {
+                    winner = players[0].score > players[1].score ? players[0] : players[1];
+                }
+
+                document.getElementById('result-title').textContent = winner
+                    ? `SIEGER: ${winner.name.toUpperCase()}`
+                    : 'UNENTSCHIEDEN';
+                document.getElementById('result-score').textContent = winner ? winner.score : players[0].score;
+                document.getElementById('result-label').textContent = 'Punkte';
+
+                const summary = document.getElementById('result-vs-summary');
+                summary.style.display = 'block';
+                summary.innerHTML = players.map(pl => {
+                    const state = pl.busted
+                        ? `unter 0 in Runde ${pl.round} (${pl.score} Punkte)`
+                        : `${pl.score} Punkte${pl.finished ? '' : ` (Runde ${pl.round}/20)`}`;
+                    return `<p class="muted-text" style="margin:4px 0;"><strong>${pl.name}:</strong> ${state}</p>`;
+                }).join('');
+                bestEl.textContent = '';
+            }
+
+            // Every run counts for the player who threw it — vs games included
+            const rows = players
+                .filter(pl => pl.id)
+                .map(pl => ({
+                    player_id: pl.id,
+                    game:      'bobs27',
+                    score:     pl.score,
+                    meta: {
+                        mode:     bobsMode,
+                        rounds:   pl.finished ? 20 : pl.round,
+                        busted:   pl.busted,
+                        opponent: bobsMode === 'vs'
+                            ? (players.find(o => o.id !== pl.id) || {}).id || null
+                            : null,
+                        win: bobsMode === 'vs'
+                            ? (winner ? pl === winner : null)
+                            : undefined,
+                        perRound: pl.perRound
+                    }
+                }));
+            if (rows.length > 0) {
+                await supa.from('training_results').insert(rows);
+            }
+        }
+
+        function resetGame() {
+            document.getElementById('result-view').style.display          = 'none';
+            document.getElementById('bobs-setup-view').style.display      = 'block';
+            document.getElementById('bobs-leaderboard-card').style.display = 'block';
+            loadLeaderboard();
+        }
+    </script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/fightclub-dart-tracker/sw.js')
+                .catch(() => {});
+        }
+    </script>
+</body>
+</html>

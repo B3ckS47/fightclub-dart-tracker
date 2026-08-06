@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlightClub · Strafen</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0d0d0f">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <script src="config.js"></script>
+    <script src="ui-utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script>document.documentElement.setAttribute("data-theme",localStorage.getItem("fc47_theme")||"dark");</script>
+</head>
+<body>
+
+    <!-- Entry detail bottom sheet (tap on row) -->
+    <div id="entry-sheet-overlay" class="entry-sheet-overlay" onclick="closeEntrySheet()" style="display:none;"></div>
+    <div id="entry-sheet" class="entry-sheet" style="display:none;">
+        <div class="entry-sheet-handle"></div>
+        <div class="entry-sheet-content">
+            <div id="entry-sheet-type" class="entry-sheet-type"></div>
+            <div id="entry-sheet-amount" class="entry-sheet-amount"></div>
+            <div class="entry-sheet-rows">
+                <div class="entry-sheet-row"><span class="entry-sheet-label">Datum</span><span id="entry-sheet-date" class="entry-sheet-value"></span></div>
+                <div class="entry-sheet-row"><span class="entry-sheet-label">Grund</span><span id="entry-sheet-reason" class="entry-sheet-value"></span></div>
+                <div class="entry-sheet-row"><span class="entry-sheet-label">Eingetragen von</span><span id="entry-sheet-by" class="entry-sheet-value"></span></div>
+                <div id="entry-sheet-note-row" class="entry-sheet-row" style="display:none;"><span class="entry-sheet-label">Notiz</span><span id="entry-sheet-note" class="entry-sheet-value"></span></div>
+            </div>
+            <div id="entry-sheet-delete-wrap" style="display:none; margin-top:20px;">
+                <button class="btn btn-danger-outline btn-full" onclick="deleteCurrentEntry()">EINTRAG LÖSCHEN</button>
+            </div>
+            <button class="btn btn-full" style="margin-top:10px; background:var(--bg-element);" onclick="closeEntrySheet()">SCHLIESSEN</button>
+        </div>
+    </div>
+
+    <!-- ── NAV ── -->
+    <nav id="nav-fines-detail">
+        <div class="nav-inner nav-inner--default">
+            <a href="index.html" class="nav-brand" style="text-decoration:none;color:inherit;">FLIGHTCLUB</a>
+            <div class="nav-links">
+                <a href="fines.html" class="nav-btn">« Strafen</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="app-wrapper">
+        <div id="fines-detail-layout">
+
+            <!-- Header card -->
+            <div class="card fines-detail-header-card" id="fines-detail-header-card">
+                <div class="fines-detail-top">
+                    <div class="fines-detail-identity">
+                        <div class="lb-avatar" id="detail-avatar">
+                            <img id="detail-avatar-img" style="display:none;" alt="">
+                            <span id="detail-avatar-initials"></span>
+                        </div>
+                        <div>
+                            <div class="fines-detail-name" id="detail-player-name">–</div>
+                            <div class="fines-detail-label">Aktueller Saldo</div>
+                        </div>
+                    </div>
+                    <div class="fines-detail-balance" id="detail-balance">0,00 €</div>
+                </div>
+            </div>
+
+            <!-- Admin: add fine / payment -->
+            <div class="card" id="fines-add-card" style="display:none;">
+                <h2 class="card-title">EINTRAG HINZUFÜGEN</h2>
+                <div class="divider"></div>
+                <div class="fines-add-form">
+                    <div class="fines-add-row">
+                        <select id="fine-type" class="select-field" onchange="onTypeChange()">
+                            <option value="fine">💸 Strafe</option>
+                            <option value="payment">✅ Zahlung</option>
+                            <option value="contribution">📅 Beitrag</option>
+                        </select>
+                        <input type="number" id="fine-amount" placeholder="Betrag (€)" min="0.01" step="0.01" class="input-field fines-amount-input">
+                    </div>
+                    <select id="fine-reason" class="select-field" onchange="prefillAmount()">
+                        <option value="" data-amount="">Lade Gründe…</option>
+                    </select>
+                    <input type="text" id="fine-note" placeholder="Zusätzliche Notiz (optional)" class="input-field">
+                    <button onclick="addEntry()" class="btn btn-primary btn-full">HINZUFÜGEN</button>
+                </div>
+                <p id="fines-add-msg" class="settings-msg"></p>
+            </div>
+
+            <!-- Ledger -->
+            <div class="card" id="fines-ledger-card">
+                <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+                    <h2 class="card-title" style="margin:0;">VERLAUF</h2>
+                    <div style="display:flex; gap:8px;">
+                        <button class="btn btn-sm" onclick="exportCSV()">⬇ CSV</button>
+                        <button class="btn btn-sm" onclick="exportPDF()">⬇ PDF</button>
+                    </div>
+                </div>
+                <div class="divider"></div>
+                <div id="fines-ledger-list">
+                    <p class="muted-text">Lade Einträge…</p>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        const SUPABASE_URL = window.SUPABASE_URL;
+        const SUPABASE_KEY = window.SUPABASE_KEY;
+        const supa         = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        const SESSION_KEY  = 'fc47_user';
+
+        // ── AUTH GUARD ──
+        const raw         = sessionStorage.getItem(SESSION_KEY);
+        const currentUser = raw ? JSON.parse(raw) : null;
+        if (!currentUser || currentUser.role === 'ipad') {
+            window.location.href = 'index.html';
+        }
+
+        const isAdmin = currentUser && currentUser.role === 'admin';
+
+        // ── PLAYER ID FROM URL ──
+        const detailPlayerId = new URLSearchParams(window.location.search).get('id');
+        if (!detailPlayerId) window.location.href = 'fines.html';
+        let detailPlayerName = null;
+
+        // ── ENTRY TYPE METADATA ──
+        const TYPE_META = {
+            fine:         { label: '💸 Strafe',  plain: 'Strafe',  css: 'fines-type--fine',         debit: true  },
+            payment:      { label: '✅ Zahlung', plain: 'Zahlung', css: 'fines-type--payment',      debit: false },
+            contribution: { label: '📅 Beitrag', plain: 'Beitrag', css: 'fines-type--contribution', debit: true  }
+        };
+        function typeMeta(t) { return TYPE_META[t] || TYPE_META.fine; }
+
+        // ── LOAD PLAYER IDENTITY (name, avatar) ──
+        async function loadPlayerIdentity() {
+            const { data: player } = await supa
+                .from('players')
+                .select('id, name, avatar_url')
+                .eq('id', detailPlayerId)
+                .single();
+
+            if (!player) { window.location.href = 'fines.html'; return; }
+
+            detailPlayerName = player.name;
+            document.getElementById('detail-player-name').textContent = player.name;
+
+            const avatarImg  = document.getElementById('detail-avatar-img');
+            const avatarInit = document.getElementById('detail-avatar-initials');
+            if (player.avatar_url) {
+                avatarImg.src = player.avatar_url;
+                avatarImg.style.display  = 'block';
+                avatarInit.style.display = 'none';
+            } else {
+                avatarInit.textContent = (player.name || '?').slice(0, 2).toUpperCase();
+                avatarImg.style.display  = 'none';
+                avatarInit.style.display = 'flex';
+            }
+
+            document.getElementById('fines-add-card').style.display = isAdmin ? 'block' : 'none';
+            document.getElementById('fines-detail-layout').classList.toggle('no-add-card', !isAdmin);
+        }
+
+        async function loadLedger() {
+            const { data, error } = await supa
+                .from('fines_ledger')
+                .select('*')
+                .eq('player_id', detailPlayerId)
+                .order('created_at', { ascending: false });
+
+            const entries = data || [];
+            const balance = entries.reduce((sum, e) => sum + parseFloat(e.amount), 0);
+            const isZero  = balance <= 0;
+
+            document.getElementById('detail-balance').textContent = formatEur(balance);
+            document.getElementById('detail-balance').className   =
+                'fines-detail-balance ' + (isZero ? 'fines-amount--zero' : 'fines-amount--debt');
+
+            const listEl = document.getElementById('fines-ledger-list');
+
+            if (error) { listEl.innerHTML = '<p class="muted-text">Fehler beim Laden.</p>'; return; }
+            if (entries.length === 0) { listEl.innerHTML = '<p class="muted-text">Noch keine Einträge.</p>'; return; }
+
+            // Resolve appt:{uuid} notes to appointment titles in one batch fetch
+            const apptIds = [...new Set(
+                entries.map(e => e.note).filter(n => n && n.startsWith('appt:')).map(n => n.replace('appt:', ''))
+            )];
+
+            const apptTitleMap = {};
+            if (apptIds.length > 0) {
+                const { data: appts } = await supa
+                    .from('appointments')
+                    .select('id, title')
+                    .in('id', apptIds);
+                (appts || []).forEach(a => apptTitleMap[a.id] = a.title);
+            }
+
+            listEl.innerHTML = `
+<div class="fines-table">
+    <div class="fines-table-header">
+        <span>Datum</span>
+        <span>Typ</span>
+        <span>Grund</span>
+        <span>Von</span>
+        <span class="fines-col-amount">Betrag</span>
+    </div>
+    ${entries.map(e => {
+        const meta    = typeMeta(e.type);
+        const dateStr = new Date(e.created_at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+        // Resolve note: replace appt:{uuid} with appointment title, hide otherwise
+        let noteDisplay = '';
+        if (e.note && e.note.startsWith('appt:')) {
+            const apptId = e.note.replace('appt:', '');
+            noteDisplay  = apptTitleMap[apptId] ? `(${apptTitleMap[apptId]})` : '';
+        } else if (e.note) {
+            noteDisplay = e.note;
+        }
+
+        const reason = [e.reason, noteDisplay].filter(Boolean).join(' · ') || '–';
+        const clickAttr = isAdmin
+            ? `onclick="openEntrySheet('${e.id}','${escHtml(e.type)}','${escHtml(e.reason||'')}','${escHtml(noteDisplay)}',${e.amount},'${escHtml(e.created_by||'')}','${escHtml(dateStr)}')" style="cursor:pointer;"`
+            : '';
+        return `
+<div class="fines-table-row${isAdmin ? ' fines-table-row--tappable' : ''}" ${clickAttr}>
+    <span class="fines-col-date">${dateStr}</span>
+    <span class="fines-col-type ${meta.css}">${meta.label}</span>
+    <span class="fines-col-reason">${escHtml(reason)}</span>
+    <span class="fines-col-by">${escHtml(e.created_by)}</span>
+    <span class="fines-col-amount ${meta.debit ? 'fines-amount--debt' : 'fines-amount--zero'}">${meta.debit ? '+' : '–'}${formatEur(Math.abs(e.amount))}</span>
+</div>`;
+    }).join('')}
+</div>`;
+        }
+
+        // ── LOAD REASONS INTO DROPDOWN ──
+        async function loadReasons() {
+            const { data } = await supa
+                .from('fines_reasons')
+                .select('*')
+                .order('sort_order')
+                .order('created_at');
+
+            const select = document.getElementById('fine-reason');
+            if (!select) return;
+
+            const reasons = data || [];
+            select.innerHTML =
+                '<option value="" data-amount="">Grund auswählen…</option>' +
+                reasons.map(r =>
+                    `<option value="${escHtml(r.name)}" data-amount="${r.amount}">` +
+                    `${escHtml(r.name)} — ${parseFloat(r.amount).toLocaleString('de-DE', { minimumFractionDigits: 2 })} €` +
+                    `</option>`
+                ).join('') +
+                '<option value="Sonstiges" data-amount="">Sonstiges</option>';
+        }
+
+        // ── TOGGLE REASON FIELD BASED ON TYPE ──
+        function onTypeChange() {
+            const type      = document.getElementById('fine-type').value;
+            const reasonSel = document.getElementById('fine-reason');
+            const noReason  = type !== 'fine'; // payment & contribution need no reason
+            reasonSel.disabled = noReason;
+            reasonSel.style.opacity = noReason ? '0.4' : '1';
+            if (noReason) {
+                reasonSel.value = '';
+                document.getElementById('fine-amount').value = type === 'contribution' ? '10.00' : '';
+            }
+        }
+
+        // ── PREFILL AMOUNT FROM REASON ──
+        function prefillAmount() {
+            const select = document.getElementById('fine-reason');
+            const amount = select.options[select.selectedIndex].dataset.amount;
+            if (amount) document.getElementById('fine-amount').value = amount;
+        }
+
+        // ── ADD ENTRY (admin only) ──
+        async function addEntry() {
+            const type   = document.getElementById('fine-type').value;
+            const amount = parseFloat(document.getElementById('fine-amount').value);
+            const reason = document.getElementById('fine-reason').value;
+            const note   = document.getElementById('fine-note').value.trim();
+            const msgEl  = document.getElementById('fines-add-msg');
+
+            const showMsg = (text, color) => {
+                msgEl.textContent = text;
+                msgEl.style.color = color;
+                setTimeout(() => msgEl.textContent = '', 3500);
+            };
+
+            if (!amount || amount <= 0) return showMsg('Bitte einen gültigen Betrag eingeben.', 'var(--red)');
+            if (type === 'fine' && !reason) return showMsg('Bitte einen Grund auswählen.', 'var(--red)');
+
+            // Payments are stored as negative amounts; fines & contributions as positive
+            const storedAmount = type === 'payment' ? -Math.abs(amount) : Math.abs(amount);
+            const storedReason = type === 'contribution' ? 'Monatsbeitrag' : reason;
+
+            const { error } = await supa.from('fines_ledger').insert([{
+                player_id:  detailPlayerId,
+                amount:     storedAmount,
+                type,
+                reason:     storedReason,
+                note:       note || null,
+                created_by: currentUser.username
+            }]);
+
+            if (error) return showMsg('Fehler: ' + error.message, 'var(--red)');
+
+            // Reset form
+            document.getElementById('fine-amount').value = '';
+            document.getElementById('fine-reason').value = '';
+            document.getElementById('fine-note').value   = '';
+
+            showMsg('Eintrag gespeichert!', 'var(--green)');
+            await loadLedger();
+        }
+
+        // ── EXPORT CSV ──
+        async function exportCSV() {
+            const { data, error } = await supa
+                .from('fines_ledger').select('*')
+                .eq('player_id', detailPlayerId)
+                .order('created_at', { ascending: false });
+            if (error || !data) { showToast('Export fehlgeschlagen.', 'error'); return; }
+
+            const rows = [['Datum', 'Typ', 'Grund', 'Betrag (€)', 'Eingetragen von', 'Notiz']];
+            data.forEach(e => {
+                const meta = typeMeta(e.type);
+                const d    = new Date(e.created_at).toLocaleDateString('de-DE');
+                const amt  = (meta.debit ? '+' : '-') + Math.abs(parseFloat(e.amount)).toFixed(2).replace('.', ',');
+                rows.push([d, meta.plain, e.reason || '', amt, e.created_by || '', e.note || '']);
+            });
+
+            const csv  = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(';')).join('\n');
+            const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+            const url  = URL.createObjectURL(blob);
+            const a    = Object.assign(document.createElement('a'), {
+                href: url,
+                download: `Strafen_${detailPlayerName}_${new Date().toISOString().slice(0,10)}.csv`
+            });
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast('CSV exportiert.', 'success');
+        }
+
+        // ── EXPORT PDF ──
+        async function exportPDF() {
+            if (!window.jspdf) { showToast('PDF-Bibliothek lädt noch, bitte kurz warten.', 'info'); return; }
+
+            const { data, error } = await supa
+                .from('fines_ledger').select('*')
+                .eq('player_id', detailPlayerId)
+                .order('created_at', { ascending: false });
+            if (error || !data) { showToast('Export fehlgeschlagen.', 'error'); return; }
+
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+            const balance = data.reduce((s, e) => s + parseFloat(e.amount), 0);
+            const now     = new Date().toLocaleDateString('de-DE');
+
+            // ── Background ──
+            doc.setFillColor(13, 13, 15);
+            doc.rect(0, 0, 210, 297, 'F');
+
+            // ── Header ──
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(16);
+            doc.setTextColor(245, 166, 35);
+            doc.text('DC FlightClub 47', 14, 18);
+
+            doc.setFontSize(10);
+            doc.setTextColor(150, 150, 170);
+            doc.setFont('helvetica', 'normal');
+            doc.text(`Strafenübersicht · ${detailPlayerName}`, 14, 26);
+            doc.text(`Exportiert: ${now}`, 14, 32);
+
+            const balFmt = (balance > 0 ? '+' : '') + balance.toFixed(2).replace('.', ',') + ' €';
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(balance > 0 ? 255 : 80, balance > 0 ? 100 : 200, balance > 0 ? 100 : 120);
+            doc.text(`Saldo: ${balFmt}`, 14, 38);
+
+            // ── Divider ──
+            doc.setDrawColor(50, 50, 65);
+            doc.line(14, 42, 196, 42);
+
+            // ── Table header ──
+            let y = 50;
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(8);
+            doc.setTextColor(120, 120, 145);
+            doc.text('DATUM',  14,  y);
+            doc.text('TYP',    46,  y);
+            doc.text('GRUND',  76,  y);
+            doc.text('VON',   148,  y);
+            doc.text('BETRAG', 196, y, { align: 'right' });
+            y += 3;
+            doc.line(14, y, 196, y);
+            y += 6;
+
+            // ── Rows ──
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(8.5);
+            data.forEach(e => {
+                if (y > 275) {
+                    doc.addPage();
+                    doc.setFillColor(13, 13, 15);
+                    doc.rect(0, 0, 210, 297, 'F');
+                    y = 20;
+                }
+                const meta  = typeMeta(e.type);
+                const d     = new Date(e.created_at).toLocaleDateString('de-DE');
+                const amt   = (meta.debit ? '+' : '–') + Math.abs(parseFloat(e.amount)).toFixed(2).replace('.', ',') + ' €';
+                const color = e.type === 'contribution' ? [232,163,61] : (meta.debit ? [220,90,90] : [80,200,130]);
+
+                doc.setTextColor(180, 180, 200);
+                doc.text(d, 14, y);
+                doc.setTextColor(color);
+                doc.text(meta.plain, 46, y);
+                doc.setTextColor(180, 180, 200);
+                doc.text(doc.splitTextToSize((e.reason || '–'), 68)[0], 76, y);
+                doc.text((e.created_by || '–').slice(0, 18), 148, y);
+                doc.setTextColor(color);
+                doc.text(amt, 196, y, { align: 'right' });
+
+                doc.setDrawColor(35, 35, 48);
+                doc.line(14, y + 2.5, 196, y + 2.5);
+                y += 9;
+            });
+
+            doc.save(`Strafen_${detailPlayerName}_${new Date().toISOString().slice(0,10)}.pdf`);
+            showToast('PDF exportiert.', 'success');
+        }
+
+        // ── ENTRY DETAIL SHEET ──
+        let _currentEntryId = null;
+
+        function openEntrySheet(id, type, reason, note, amount, createdBy, dateStr) {
+            _currentEntryId = id;
+            const meta = typeMeta(type);
+            document.getElementById('entry-sheet-type').textContent    = meta.label;
+            document.getElementById('entry-sheet-type').className       = 'entry-sheet-type ' + meta.css;
+            document.getElementById('entry-sheet-amount').textContent  = (meta.debit ? '+' : '–') + formatEur(Math.abs(parseFloat(amount)));
+            document.getElementById('entry-sheet-amount').className    = 'entry-sheet-amount ' + (meta.debit ? 'fines-amount--debt' : 'fines-amount--zero');
+            document.getElementById('entry-sheet-date').textContent    = dateStr;
+            document.getElementById('entry-sheet-reason').textContent  = reason || '–';
+            document.getElementById('entry-sheet-by').textContent      = createdBy || '–';
+            const noteRow = document.getElementById('entry-sheet-note-row');
+            if (note) {
+                document.getElementById('entry-sheet-note').textContent = note;
+                noteRow.style.display = 'flex';
+            } else {
+                noteRow.style.display = 'none';
+            }
+            document.getElementById('entry-sheet-delete-wrap').style.display = isAdmin ? 'block' : 'none';
+
+            document.getElementById('entry-sheet-overlay').style.display = 'block';
+            const sheet = document.getElementById('entry-sheet');
+            sheet.style.display = 'block';
+            requestAnimationFrame(() => sheet.classList.add('entry-sheet--open'));
+        }
+
+        function closeEntrySheet() {
+            const sheet = document.getElementById('entry-sheet');
+            sheet.classList.remove('entry-sheet--open');
+            setTimeout(() => {
+                sheet.style.display = 'block';
+                document.getElementById('entry-sheet-overlay').style.display = 'none';
+                sheet.style.display = 'none';
+            }, 300);
+            _currentEntryId = null;
+        }
+
+        async function deleteCurrentEntry() {
+            if (!_currentEntryId) return;
+            const ok = await showConfirm('Eintrag löschen', 'Diesen Eintrag wirklich dauerhaft löschen?');
+            if (!ok) return;
+            const { error } = await supa.from('fines_ledger').delete().eq('id', _currentEntryId);
+            if (error) { showToast('Fehler: ' + error.message, 'error'); return; }
+            closeEntrySheet();
+            showToast('Eintrag gelöscht.', 'success');
+            await loadLedger();
+        }
+
+        // ── REMOVE LEGACY "MONATSBEITRAG" FINE REASON ──
+        // Monatsbeitrag is now its own record type ('contribution') and must no
+        // longer be selectable as a fine reason (would count into appointment
+        // average fines otherwise).
+        async function removeMonatsbeitragReason() {
+            await supa.from('fines_reasons').delete().eq('name', 'Monatsbeitrag');
+        }
+
+        // ── HELPERS ──
+        function formatEur(amount) {
+            return Math.abs(amount).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+        }
+
+        function escHtml(str) {
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        // ── INIT ──
+        async function init() {
+            await loadPlayerIdentity();
+            if (isAdmin) {
+                removeMonatsbeitragReason().then(() => loadReasons());
+            }
+            await loadLedger();
+        }
+        init();
+    </script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/fightclub-dart-tracker/sw.js')
+                .catch(() => {});
+        }
+    </script>
+</body>
+</html>

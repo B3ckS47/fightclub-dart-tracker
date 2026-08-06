@@ -27,7 +27,7 @@
         </div>
     </nav>
 
-    <div class="app-wrapper">
+    <div class="app-wrapper" id="spieltag-detail-wrapper">
 
         <!-- Header -->
         <div class="card">
@@ -40,40 +40,46 @@
             </div>
         </div>
 
-        <!-- Player Pool -->
-        <div class="card">
-            <h2 class="card-title">ZUGESAGTE SPIELER</h2>
-            <div class="divider"></div>
-            <p class="muted-text" style="font-size:0.78rem; margin-bottom:12px;">Sortiert nach Punkten. Nur Mitglieder und Admins die zugesagt haben.</p>
-            <div id="player-pool"></div>
+        <!-- Player Pool — independent flex column so its height never
+             affects the bracket column's row-placement (CSS Grid
+             implicit-row-sharing bug, same fix as player-profile.html) -->
+        <div id="spieltag-detail-left">
+            <div class="card">
+                <h2 class="card-title">ZUGESAGTE SPIELER</h2>
+                <div class="divider"></div>
+                <p class="muted-text" style="font-size:0.78rem; margin-bottom:12px;">Sortiert nach Punkten. Nur Mitglieder und Admins die zugesagt haben.</p>
+                <div id="player-pool"></div>
+            </div>
         </div>
 
-        <!-- Bracket 1: 6 Singles -->
-        <div class="card">
-            <h2 class="card-title">BRACKET 1 · EINZEL</h2>
-            <div class="divider"></div>
-            <p class="muted-text" style="font-size:0.78rem; margin-bottom:12px;">6 Einzel · jeder Spieler nur einmal pro Bracket</p>
-            <div class="bracket-section" id="bracket-1"></div>
-        </div>
+        <div id="spieltag-detail-right">
+            <!-- Bracket 1: 6 Singles -->
+            <div class="card">
+                <h2 class="card-title">BRACKET 1 · EINZEL</h2>
+                <div class="divider"></div>
+                <p class="muted-text" style="font-size:0.78rem; margin-bottom:12px;">6 Einzel · jeder Spieler nur einmal pro Bracket</p>
+                <div class="bracket-section" id="bracket-1"></div>
+            </div>
 
-        <!-- Bracket 2: 3 Doubles -->
-        <div class="card">
-            <h2 class="card-title">BRACKET 2 · DOPPEL</h2>
-            <div class="divider"></div>
-            <p class="muted-text" style="font-size:0.78rem; margin-bottom:12px;">3 Doppel · jeder Spieler nur einmal pro Bracket</p>
-            <div class="bracket-section" id="bracket-2"></div>
-        </div>
+            <!-- Bracket 2: 3 Doubles -->
+            <div class="card">
+                <h2 class="card-title">BRACKET 2 · DOPPEL</h2>
+                <div class="divider"></div>
+                <p class="muted-text" style="font-size:0.78rem; margin-bottom:12px;">3 Doppel · jeder Spieler nur einmal pro Bracket</p>
+                <div class="bracket-section" id="bracket-2"></div>
+            </div>
 
-        <!-- Bracket 3: 6 Singles -->
-        <div class="card">
-            <h2 class="card-title">BRACKET 3 · EINZEL</h2>
-            <div class="divider"></div>
-            <p class="muted-text" style="font-size:0.78rem; margin-bottom:12px;">6 Einzel · jeder Spieler nur einmal pro Bracket</p>
-            <div class="bracket-section" id="bracket-3"></div>
-        </div>
+            <!-- Bracket 3: 6 Singles -->
+            <div class="card">
+                <h2 class="card-title">BRACKET 3 · EINZEL</h2>
+                <div class="divider"></div>
+                <p class="muted-text" style="font-size:0.78rem; margin-bottom:12px;">6 Einzel · jeder Spieler nur einmal pro Bracket</p>
+                <div class="bracket-section" id="bracket-3"></div>
+            </div>
 
-        <!-- Save button -->
-        <button class="btn btn-primary btn-full btn-lg" onclick="saveLineup()">AUFSTELLUNG SPEICHERN</button>
+            <!-- Save button -->
+            <button class="btn btn-primary btn-full btn-lg" onclick="saveLineup()">AUFSTELLUNG SPEICHERN</button>
+        </div>
 
     </div>
 

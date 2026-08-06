@@ -515,6 +515,37 @@ function makePlayerStats() {
 const BOT_ICON = '🤖'; // every bot display name starts with this — used to detect the bot side in vsAvatarHtml()
 let pendingBotTurnTimer = null; // setTimeout handle — kept OUTSIDE gameState (not JSON-serializable, not part of undo)
 
+// Separate, isolated save path into training_results (game:'bot') — completely
+// independent from saveMatchToSupabase()/game_history. Fire-and-forget so a
+// Supabase hiccup here can never delay or break the real match-end flow.
+// Reads gameState synchronously before the first await inside the async IIFE,
+// so a rematch (startGame() resetting gameState.stats) can't race the snapshot.
+function saveBotTrainingResult(winnerTeamIdx) {
+    if (gameState.opponentType !== 'bot' || !gameState.botPlayerId) return;
+    const s   = gameState.stats[0]; // bot training is always singles, player is always index 0
+    const avg = s.dartsThrown > 0 ? (s.totalPoints / (s.dartsThrown / 3)) : 0;
+    const row = {
+        player_id: gameState.botPlayerId,
+        game:      'bot',
+        score:     Math.round(avg * 100), // Ø×100 as an integer; meta.avg holds the real value
+        meta: {
+            avg:             parseFloat(avg.toFixed(2)),
+            win:             winnerTeamIdx === 0,
+            legsWon:         gameState.legScore[0],
+            legsLost:        gameState.legScore[1],
+            oneEighties:     s.oneEighties,
+            highFinish:      s.highFinish,
+            dartsThrown:     s.dartsThrown,
+            botTargetAvg:    gameState.botTargetAvg,
+            botStrengthMode: gameState.botStrengthMode
+        }
+    };
+    (async () => {
+        try { await supa.from('training_results').insert([row]); }
+        catch (e) { console.error('Bot training save error:', e); }
+    })();
+}
+
 // ── ONLINE MODE (two devices, one throw each) ──
 let _applyingRemoteOnlineMove = false; // re-entrancy guard while replaying the opponent's move locally
 let vsIntroTapDisabled = false;        // blocks pickStarter() during the automatic Bull-Out reveal
@@ -685,6 +716,7 @@ async function startGame() {
             const currentUser = raw ? JSON.parse(raw) : null;
             const myPlayer    = currentUser && currentUser.player_id ? players.find(p => p.id === currentUser.player_id) : null;
             if (!myPlayer) { await showAlert('Kein Profil verknüpft', 'Dein Konto ist mit keinem Spieler-Profil verknüpft.'); return; }
+            gameState.botPlayerId = myPlayer.id;
             const p1 = myPlayer.name;
             gameState.pNames      = [p1, `${BOT_ICON} Training`]; // bot label is finalized below once strength mode is known
             gameState.teamPlayers = [[p1], [`${BOT_ICON} Training`]];
@@ -931,6 +963,7 @@ async function submitTurn() {
             if (gameState.gameType === 'singles' && gameState.isOfficial) {
                 try { await saveMatchToSupabase(); } catch(e) { console.error(e); }
             }
+            if (gameState.opponentType === 'bot') saveBotTrainingResult(teamIdx);
             showMatchModal(gameState.pNames[teamIdx]);
         } else {
             showLegModal(gameState.pNames[teamIdx]);
@@ -1289,6 +1322,11 @@ async function selectAusbullenWinner(teamIdx) {
         if (gameState.gameType === 'singles' && gameState.isOfficial) {
             try { await saveMatchToSupabase(); } catch(e) { console.error(e); }
         }
+        // Currently unreachable for bot opponents — Ausbullen only triggers
+        // when gameState.isOfficial is true, and bot games never are. Kept
+        // here defensively in case that gating ever changes; don't "fix" by
+        // removing it if it looks dead.
+        if (gameState.opponentType === 'bot') saveBotTrainingResult(teamIdx);
         showMatchModal(gameState.pNames[teamIdx]);
     } else {
         showLegModal(gameState.pNames[teamIdx] + ' (Ausbullen)');

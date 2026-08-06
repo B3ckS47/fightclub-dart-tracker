@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlightClub · Training</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0d0d0f">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <script src="config.js"></script>
+    <script src="ui-utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>document.documentElement.setAttribute("data-theme",localStorage.getItem("fc47_theme")||"dark");</script>
+</head>
+<body>
+
+    <nav id="nav-training">
+        <div class="nav-inner nav-inner--default">
+            <a href="index.html" class="nav-brand" style="text-decoration:none;color:inherit;">FLIGHTCLUB</a>
+            <div class="nav-links">
+                <a href="index.html" class="nav-btn">« Menü</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="app-wrapper">
+        <div class="card">
+            <h2 class="card-title">TRAINING</h2>
+            <div class="divider"></div>
+            <p class="muted-text" style="font-size:0.85rem;">Wähle eine Trainingsform.</p>
+        </div>
+
+        <div class="menu-cards" id="training-cards">
+            <a href="game.html?opponent=bot" class="menu-card menu-card--training">
+                <div class="menu-card-icon">🤖</div>
+                <div class="menu-card-body">
+                    <div class="menu-card-title">GEGEN DEN BOT</div>
+                    <div class="menu-card-sub">501/301 · Ziel-Average wählbar</div>
+                </div>
+                <div class="menu-card-arrow">»</div>
+            </a>
+
+            <a href="training-clock.html" class="menu-card menu-card--training">
+                <div class="menu-card-icon">🕐</div>
+                <div class="menu-card-body">
+                    <div class="menu-card-title">AROUND THE CLOCK</div>
+                    <div class="menu-card-sub" id="clock-best-sub">Noch keine Ergebnisse</div>
+                </div>
+                <div class="menu-card-arrow">»</div>
+            </a>
+
+            <a href="training-bobs27.html" class="menu-card menu-card--training">
+                <div class="menu-card-icon">2️⃣</div>
+                <div class="menu-card-body">
+                    <div class="menu-card-title">BOB'S 27</div>
+                    <div class="menu-card-sub" id="bobs27-best-sub">Noch keine Ergebnisse</div>
+                </div>
+                <div class="menu-card-arrow">»</div>
+            </a>
+
+            <a href="training-checkout.html" class="menu-card menu-card--training">
+                <div class="menu-card-icon">✅</div>
+                <div class="menu-card-body">
+                    <div class="menu-card-title">CHECKOUT-TRAINING</div>
+                    <div class="menu-card-sub" id="checkout-best-sub">Noch keine Ergebnisse</div>
+                </div>
+                <div class="menu-card-arrow">»</div>
+            </a>
+
+            <a href="training-jdc.html" class="menu-card menu-card--training">
+                <div class="menu-card-icon">👕</div>
+                <div class="menu-card-body">
+                    <div class="menu-card-title">JDC CHALLENGE</div>
+                    <div class="menu-card-sub" id="jdc-best-sub">Noch keine Ergebnisse</div>
+                </div>
+                <div class="menu-card-arrow">»</div>
+            </a>
+
+            <a href="training-aim.html" class="menu-card menu-card--training">
+                <div class="menu-card-icon">🎯</div>
+                <div class="menu-card-body">
+                    <div class="menu-card-title">AIM-TRAINING</div>
+                    <div class="menu-card-sub" id="aim-best-sub">Noch keine Ergebnisse</div>
+                </div>
+                <div class="menu-card-arrow">»</div>
+            </a>
+
+            <a href="training-stats.html" class="menu-card menu-card--training">
+                <div class="menu-card-icon">📈</div>
+                <div class="menu-card-body">
+                    <div class="menu-card-title">MEINE STATISTIKEN</div>
+                    <div class="menu-card-sub">Verlauf · Heatmaps · Bilanzen</div>
+                </div>
+                <div class="menu-card-arrow">»</div>
+            </a>
+        </div>
+    </div>
+
+    <script>
+        const supa = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
+
+        (function() {
+            var raw = sessionStorage.getItem('fc47_user');
+            if (!raw) { window.location.href = 'index.html'; return; }
+            var u = JSON.parse(raw);
+            if (u.role === 'ipad') { window.location.href = 'index.html'; return; }
+            window.loggedInUser = u;
+            loadPersonalBests(u.player_id);
+        })();
+
+        async function loadPersonalBests(playerId) {
+            if (!playerId) return;
+            const { data, error } = await supa
+                .from('training_results')
+                .select('game, score, meta')
+                .eq('player_id', playerId);
+            if (error || !data || data.length === 0) return;
+
+            const byGame = { clock: [], bobs27: [], checkout: [], jdc: [], aim: [] };
+            data.forEach(r => {
+                if (!byGame[r.game]) return;
+                // Clock runs over a partial range (e.g. 15–20) are stored but
+                // not comparable to full 1–Bull runs — exclude them from the
+                // "Beste Runde" headline. Rows without from/to predate the
+                // range feature and were always full runs.
+                if (r.game === 'clock' && r.meta
+                    && ((r.meta.from !== undefined && r.meta.from !== 1)
+                        || (r.meta.to !== undefined && r.meta.to !== 'bull'))) return;
+                byGame[r.game].push(r.score);
+            });
+
+            if (byGame.clock.length > 0) {
+                const best = Math.min(...byGame.clock);
+                document.getElementById('clock-best-sub').textContent = `Beste Runde: ${best} Darts`;
+            }
+            if (byGame.bobs27.length > 0) {
+                const best = Math.max(...byGame.bobs27);
+                document.getElementById('bobs27-best-sub').textContent = `Highscore: ${best}`;
+            }
+            if (byGame.checkout.length > 0) {
+                const best = Math.max(...byGame.checkout);
+                document.getElementById('checkout-best-sub').textContent = `Beste Quote: ${best} %`;
+            }
+            if (byGame.jdc.length > 0) {
+                const best = Math.max(...byGame.jdc);
+                document.getElementById('jdc-best-sub').textContent = `Highscore: ${best} · ${getShirt(best).emoji} ${getShirt(best).label}`;
+            }
+            if (byGame.aim.length > 0) {
+                const best = Math.max(...byGame.aim);
+                document.getElementById('aim-best-sub').textContent = `Beste Quote: ${best} %`;
+            }
+        }
+
+        // Same 7-tier boundaries the JDC Challenge instructions specify —
+        // duplicated on training-jdc.html and training-stats.html too.
+        function getShirt(score) {
+            if (score < 150) return { label: 'Weiß',    color: '#f5f5f5', emoji: '⚪' };
+            if (score < 300) return { label: 'Lila',     color: '#a855f7', emoji: '🟣' };
+            if (score < 450) return { label: 'Gelb',     color: '#eab308', emoji: '🟡' };
+            if (score < 600) return { label: 'Grün',     color: '#29d87c', emoji: '🟢' };
+            if (score < 700) return { label: 'Blau',     color: '#3b82f6', emoji: '🔵' };
+            if (score < 850) return { label: 'Rot',      color: '#ff4455', emoji: '🔴' };
+            return                 { label: 'Schwarz',  color: '#1a1a1a', emoji: '⚫' };
+        }
+    </script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/fightclub-dart-tracker/sw.js')
+                .catch(() => {});
+        }
+    </script>
+</body>
+</html>

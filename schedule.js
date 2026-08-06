@@ -14,6 +14,8 @@ const TYPE_COLORS = {
 
 let allPlayers = [];
 let memberPlayerIds = new Set();
+let avatarByPlayerId = {};
+let userToPlayerId = {};
 let _upcomingRaw = [];
 let _pastRaw     = [];
 let _allVotesRaw = [];
@@ -52,7 +54,7 @@ async function loadAppointments() {
     const [apptRes, votesRes, playersRes, usersRes, finesRes] = await Promise.all([
         supa.from('appointments').select('*').order('date', { ascending: true }),
         supa.from('appointment_votes').select('*'),
-        supa.from('players').select('id, name').order('name'),
+        supa.from('players').select('id, name, avatar_url').order('name'),
         supa.from('app_users').select('id, player_id, role'),
         supa.from('fines_ledger').select('amount, note, type').eq('type', 'fine').like('note', 'appt:%').not('reason', 'like', 'Bountyeinsatz%')
     ]);
@@ -66,6 +68,12 @@ async function loadAppointments() {
     const allUsers  = usersRes.data || [];
     const linkedIds = allUsers.map(u => u.player_id).filter(Boolean);
     memberPlayerIds = new Set(linkedIds);
+
+    avatarByPlayerId = {};
+    allPlayers.forEach(p => { avatarByPlayerId[p.id] = p.avatar_url || null; });
+
+    userToPlayerId = {};
+    allUsers.forEach(u => { userToPlayerId[u.id] = u.player_id; });
 
     const allVotes = votesRes.data || [];
     const all      = apptRes.data || [];
@@ -173,6 +181,35 @@ async function applyAverageFine(appt, allVotes, allUsers) {
     if (error) console.error('Avg fine insert error:', error.message);
 }
 
+// ── VOTE AVATAR ──
+function voteAvatarHtml(v, stacked) {
+    const playerId = v.is_guest ? v.user_id : userToPlayerId[v.user_id];
+    const url      = playerId ? avatarByPlayerId[playerId] : null;
+    const initials = (v.username || '?').slice(0, 2).toUpperCase();
+    const cls      = 'lb-avatar lb-avatar--sm' + (stacked ? ' lb-avatar--stacked' : '');
+    return url
+        ? `<span class="${cls}"><img src="${url}" alt=""></span>`
+        : `<span class="${cls}">${initials}</span>`;
+}
+
+const VOTE_STACK_MAX = 10;
+
+function voteAvatarStackHtml(votes) {
+    if (votes.length === 0) return '';
+    const shown = votes.slice(0, VOTE_STACK_MAX).map(v => voteAvatarHtml(v, true)).join('');
+    const rest  = votes.length - VOTE_STACK_MAX;
+    return shown + (rest > 0 ? `<span class="vote-avatar-more">+${rest}</span>` : '');
+}
+
+// ── TOGGLE VOTE NAME LIST ──
+function toggleVoteNames(key) {
+    const el   = document.getElementById(`vote-names-${key}`);
+    const icon = document.getElementById(`vote-toggle-${key}`);
+    if (!el) return;
+    const collapsed = el.classList.toggle('vote-names--collapsed');
+    if (icon) icon.textContent = collapsed ? '▶' : '▼';
+}
+
 // ── RENDER APPOINTMENT CARDS ──
 function renderAppointments(appointments, allVotes, containerId, isPast) {
     const container = document.getElementById(containerId);
@@ -254,32 +291,45 @@ function renderAppointments(appointments, allVotes, containerId, isPast) {
 
     <div class="appt-votes">
         <div class="vote-col vote-col--yes">
-            <div class="vote-col-header">
+            <div class="vote-col-header"${attending.length > 0 ? ` onclick="toggleVoteNames('${appt.id}-yes')" style="cursor:pointer;"` : ''}>
                 <span class="vote-icon">✅</span>
                 <span class="vote-count vote-count--yes">${attending.length}</span>
+                ${attending.length > 0 ? `<span class="vote-toggle-icon" id="vote-toggle-${appt.id}-yes">▶</span>` : ''}
             </div>
-            <div class="vote-names vote-names--col">
-                ${attending.length > 0
-                    ? attending.map(v => `
-                        <span class="vote-name vote-name--yes${v.is_guest ? ' vote-name--guest' : ''}">
-                            ${v.is_guest ? '👤 ' : ''}${v.username}${canVote && v.is_guest
-                                ? `<button class="vote-guest-remove" onclick="removeGuestVote('${appt.id}', '${v.user_id}')" title="Entfernen">×</button>`
-                                : ''
-                            }
-                        </span>`).join('')
-                    : '<span class="vote-none">–</span>'}
+            ${attending.length > 0 ? `
+            <div class="vote-avatar-stack" onclick="toggleVoteNames('${appt.id}-yes')">
+                ${voteAvatarStackHtml(attending)}
             </div>
+            <div class="vote-names vote-names--col vote-names--collapsed" id="vote-names-${appt.id}-yes">
+                ${attending.map(v => `
+                    <span class="vote-name vote-name--yes${v.is_guest ? ' vote-name--guest' : ''}">
+                        <span class="vote-name-main">
+                            ${voteAvatarHtml(v)}
+                            <span class="vote-name-text">${v.is_guest ? '👤 ' : ''}${v.username}</span>
+                        </span>${canVote && v.is_guest
+                            ? `<button class="vote-guest-remove" onclick="removeGuestVote('${appt.id}', '${v.user_id}')" title="Entfernen">×</button>`
+                            : ''
+                        }
+                    </span>`).join('')}
+            </div>` : '<span class="vote-none">–</span>'}
         </div>
         <div class="vote-col vote-col--no">
-            <div class="vote-col-header">
+            <div class="vote-col-header"${declining.length > 0 ? ` onclick="toggleVoteNames('${appt.id}-no')" style="cursor:pointer;"` : ''}>
                 <span class="vote-icon">❌</span>
                 <span class="vote-count vote-count--no">${declining.length}</span>
+                ${declining.length > 0 ? `<span class="vote-toggle-icon" id="vote-toggle-${appt.id}-no">▶</span>` : ''}
             </div>
-            <div class="vote-names vote-names--col">
-                ${declining.length > 0
-                    ? declining.map(v => `<span class="vote-name vote-name--no">${v.username}</span>`).join('')
-                    : '<span class="vote-none">–</span>'}
+            ${declining.length > 0 ? `
+            <div class="vote-avatar-stack" onclick="toggleVoteNames('${appt.id}-no')">
+                ${voteAvatarStackHtml(declining)}
             </div>
+            <div class="vote-names vote-names--col vote-names--collapsed" id="vote-names-${appt.id}-no">
+                ${declining.map(v => `
+                    <span class="vote-name vote-name--no">
+                        ${voteAvatarHtml(v)}
+                        <span class="vote-name-text">${v.username}</span>
+                    </span>`).join('')}
+            </div>` : '<span class="vote-none">–</span>'}
         </div>
     </div>
 

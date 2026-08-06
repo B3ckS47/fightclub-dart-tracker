@@ -29,7 +29,7 @@
         </div>
     </nav>
 
-    <div class="app-wrapper">
+    <div class="app-wrapper" id="settings-wrapper">
 
         <!-- PROFILE HEADER -->
         <div class="settings-header">
@@ -47,9 +47,9 @@
         <input type="file" id="avatar-file-input" accept="image/*" style="display:none;">
         <p id="avatar-msg" class="settings-msg" style="margin: 0 0 12px; text-align:center;"></p>
 
-        <!-- CHANGE PASSWORD -->
+        <!-- QUICK SETTINGS -->
         <div class="card">
-            <h2 class="card-title">EINSTELLUNGEN</h2>
+            <h2 class="card-title">SCHNELLEINSTELLUNGEN</h2>
             <div class="divider"></div>
 
             <!-- THEME -->
@@ -81,7 +81,24 @@
 
             <div class="divider" style="margin-top:20px;"></div>
 
-            <h3 class="section-label" style="margin-top:16px;">Passwort ändern</h3>
+            <h3 class="section-label" style="margin-top:16px;">Benachrichtigungen</h3>
+            <p class="muted-text" style="margin:8px 0 12px; font-size:0.78rem;">
+                Erhalte eine Push-Benachrichtigung 24 Stunden vor einem Termin.<br>
+                Die App muss als PWA installiert sein.
+            </p>
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+                <span id="push-status-text" style="font-size:0.9rem; color:var(--text-secondary);">Lade Status…</span>
+                <button id="push-toggle-btn" class="btn btn-primary" onclick="togglePush()" style="min-width:140px; display:none;">–</button>
+            </div>
+            <p id="push-msg" class="settings-msg" style="margin-top:10px;"></p>
+        </div>
+
+        <!-- SECURITY -->
+        <div class="card">
+            <h2 class="card-title">SICHERHEIT</h2>
+            <div class="divider"></div>
+
+            <h3 class="section-label">Passwort ändern</h3>
             <div class="settings-form">
                 <div class="settings-field">
                     <label class="settings-label">Aktuelles Passwort</label>
@@ -98,21 +115,6 @@
                 <button onclick="changePassword()" class="btn btn-primary btn-full">PASSWORT ÄNDERN</button>
             </div>
             <p id="settings-msg" class="settings-msg"></p>
-        </div>
-
-        <!-- PUSH NOTIFICATIONS -->
-        <div class="card">
-            <h2 class="card-title">BENACHRICHTIGUNGEN</h2>
-            <div class="divider"></div>
-            <p class="muted-text" style="margin-bottom:16px; font-size:0.85rem;">
-                Erhalte eine Push-Benachrichtigung 24 Stunden vor einem Termin.<br>
-                Die App muss als PWA installiert sein.
-            </p>
-            <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
-                <span id="push-status-text" style="font-size:0.9rem; color:var(--text-secondary);">Lade Status…</span>
-                <button id="push-toggle-btn" class="btn btn-primary" onclick="togglePush()" style="min-width:140px; display:none;">–</button>
-            </div>
-            <p id="push-msg" class="settings-msg" style="margin-top:10px;"></p>
         </div>
 
     </div>

@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlightClub · JDC Challenge</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0d0d0f">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <script src="config.js"></script>
+    <script src="ui-utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>document.documentElement.setAttribute("data-theme",localStorage.getItem("fc47_theme")||"dark");</script>
+</head>
+<body>
+
+    <nav id="nav-training-jdc">
+        <div class="nav-inner nav-inner--default">
+            <a href="index.html" class="nav-brand" style="text-decoration:none;color:inherit;">FLIGHTCLUB</a>
+            <div class="nav-links">
+                <a href="training.html" class="nav-btn">« Training</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="app-wrapper">
+
+        <div class="card">
+            <h2 class="card-title">JDC CHALLENGE</h2>
+            <div class="divider"></div>
+            <p class="muted-text" style="font-size:0.85rem;">3 Abschnitte: 10–14 (3 Darts/Zahl), alle Doppel 1–20+Bull (1 Dart/Doppel), dann 15–20 (3 Darts/Zahl). S+D+T an einer Zahl = +100 Bonus. Doppel-Treffer = +50.</p>
+        </div>
+
+        <!-- MEMBER LEADERBOARD -->
+        <div class="card" id="jdc-leaderboard-card">
+            <h3 class="section-label">Bestenliste · Mitglieder</h3>
+            <div class="training-leaderboard" id="jdc-leaderboard-list">
+                <p class="muted-text" style="font-size:0.8rem;">Lade…</p>
+            </div>
+        </div>
+
+        <!-- SETUP -->
+        <div class="card" id="jdc-setup-view">
+            <h3 class="section-label">Modus</h3>
+            <div class="game-type-selector" style="margin-top:10px;">
+                <button type="button" id="jdc-mode-solo" class="game-type-btn game-type-btn--active" onclick="setJdcMode('solo')">
+                    <span class="game-type-icon">🎯</span>
+                    <span class="game-type-label">ALLEIN</span>
+                    <span class="game-type-sub">Solo-Training</span>
+                </button>
+                <button type="button" id="jdc-mode-vs" class="game-type-btn" onclick="setJdcMode('vs')">
+                    <span class="game-type-icon">⚔️</span>
+                    <span class="game-type-label">GEGENEINANDER</span>
+                    <span class="game-type-sub">2 Spieler</span>
+                </button>
+            </div>
+
+            <div id="jdc-opponent-wrap" style="display:none; margin-top:18px;">
+                <h3 class="section-label">Gegner</h3>
+                <select id="jdc-opponent-select" class="select-field" style="display:block; width:100%; margin-top:8px;">
+                    <option value="">– Mitglied wählen –</option>
+                </select>
+            </div>
+
+            <button class="btn btn-primary btn-full" style="margin-top:20px;" onclick="startJdcGame()">START</button>
+        </div>
+
+        <!-- PLAY -->
+        <div class="card training-target-card" id="play-view" style="display:none;">
+            <div class="training-target-label" id="jdc-section-label">ABSCHNITT 1</div>
+            <div class="training-target-number" id="target-number">10</div>
+            <div class="training-target-sub" id="jdc-sub-info">Dart 1/3</div>
+
+            <div class="stats-grid" id="jdc-stats" style="margin-top:20px; grid-template-columns:1fr;">
+                <div class="stat-box">
+                    <div class="stat-label">Punkte bisher</div>
+                    <div class="stat-value" id="jdc-running-total">0</div>
+                </div>
+            </div>
+
+            <div class="clock-players" id="jdc-players" style="display:none;"></div>
+
+            <div class="training-action-buttons training-action-buttons--four" id="jdc-triple-buttons">
+                <button class="btn btn-ghost training-action-btn" onclick="recordDart('single')">SINGLE</button>
+                <button class="btn btn-ghost training-action-btn" onclick="recordDart('double')">DOUBLE</button>
+                <button class="btn btn-accent training-action-btn" onclick="recordDart('triple')">TRIPLE</button>
+                <button class="btn btn-danger-outline training-action-btn" onclick="recordDart('miss')">MISS</button>
+            </div>
+            <div class="training-action-buttons" id="jdc-double-buttons" style="display:none;">
+                <button class="btn btn-accent training-action-btn" onclick="recordDart(true)">✓ Getroffen</button>
+                <button class="btn btn-danger-outline training-action-btn" onclick="recordDart(false)">✗ Verfehlt</button>
+            </div>
+        </div>
+
+        <!-- RESULT -->
+        <div class="card training-result-card" id="result-view" style="display:none;">
+            <h2 class="card-title" id="result-title">FERTIG!</h2>
+            <div class="divider"></div>
+            <div class="training-result-number" id="result-score">0</div>
+            <div class="training-result-label">Gesamtpunkte</div>
+            <p style="margin-top:10px; font-size:1.1rem;" id="result-shirt"></p>
+            <div id="result-vs-summary" style="display:none; margin-top:14px;"></div>
+            <p class="muted-text" id="result-best" style="margin-top:12px;"></p>
+            <div class="training-action-buttons" style="margin-top:20px;">
+                <button class="btn btn-primary training-action-btn" onclick="resetGame()">Nochmal</button>
+                <button class="btn btn-full training-action-btn" onclick="window.location.href='training.html'">Fertig</button>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const supa = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
+
+        let currentUser = null;
+        (function() {
+            var raw = sessionStorage.getItem('fc47_user');
+            if (!raw) { window.location.href = 'index.html'; return; }
+            currentUser = JSON.parse(raw);
+            if (currentUser.role === 'ipad') { window.location.href = 'index.html'; return; }
+        })();
+
+        // Same 7-tier boundaries as training.html/training-stats.html
+        function getShirt(score) {
+            if (score < 150) return { label: 'Weiß',    emoji: '⚪' };
+            if (score < 300) return { label: 'Lila',     emoji: '🟣' };
+            if (score < 450) return { label: 'Gelb',     emoji: '🟡' };
+            if (score < 600) return { label: 'Grün',     emoji: '🟢' };
+            if (score < 700) return { label: 'Blau',     emoji: '🔵' };
+            if (score < 850) return { label: 'Rot',      emoji: '🔴' };
+            return                 { label: 'Schwarz',  emoji: '⚫' };
+        }
+
+        // ── SEQUENCE DEFINITION (18 units — every player, solo or vs,
+        // independently works through the exact same 18 units; activeIdx
+        // only decides whose turn it is to throw the next unit) ──
+        const SECTION1_NUMBERS = [10, 11, 12, 13, 14];
+        const SECTION2_GROUPS  = [[1,2,3],[4,5,6],[7,8,9],[10,11,12],[13,14,15],[16,17,18],[19,20,'Bull']];
+        const SECTION3_NUMBERS = [15, 16, 17, 18, 19, 20];
+
+        const UNITS = [
+            ...SECTION1_NUMBERS.map(n => ({ section: 1, kind: 'triple', targets: [n] })),
+            ...SECTION2_GROUPS.map((g, i) => ({ section: 2, kind: 'doubles', targets: g, roundNum: i + 1 })),
+            ...SECTION3_NUMBERS.map(n => ({ section: 3, kind: 'triple', targets: [n] }))
+        ];
+
+        // ── SETUP STATE ──
+        let jdcMode    = 'solo';
+        let allMembers = [];
+        let myPlayer   = null;
+
+        // ── GAME STATE ──
+        let players      = [];
+        let activeIdx    = 0;
+        let personalBest = null;
+
+        async function loadMembers() {
+            const [playersRes, usersRes] = await Promise.all([
+                supa.from('players').select('id, name, avatar_url').order('name'),
+                supa.from('app_users').select('player_id').in('role', ['admin', 'member'])
+            ]);
+            const memberIds = new Set((usersRes.data || []).map(u => u.player_id).filter(Boolean));
+            allMembers = (playersRes.data || []).filter(p => memberIds.has(p.id));
+
+            myPlayer = allMembers.find(p => p.id === currentUser.player_id)
+                || { id: currentUser.player_id, name: currentUser.username, avatar_url: null };
+
+            const sel = document.getElementById('jdc-opponent-select');
+            allMembers
+                .filter(p => p.id !== currentUser.player_id)
+                .forEach(p => {
+                    const opt = document.createElement('option');
+                    opt.value = p.id;
+                    opt.textContent = p.name;
+                    sel.appendChild(opt);
+                });
+        }
+
+        async function loadPersonalBest() {
+            if (!currentUser.player_id) return;
+            const { data } = await supa
+                .from('training_results')
+                .select('score')
+                .eq('player_id', currentUser.player_id)
+                .eq('game', 'jdc');
+            if (data && data.length > 0) {
+                personalBest = Math.max(...data.map(r => r.score));
+            }
+        }
+
+        async function loadLeaderboard() {
+            const listEl = document.getElementById('jdc-leaderboard-list');
+            const { data } = await supa
+                .from('training_results')
+                .select('player_id, score, created_at')
+                .eq('game', 'jdc')
+                .neq('player_id', currentUser.player_id || '');
+
+            const bestByPlayer = {};
+            (data || []).forEach(r => {
+                const cur = bestByPlayer[r.player_id];
+                if (!cur || r.score > cur.score) bestByPlayer[r.player_id] = r;
+            });
+
+            const rows = Object.entries(bestByPlayer)
+                .map(([playerId, r]) => ({ playerId, ...r }))
+                .sort((a, b) => b.score - a.score)
+                .slice(0, 5);
+
+            if (rows.length === 0) {
+                listEl.innerHTML = '<p class="muted-text" style="font-size:0.8rem;">Noch keine Einträge von anderen Mitgliedern.</p>';
+                return;
+            }
+
+            listEl.innerHTML = rows.map((r, i) => {
+                const p        = allMembers.find(m => m.id === r.playerId);
+                const name     = p ? p.name : '?';
+                const initials = name.slice(0, 2).toUpperCase();
+                const avatar   = p && p.avatar_url
+                    ? `<span class="lb-avatar lb-avatar--sm"><img src="${p.avatar_url}" alt=""></span>`
+                    : `<span class="lb-avatar lb-avatar--sm">${initials}</span>`;
+                const date  = new Date(r.created_at).toLocaleDateString('de-DE');
+                const shirt = getShirt(r.score);
+                return `
+<div class="training-leader-row">
+    <span class="training-leader-rank">${i + 1}</span>
+    ${avatar}
+    <div class="training-leader-info">
+        <div class="training-leader-name">${name}</div>
+        <div class="training-leader-date">${date}</div>
+    </div>
+    <div class="training-leader-score">${shirt.emoji} ${r.score}</div>
+</div>`;
+            }).join('');
+        }
+
+        (async function init() {
+            await loadMembers();
+            loadPersonalBest();
+            loadLeaderboard();
+        })();
+
+        // ── SETUP UI ──
+        function setJdcMode(mode) {
+            jdcMode = mode;
+            document.getElementById('jdc-mode-solo').classList.toggle('game-type-btn--active', mode === 'solo');
+            document.getElementById('jdc-mode-vs').classList.toggle('game-type-btn--active', mode === 'vs');
+            document.getElementById('jdc-opponent-wrap').style.display = mode === 'vs' ? 'block' : 'none';
+        }
+
+        function totalScore(p) {
+            return p.section1.total + p.section2.total + p.section3.total;
+        }
+
+        function startJdcGame() {
+            const mkPlayer = p => ({
+                id: p.id, name: p.name, avatarUrl: p.avatar_url || null,
+                unitIndex: 0, dartInUnit: 0, currentDarts: [],
+                section1: { perNumber: {}, total: 0 },
+                section2: { perDouble: {}, total: 0 },
+                section3: { perNumber: {}, total: 0 },
+                finished: false
+            });
+
+            players = [mkPlayer(myPlayer)];
+            if (jdcMode === 'vs') {
+                const oppId = document.getElementById('jdc-opponent-select').value;
+                if (!oppId) { showToast('Bitte einen Gegner auswählen.', 'error'); return; }
+                players.push(mkPlayer(allMembers.find(p => p.id === oppId)));
+            }
+            activeIdx = 0;
+
+            document.getElementById('jdc-setup-view').style.display       = 'none';
+            document.getElementById('jdc-leaderboard-card').style.display = 'none';
+            document.getElementById('play-view').style.display            = 'block';
+            document.getElementById('result-view').style.display          = 'none';
+            document.getElementById('jdc-stats').style.display   = jdcMode === 'solo' ? 'grid' : 'none';
+            document.getElementById('jdc-players').style.display = jdcMode === 'vs' ? 'grid' : 'none';
+
+            updateDisplay();
+        }
+
+        function currentUnit(p) { return UNITS[p.unitIndex]; }
+
+        // ── GAMEPLAY ──
+        // input: 'single'|'double'|'triple'|'miss' for triple units, true|false for doubles units
+        function recordDart(input) {
+            const p = players[activeIdx];
+            const unit = currentUnit(p);
+            if (!unit) return;
+
+            p.currentDarts.push(input);
+
+            if (unit.kind === 'doubles') {
+                const doubleNum = unit.targets[p.dartInUnit];
+                if (input === true) p.section2.total += 50;
+                p.section2.perDouble[String(doubleNum)] = input === true;
+            }
+
+            p.dartInUnit++;
+
+            if (p.dartInUnit === 3) {
+                if (unit.kind === 'triple') {
+                    const number = unit.targets[0];
+                    const types  = p.currentDarts;
+                    let score = 0;
+                    types.forEach(t => {
+                        if (t === 'single') score += number;
+                        else if (t === 'double') score += number * 2;
+                        else if (t === 'triple') score += number * 3;
+                    });
+                    const bonus = types.includes('single') && types.includes('double') && types.includes('triple');
+                    if (bonus) score += 100;
+                    const bucket = unit.section === 1 ? p.section1 : p.section3;
+                    bucket.perNumber[String(number)] = { darts: types.slice(), score, bonus };
+                    bucket.total += score;
+                }
+                p.currentDarts = [];
+                p.dartInUnit   = 0;
+                p.unitIndex++;
+                if (p.unitIndex >= UNITS.length) p.finished = true;
+            }
+
+            afterDart();
+        }
+
+        function afterDart() {
+            const p = players[activeIdx];
+
+            if (p.dartInUnit !== 0) { updateDisplay(); return; } // mid-unit, same player's turn continues
+
+            if (players.every(pl => pl.finished)) { finishGame(); return; }
+
+            // Unit just completed — hand the turn to the other player, unless
+            // they've already finished all 18 units (can't happen in lockstep
+            // alternation since both always have exactly 18 units, but kept
+            // as a safe guard).
+            if (jdcMode === 'vs') {
+                const other = 1 - activeIdx;
+                if (!players[other].finished) activeIdx = other;
+            }
+            updateDisplay();
+        }
+
+        // ── DISPLAY ──
+        function updateDisplay() {
+            const p    = players[activeIdx];
+            const unit = currentUnit(p);
+            if (!unit) return;
+
+            if (unit.kind === 'triple') {
+                document.getElementById('jdc-section-label').textContent = `ABSCHNITT ${unit.section}`;
+                document.getElementById('target-number').textContent     = unit.targets[0];
+                document.getElementById('jdc-sub-info').textContent      = `Dart ${p.dartInUnit + 1}/3`;
+                document.getElementById('jdc-triple-buttons').style.display = 'flex';
+                document.getElementById('jdc-double-buttons').style.display = 'none';
+            } else {
+                const doubleNum = unit.targets[p.dartInUnit];
+                document.getElementById('jdc-section-label').textContent = `ABSCHNITT 2 · RUNDE ${unit.roundNum}/7`;
+                document.getElementById('target-number').textContent     = doubleNum;
+                document.getElementById('jdc-sub-info').textContent      = `Doppel ${p.dartInUnit + 1}/3`;
+                document.getElementById('jdc-triple-buttons').style.display = 'none';
+                document.getElementById('jdc-double-buttons').style.display = 'flex';
+            }
+
+            if (jdcMode === 'solo') {
+                document.getElementById('jdc-running-total').textContent = totalScore(p);
+                return;
+            }
+
+            document.getElementById('jdc-players').innerHTML = players.map((pl, idx) => {
+                const initials = (pl.name || '?').slice(0, 2).toUpperCase();
+                const avatar   = pl.avatarUrl
+                    ? `<span class="lb-avatar lb-avatar--sm"><img src="${pl.avatarUrl}" alt=""></span>`
+                    : `<span class="lb-avatar lb-avatar--sm">${initials}</span>`;
+                const cls = 'clock-player'
+                    + (idx === activeIdx && !pl.finished ? ' clock-player--active' : '')
+                    + (pl.finished ? ' clock-player--done' : '');
+                const meta = pl.finished ? 'Fertig' : `Einheit ${pl.unitIndex + 1}/18`;
+                return `
+<div class="${cls}">
+    <div class="clock-player-name">${avatar}<span>${pl.name}</span></div>
+    <div class="clock-player-target">${totalScore(pl)}</div>
+    <div class="clock-player-meta">${meta}</div>
+</div>`;
+            }).join('');
+        }
+
+        // ── FINISH & SAVE ──
+        async function finishGame() {
+            document.getElementById('play-view').style.display   = 'none';
+            document.getElementById('result-view').style.display = 'block';
+
+            const me    = players[0];
+            const total = totalScore(me);
+            const shirt = getShirt(total);
+
+            document.getElementById('result-score').textContent = total;
+            document.getElementById('result-shirt').textContent = `${shirt.emoji} ${shirt.label} Shirt`;
+
+            const bestEl = document.getElementById('result-best');
+            const summary = document.getElementById('result-vs-summary');
+
+            let winner = null;
+            if (jdcMode === 'vs') {
+                const otherTotal = totalScore(players[1]);
+                if (total !== otherTotal) winner = total > otherTotal ? players[0] : players[1];
+
+                document.getElementById('result-title').textContent = winner
+                    ? `SIEGER: ${winner.name.toUpperCase()}`
+                    : 'UNENTSCHIEDEN';
+
+                summary.style.display = 'block';
+                summary.innerHTML = players.map(pl => {
+                    const s = getShirt(totalScore(pl));
+                    return `<p class="muted-text" style="margin:4px 0;"><strong>${pl.name}:</strong> ${totalScore(pl)} Punkte · ${s.emoji} ${s.label}</p>`;
+                }).join('');
+                bestEl.textContent = '';
+            } else {
+                document.getElementById('result-title').textContent = 'FERTIG!';
+                summary.style.display = 'none';
+
+                if (personalBest === null) {
+                    bestEl.textContent = 'Erste gespeicherte Runde!';
+                } else if (total > personalBest) {
+                    bestEl.textContent = `Neuer Highscore! (vorher: ${personalBest})`;
+                } else {
+                    bestEl.textContent = `Persönlicher Highscore: ${personalBest}`;
+                }
+                personalBest = personalBest === null ? total : Math.max(personalBest, total);
+            }
+
+            const rows = players
+                .filter(pl => pl.id)
+                .map(pl => {
+                    const pTotal = totalScore(pl);
+                    let win;
+                    if (jdcMode === 'vs') {
+                        const other = players.find(o => o !== pl);
+                        const oTotal = totalScore(other);
+                        win = pTotal === oTotal ? null : pTotal > oTotal;
+                    }
+                    return {
+                        player_id: pl.id,
+                        game:      'jdc',
+                        score:     pTotal,
+                        meta: {
+                            mode: jdcMode,
+                            win,
+                            opponent: jdcMode === 'vs'
+                                ? (players.find(o => o.id !== pl.id) || {}).id || null
+                                : null,
+                            section1: pl.section1,
+                            section2: pl.section2,
+                            section3: pl.section3
+                        }
+                    };
+                });
+            if (rows.length > 0) {
+                await supa.from('training_results').insert(rows);
+            }
+        }
+
+        function resetGame() {
+            document.getElementById('result-view').style.display        = 'none';
+            document.getElementById('jdc-setup-view').style.display      = 'block';
+            document.getElementById('jdc-leaderboard-card').style.display = 'block';
+            loadLeaderboard();
+        }
+    </script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/fightclub-dart-tracker/sw.js')
+                .catch(() => {});
+        }
+    </script>
+</body>
+</html>

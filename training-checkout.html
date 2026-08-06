@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlightClub · Checkout-Training</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0d0d0f">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <script src="config.js"></script>
+    <script src="ui-utils.js"></script>
+    <script src="checkout.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>document.documentElement.setAttribute("data-theme",localStorage.getItem("fc47_theme")||"dark");</script>
+</head>
+<body>
+
+    <nav id="nav-training-checkout">
+        <div class="nav-inner nav-inner--default">
+            <a href="index.html" class="nav-brand" style="text-decoration:none;color:inherit;">FLIGHTCLUB</a>
+            <div class="nav-links">
+                <a href="training.html" class="nav-btn">« Training</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="app-wrapper">
+
+        <div class="card">
+            <h2 class="card-title">CHECKOUT-TRAINING</h2>
+            <div class="divider"></div>
+            <p class="muted-text" style="font-size:0.85rem;">Restpunktzahl auschecken, danach Erfolg/Kein Erfolg markieren — Trefferquote wird mitgezählt.</p>
+        </div>
+
+        <!-- MEMBER LEADERBOARD -->
+        <div class="card" id="checkout-leaderboard-card">
+            <h3 class="section-label">Bestenliste · Mitglieder</h3>
+            <div class="training-leaderboard" id="checkout-leaderboard-list">
+                <p class="muted-text" style="font-size:0.8rem;">Lade…</p>
+            </div>
+        </div>
+
+        <!-- SETUP -->
+        <div class="card" id="checkout-setup-view">
+            <h3 class="section-label">Modus</h3>
+            <div class="game-type-selector" style="margin-top:10px;">
+                <button type="button" id="checkout-mode-random" class="game-type-btn game-type-btn--active" onclick="setCheckoutMode('random')">
+                    <span class="game-type-icon">🎲</span>
+                    <span class="game-type-label">ZUFÄLLIG</span>
+                    <span class="game-type-sub">Bunt gemischt</span>
+                </button>
+                <button type="button" id="checkout-mode-ladder" class="game-type-btn" onclick="setCheckoutMode('ladder')">
+                    <span class="game-type-icon">📈</span>
+                    <span class="game-type-label">STEIGERND</span>
+                    <span class="game-type-sub">Checkout-Leiter</span>
+                </button>
+            </div>
+            <p class="muted-text" id="checkout-mode-hint" style="font-size:0.78rem; margin-top:8px;">Jede Runde eine zufällige Checkout-Zahl aus dem Bereich.</p>
+
+            <div style="margin-top:18px;">
+                <h3 class="section-label">Zahlenbereich</h3>
+                <div style="display:flex; gap:10px; margin-top:8px;">
+                    <div style="flex:1;">
+                        <label class="schedule-time-label" for="checkout-from-select">Von</label>
+                        <select id="checkout-from-select" class="select-field" style="display:block; width:100%; margin-top:4px;"></select>
+                    </div>
+                    <div style="flex:1;">
+                        <label class="schedule-time-label" for="checkout-to-select">Bis</label>
+                        <select id="checkout-to-select" class="select-field" style="display:block; width:100%; margin-top:4px;"></select>
+                    </div>
+                </div>
+            </div>
+
+            <div style="margin-top:18px;">
+                <h3 class="section-label">Pfeile je Versuch</h3>
+                <select id="checkout-darts-select" class="select-field" style="display:block; width:100%; margin-top:8px;"></select>
+            </div>
+
+            <button class="btn btn-primary btn-full" style="margin-top:20px;" onclick="startSession()">START</button>
+        </div>
+
+        <!-- PLAY -->
+        <div class="card training-target-card" id="play-view" style="display:none;">
+            <div class="training-target-label">RESTPUNKTZAHL</div>
+            <div class="training-target-number" id="target-number">170</div>
+            <div class="training-target-sub" id="checkout-path">T20 T20 Bull</div>
+            <p class="muted-text" id="checkout-darts-info" style="font-size:0.8rem; margin-top:4px;"></p>
+            <div class="stats-grid" id="checkout-stats">
+                <div class="stat-box">
+                    <div class="stat-label">Versuche</div>
+                    <div class="stat-value" id="attempts-count">0</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">Treffer</div>
+                    <div class="stat-value stat-value--green" id="hits-count">0</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">Quote</div>
+                    <div class="stat-value" id="rate-value">0 %</div>
+                </div>
+            </div>
+            <div class="training-action-buttons">
+                <button class="btn btn-accent training-action-btn" onclick="recordAttempt(true)">✓ Erfolg</button>
+                <button class="btn btn-danger-outline training-action-btn" onclick="recordAttempt(false)">✗ Kein Erfolg</button>
+            </div>
+            <button class="btn btn-full" style="margin-top:16px;" onclick="finishSession()">Fertig</button>
+        </div>
+
+        <!-- RESULT -->
+        <div class="card training-result-card" id="result-view" style="display:none;">
+            <h2 class="card-title" id="result-title">SESSION BEENDET</h2>
+            <div class="divider"></div>
+            <div class="training-result-number" id="result-rate">0 %</div>
+            <div class="training-result-label">Trefferquote</div>
+            <p class="muted-text" id="result-best" style="margin-top:12px;"></p>
+            <div class="training-action-buttons" style="margin-top:20px;">
+                <button class="btn btn-primary training-action-btn" onclick="resetGame()">Nochmal</button>
+                <button class="btn btn-full training-action-btn" onclick="window.location.href='training.html'">Fertig</button>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const supa = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
+
+        let currentUser = null;
+        (function() {
+            var raw = sessionStorage.getItem('fc47_user');
+            if (!raw) { window.location.href = 'index.html'; return; }
+            currentUser = JSON.parse(raw);
+            if (currentUser.role === 'ipad') { window.location.href = 'index.html'; return; }
+        })();
+
+        const ALL_NUMBERS = Object.keys(checkouts).map(Number).sort((a, b) => a - b);
+
+        // ── SETUP STATE ──
+        let checkoutMode = 'random';   // 'random' | 'ladder'
+
+        (function buildSetupSelects() {
+            const fromSel = document.getElementById('checkout-from-select');
+            const toSel   = document.getElementById('checkout-to-select');
+            ALL_NUMBERS.forEach(n => {
+                const o1 = document.createElement('option');
+                o1.value = String(n); o1.textContent = n;
+                fromSel.appendChild(o1);
+                const o2 = document.createElement('option');
+                o2.value = String(n); o2.textContent = n;
+                toSel.appendChild(o2);
+            });
+            fromSel.value = String(ALL_NUMBERS[0]);
+            toSel.value   = String(ALL_NUMBERS[ALL_NUMBERS.length - 1]);
+
+            const dartsSel = document.getElementById('checkout-darts-select');
+            for (let n = 1; n <= 9; n++) {
+                const o = document.createElement('option');
+                o.value = String(n);
+                o.textContent = n + (n === 1 ? ' Pfeil' : ' Pfeile');
+                dartsSel.appendChild(o);
+            }
+            dartsSel.value = '3';
+        })();
+
+        function setCheckoutMode(mode) {
+            checkoutMode = mode;
+            document.getElementById('checkout-mode-random').classList.toggle('game-type-btn--active', mode === 'random');
+            document.getElementById('checkout-mode-ladder').classList.toggle('game-type-btn--active', mode === 'ladder');
+            document.getElementById('checkout-mode-hint').textContent = mode === 'random'
+                ? 'Jede Runde eine zufällige Checkout-Zahl aus dem Bereich.'
+                : 'Start bei der niedrigsten Zahl. Erfolg → nächsthöhere Zahl, Misserfolg → gleiche Zahl nochmal. Oben angekommen endet die Session.';
+        }
+
+        // ── GAME STATE ──
+        let sessionNumbers  = [];   // ascending checkout numbers within the range
+        let ladderIdx       = 0;
+        let currentTarget   = null;
+        let dartsPerAttempt = 3;
+        let rangeFrom       = 2;
+        let rangeTo         = 170;
+        let attempts        = 0;
+        let hits            = 0;
+        let personalBest    = null;
+
+        let allMembers = [];
+
+        async function loadMembers() {
+            const [playersRes, usersRes] = await Promise.all([
+                supa.from('players').select('id, name, avatar_url').order('name'),
+                supa.from('app_users').select('player_id').in('role', ['admin', 'member'])
+            ]);
+            const memberIds = new Set((usersRes.data || []).map(u => u.player_id).filter(Boolean));
+            allMembers = (playersRes.data || []).filter(p => memberIds.has(p.id));
+        }
+
+        async function loadPersonalBest() {
+            if (!currentUser.player_id) return;
+            const { data } = await supa
+                .from('training_results')
+                .select('score')
+                .eq('player_id', currentUser.player_id)
+                .eq('game', 'checkout');
+            if (data && data.length > 0) {
+                personalBest = Math.max(...data.map(r => r.score));
+            }
+        }
+
+        // ── MEMBER LEADERBOARD (other members' best hit rate) ──
+        async function loadLeaderboard() {
+            const listEl = document.getElementById('checkout-leaderboard-list');
+            const { data } = await supa
+                .from('training_results')
+                .select('player_id, score, created_at')
+                .eq('game', 'checkout')
+                .neq('player_id', currentUser.player_id || '');
+
+            const bestByPlayer = {};
+            (data || []).forEach(r => {
+                const cur = bestByPlayer[r.player_id];
+                if (!cur || r.score > cur.score) bestByPlayer[r.player_id] = r;
+            });
+
+            const rows = Object.entries(bestByPlayer)
+                .map(([playerId, r]) => ({ playerId, ...r }))
+                .sort((a, b) => b.score - a.score)
+                .slice(0, 5);
+
+            if (rows.length === 0) {
+                listEl.innerHTML = '<p class="muted-text" style="font-size:0.8rem;">Noch keine Einträge von anderen Mitgliedern.</p>';
+                return;
+            }
+
+            listEl.innerHTML = rows.map((r, i) => {
+                const p        = allMembers.find(m => m.id === r.playerId);
+                const name     = p ? p.name : '?';
+                const initials = name.slice(0, 2).toUpperCase();
+                const avatar   = p && p.avatar_url
+                    ? `<span class="lb-avatar lb-avatar--sm"><img src="${p.avatar_url}" alt=""></span>`
+                    : `<span class="lb-avatar lb-avatar--sm">${initials}</span>`;
+                const date = new Date(r.created_at).toLocaleDateString('de-DE');
+                return `
+<div class="training-leader-row">
+    <span class="training-leader-rank">${i + 1}</span>
+    ${avatar}
+    <div class="training-leader-info">
+        <div class="training-leader-name">${name}</div>
+        <div class="training-leader-date">${date}</div>
+    </div>
+    <div class="training-leader-score">${r.score} %</div>
+</div>`;
+            }).join('');
+        }
+
+        (async function init() {
+            await loadMembers();
+            loadPersonalBest();
+            loadLeaderboard();
+        })();
+
+        function startSession() {
+            rangeFrom       = parseInt(document.getElementById('checkout-from-select').value);
+            rangeTo         = parseInt(document.getElementById('checkout-to-select').value);
+            dartsPerAttempt = parseInt(document.getElementById('checkout-darts-select').value);
+
+            if (rangeFrom > rangeTo) {
+                showToast('„Von" darf nicht größer als „Bis" sein.', 'error');
+                return;
+            }
+
+            sessionNumbers = ALL_NUMBERS.filter(n => n >= rangeFrom && n <= rangeTo);
+            ladderIdx      = 0;
+            attempts       = 0;
+            hits           = 0;
+
+            document.getElementById('checkout-setup-view').style.display       = 'none';
+            document.getElementById('checkout-leaderboard-card').style.display = 'none';
+            document.getElementById('play-view').style.display                 = 'block';
+            document.getElementById('result-view').style.display               = 'none';
+            document.getElementById('checkout-darts-info').textContent   =
+                dartsPerAttempt + (dartsPerAttempt === 1 ? ' Pfeil' : ' Pfeile') + ' je Versuch';
+
+            pickTarget();
+            updateStats();
+        }
+
+        function pickTarget() {
+            currentTarget = checkoutMode === 'ladder'
+                ? sessionNumbers[ladderIdx]
+                : sessionNumbers[Math.floor(Math.random() * sessionNumbers.length)];
+            document.getElementById('target-number').textContent = currentTarget;
+            document.getElementById('checkout-path').textContent = checkouts[currentTarget] || '';
+        }
+
+        function updateStats() {
+            document.getElementById('attempts-count').textContent = attempts;
+            document.getElementById('hits-count').textContent     = hits;
+            const rate = attempts > 0 ? Math.round((hits / attempts) * 100) : 0;
+            document.getElementById('rate-value').textContent = rate + ' %';
+        }
+
+        function recordAttempt(success) {
+            attempts++;
+            if (success) hits++;
+            updateStats();
+
+            if (checkoutMode === 'ladder') {
+                if (success) {
+                    // Ladder complete? Session ends automatically.
+                    if (ladderIdx === sessionNumbers.length - 1) {
+                        finishSession(true);
+                        return;
+                    }
+                    ladderIdx++;
+                }
+                // On fail the same number stays up
+                pickTarget();
+                return;
+            }
+            pickTarget();
+        }
+
+        async function finishSession(ladderComplete) {
+            if (attempts === 0) { window.location.href = 'training.html'; return; }
+
+            const rate = Math.round((hits / attempts) * 100);
+            document.getElementById('play-view').style.display   = 'none';
+            document.getElementById('result-view').style.display = 'block';
+            document.getElementById('result-title').textContent  = ladderComplete === true
+                ? 'LEITER GESCHAFFT!'
+                : 'SESSION BEENDET';
+            document.getElementById('result-rate').textContent   = rate + ' %';
+
+            const bestEl = document.getElementById('result-best');
+            if (personalBest === null) {
+                bestEl.textContent = 'Erste gespeicherte Session!';
+            } else if (rate > personalBest) {
+                bestEl.textContent = `Neue Bestleistung! (vorher: ${personalBest} %)`;
+            } else {
+                bestEl.textContent = `Persönliche Bestleistung: ${personalBest} %`;
+            }
+            personalBest = personalBest === null ? rate : Math.max(personalBest, rate);
+
+            if (currentUser.player_id) {
+                await supa.from('training_results').insert([{
+                    player_id: currentUser.player_id,
+                    game:      'checkout',
+                    score:     rate,
+                    meta: {
+                        attempts,
+                        hits,
+                        mode:  checkoutMode,
+                        from:  rangeFrom,
+                        to:    rangeTo,
+                        darts: dartsPerAttempt
+                    }
+                }]);
+            }
+        }
+
+        function resetGame() {
+            document.getElementById('result-view').style.display              = 'none';
+            document.getElementById('checkout-setup-view').style.display      = 'block';
+            document.getElementById('checkout-leaderboard-card').style.display = 'block';
+            loadLeaderboard();
+        }
+    </script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/fightclub-dart-tracker/sw.js')
+                .catch(() => {});
+        }
+    </script>
+</body>
+</html>

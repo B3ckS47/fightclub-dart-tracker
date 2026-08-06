@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlightClub · Around the Clock</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0d0d0f">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <script src="config.js"></script>
+    <script src="ui-utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>document.documentElement.setAttribute("data-theme",localStorage.getItem("fc47_theme")||"dark");</script>
+</head>
+<body>
+
+    <nav id="nav-training-clock">
+        <div class="nav-inner nav-inner--default">
+            <a href="index.html" class="nav-brand" style="text-decoration:none;color:inherit;">FLIGHTCLUB</a>
+            <div class="nav-links">
+                <a href="training.html" class="nav-btn">« Training</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="app-wrapper">
+
+        <div class="card">
+            <h2 class="card-title">AROUND THE CLOCK</h2>
+            <div class="divider"></div>
+            <p class="muted-text" style="font-size:0.85rem;">Triff die Zahlen der Reihe nach. Jeder Wurf zählt als ein Dart. Im 2-Spieler-Modus wird nach jeweils 3 Darts gewechselt — wer zuerst fertig ist, gewinnt.</p>
+        </div>
+
+        <!-- MEMBER LEADERBOARD -->
+        <div class="card" id="clock-leaderboard-card">
+            <h3 class="section-label">Bestenliste · Mitglieder (1–Bull)</h3>
+            <div class="training-leaderboard" id="clock-leaderboard-list">
+                <p class="muted-text" style="font-size:0.8rem;">Lade…</p>
+            </div>
+        </div>
+
+        <!-- SETUP -->
+        <div class="card" id="clock-setup-view">
+            <h3 class="section-label">Modus</h3>
+            <div class="game-type-selector" style="margin-top:10px;">
+                <button type="button" id="clock-mode-solo" class="game-type-btn game-type-btn--active" onclick="setClockMode('solo')">
+                    <span class="game-type-icon">🎯</span>
+                    <span class="game-type-label">ALLEIN</span>
+                    <span class="game-type-sub">Solo-Training</span>
+                </button>
+                <button type="button" id="clock-mode-vs" class="game-type-btn" onclick="setClockMode('vs')">
+                    <span class="game-type-icon">⚔️</span>
+                    <span class="game-type-label">GEGENEINANDER</span>
+                    <span class="game-type-sub">2 Spieler</span>
+                </button>
+            </div>
+
+            <div id="clock-opponent-wrap" style="display:none; margin-top:18px;">
+                <h3 class="section-label">Gegner</h3>
+                <select id="clock-opponent-select" class="select-field" style="display:block; width:100%; margin-top:8px;">
+                    <option value="">– Mitglied wählen –</option>
+                </select>
+            </div>
+
+            <div style="margin-top:18px;">
+                <h3 class="section-label">Zahlenbereich</h3>
+                <div style="display:flex; gap:10px; margin-top:8px;">
+                    <div style="flex:1;">
+                        <label class="schedule-time-label" for="clock-from-select">Von</label>
+                        <select id="clock-from-select" class="select-field" style="display:block; width:100%; margin-top:4px;"></select>
+                    </div>
+                    <div style="flex:1;">
+                        <label class="schedule-time-label" for="clock-to-select">Bis</label>
+                        <select id="clock-to-select" class="select-field" style="display:block; width:100%; margin-top:4px;"></select>
+                    </div>
+                </div>
+            </div>
+
+            <button class="btn btn-primary btn-full" style="margin-top:20px;" onclick="startClockGame()">START</button>
+        </div>
+
+        <!-- PLAY -->
+        <div class="card training-target-card" id="play-view" style="display:none;">
+            <div class="training-target-label">ZIEL</div>
+            <div class="training-target-number" id="target-number">1</div>
+            <div class="training-target-sub" id="clock-turn-info" style="display:none;"></div>
+
+            <!-- Solo: full-width stat row (4 across on desktop) -->
+            <div class="stats-grid" id="clock-stats" style="margin-top:20px;">
+                <div class="stat-box">
+                    <div class="stat-label">Darts</div>
+                    <div class="stat-value" id="darts-count">0</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">Getroffen</div>
+                    <div class="stat-value stat-value--green" id="hit-count">0</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">Verfehlt</div>
+                    <div class="stat-value" id="miss-count">0</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">Ø Würfe je Treffer</div>
+                    <div class="stat-value" id="avg-count">–</div>
+                </div>
+            </div>
+
+            <!-- Vs: two-player scoreboard -->
+            <div class="clock-players" id="clock-players" style="display:none;"></div>
+
+            <div class="clock-banner" id="clock-banner" style="display:none;"></div>
+
+            <div class="training-action-buttons">
+                <button class="btn btn-primary training-action-btn" onclick="recordThrow(true)">✓ Getroffen</button>
+                <button class="btn btn-danger-outline training-action-btn" onclick="recordThrow(false)">✗ Verfehlt</button>
+            </div>
+            <button class="btn btn-full" id="clock-end-early-btn" style="display:none; margin-top:16px;" onclick="finishGame()">Ohne Auswerfen beenden</button>
+        </div>
+
+        <!-- RESULT -->
+        <div class="card training-result-card" id="result-view" style="display:none;">
+            <h2 class="card-title" id="result-title">GESCHAFFT!</h2>
+            <div class="divider"></div>
+            <div class="training-result-number" id="result-darts">0</div>
+            <div class="training-result-label" id="result-label">Darts benötigt</div>
+            <div id="result-vs-summary" style="display:none; margin-top:14px;"></div>
+            <p class="muted-text" id="result-best" style="margin-top:12px;"></p>
+            <div class="training-action-buttons" style="margin-top:20px;">
+                <button class="btn btn-primary training-action-btn" onclick="resetGame()">Nochmal</button>
+                <button class="btn btn-full training-action-btn" onclick="window.location.href='training.html'">Fertig</button>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const supa = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
+
+        let currentUser = null;
+        (function() {
+            var raw = sessionStorage.getItem('fc47_user');
+            if (!raw) { window.location.href = 'index.html'; return; }
+            currentUser = JSON.parse(raw);
+            if (currentUser.role === 'ipad') { window.location.href = 'index.html'; return; }
+        })();
+
+        // ── SETUP STATE ──
+        let clockMode  = 'solo';
+        let allMembers = [];   // players linked to a member/admin account
+        let myPlayer   = null;
+
+        // ── GAME STATE ──
+        let sequence    = [];      // e.g. [15,16,17,18,19,20] or [1,...,20,'Bull']
+        let rangeFrom   = 1;
+        let rangeTo     = 'bull';  // 'bull' or number as string
+        let players     = [];      // [{ id, name, avatarUrl, seqIndex, darts, hits, misses, finished }]
+        let activeIdx   = 0;
+        let dartInVisit = 1;
+        let winnerIdx   = null;
+        let personalBest = null;   // best full-range (1–Bull) darts count
+
+        // ── INIT ──
+        (function buildRangeSelects() {
+            const fromSel = document.getElementById('clock-from-select');
+            for (let n = 1; n <= 20; n++) {
+                const opt = document.createElement('option');
+                opt.value = String(n);
+                opt.textContent = n;
+                fromSel.appendChild(opt);
+            }
+            const toSel = document.getElementById('clock-to-select');
+            for (let n = 2; n <= 20; n++) {
+                const opt = document.createElement('option');
+                opt.value = String(n);
+                opt.textContent = n;
+                toSel.appendChild(opt);
+            }
+            const bullOpt = document.createElement('option');
+            bullOpt.value = 'bull';
+            bullOpt.textContent = 'Bull';
+            toSel.appendChild(bullOpt);
+            toSel.value = 'bull';
+        })();
+
+        async function loadMembers() {
+            const [playersRes, usersRes] = await Promise.all([
+                supa.from('players').select('id, name, avatar_url').order('name'),
+                supa.from('app_users').select('player_id').in('role', ['admin', 'member'])
+            ]);
+            const memberIds = new Set((usersRes.data || []).map(u => u.player_id).filter(Boolean));
+            allMembers = (playersRes.data || []).filter(p => memberIds.has(p.id));
+
+            myPlayer = allMembers.find(p => p.id === currentUser.player_id)
+                || { id: currentUser.player_id, name: currentUser.username, avatar_url: null };
+
+            const sel = document.getElementById('clock-opponent-select');
+            allMembers
+                .filter(p => p.id !== currentUser.player_id)
+                .forEach(p => {
+                    const opt = document.createElement('option');
+                    opt.value = p.id;
+                    opt.textContent = p.name;
+                    sel.appendChild(opt);
+                });
+        }
+        async function loadPersonalBest() {
+            if (!currentUser.player_id) return;
+            const { data } = await supa
+                .from('training_results')
+                .select('score, meta')
+                .eq('player_id', currentUser.player_id)
+                .eq('game', 'clock');
+            const fullRuns = (data || []).filter(isCountableBest);
+            if (fullRuns.length > 0) {
+                personalBest = Math.min(...fullRuns.map(r => r.score));
+            }
+        }
+
+        // Rows saved before the range feature existed have no from/to — those
+        // were always full 1–Bull runs.
+        function isFullRange(row) {
+            const m = row.meta;
+            if (!m) return true;
+            return (m.from === undefined || m.from === 1) && (m.to === undefined || m.to === 'bull');
+        }
+
+        // A run only counts toward a Darts-Bestleistung if it's both a full
+        // 1–Bull range AND was actually completed (not abandoned via
+        // "Ohne Auswerfen beenden").
+        function isCountableBest(row) {
+            if (row.meta && row.meta.finished === false) return false;
+            return isFullRange(row);
+        }
+
+        // ── MEMBER LEADERBOARD (other members' best full-range runs) ──
+        async function loadLeaderboard() {
+            const listEl = document.getElementById('clock-leaderboard-list');
+            const { data } = await supa
+                .from('training_results')
+                .select('player_id, score, meta, created_at')
+                .eq('game', 'clock')
+                .neq('player_id', currentUser.player_id || '');
+
+            const fullRuns = (data || []).filter(isCountableBest);
+            const bestByPlayer = {};
+            fullRuns.forEach(r => {
+                const cur = bestByPlayer[r.player_id];
+                if (!cur || r.score < cur.score) bestByPlayer[r.player_id] = r;
+            });
+
+            const rows = Object.entries(bestByPlayer)
+                .map(([playerId, r]) => ({ playerId, ...r }))
+                .sort((a, b) => a.score - b.score)
+                .slice(0, 5);
+
+            if (rows.length === 0) {
+                listEl.innerHTML = '<p class="muted-text" style="font-size:0.8rem;">Noch keine Einträge von anderen Mitgliedern.</p>';
+                return;
+            }
+
+            listEl.innerHTML = rows.map((r, i) => {
+                const p        = allMembers.find(m => m.id === r.playerId);
+                const name     = p ? p.name : '?';
+                const initials = name.slice(0, 2).toUpperCase();
+                const avatar   = p && p.avatar_url
+                    ? `<span class="lb-avatar lb-avatar--sm"><img src="${p.avatar_url}" alt=""></span>`
+                    : `<span class="lb-avatar lb-avatar--sm">${initials}</span>`;
+                const date = new Date(r.created_at).toLocaleDateString('de-DE');
+                return `
+<div class="training-leader-row">
+    <span class="training-leader-rank">${i + 1}</span>
+    ${avatar}
+    <div class="training-leader-info">
+        <div class="training-leader-name">${name}</div>
+        <div class="training-leader-date">${date}</div>
+    </div>
+    <div class="training-leader-score">${r.score} Darts</div>
+</div>`;
+            }).join('');
+        }
+
+        (async function init() {
+            await loadMembers();
+            loadPersonalBest();
+            loadLeaderboard();
+        })();
+
+        // ── SETUP UI ──
+        function setClockMode(mode) {
+            clockMode = mode;
+            document.getElementById('clock-mode-solo').classList.toggle('game-type-btn--active', mode === 'solo');
+            document.getElementById('clock-mode-vs').classList.toggle('game-type-btn--active', mode === 'vs');
+            document.getElementById('clock-opponent-wrap').style.display = mode === 'vs' ? 'block' : 'none';
+        }
+
+        function startClockGame() {
+            rangeFrom = parseInt(document.getElementById('clock-from-select').value);
+            rangeTo   = document.getElementById('clock-to-select').value;
+
+            if (rangeTo !== 'bull' && rangeFrom >= parseInt(rangeTo)) {
+                showToast('„Von" muss kleiner als „Bis" sein.', 'error');
+                return;
+            }
+
+            sequence = [];
+            const upper = rangeTo === 'bull' ? 20 : parseInt(rangeTo);
+            for (let n = rangeFrom; n <= upper; n++) sequence.push(n);
+            if (rangeTo === 'bull') sequence.push('Bull');
+
+            const mkPlayer = p => ({
+                id: p.id, name: p.name, avatarUrl: p.avatar_url || null,
+                seqIndex: 0, darts: 0, hits: 0, misses: 0, finished: false,
+                numberDarts: 0, perNumber: {}
+            });
+
+            players = [mkPlayer(myPlayer)];
+            if (clockMode === 'vs') {
+                const oppId = document.getElementById('clock-opponent-select').value;
+                if (!oppId) { showToast('Bitte einen Gegner auswählen.', 'error'); return; }
+                const opp = allMembers.find(p => p.id === oppId);
+                players.push(mkPlayer(opp));
+            }
+
+            activeIdx   = 0;
+            dartInVisit = 1;
+            winnerIdx   = null;
+
+            document.getElementById('clock-setup-view').style.display       = 'none';
+            document.getElementById('clock-leaderboard-card').style.display = 'none';
+            document.getElementById('play-view').style.display              = 'block';
+            document.getElementById('result-view').style.display      = 'none';
+            document.getElementById('clock-banner').style.display     = 'none';
+            document.getElementById('clock-end-early-btn').style.display = 'none';
+            document.getElementById('clock-stats').style.display   = clockMode === 'solo' ? 'grid' : 'none';
+            document.getElementById('clock-players').style.display = clockMode === 'vs' ? 'grid' : 'none';
+            document.getElementById('clock-turn-info').style.display = clockMode === 'vs' ? 'block' : 'none';
+
+            updateDisplay();
+        }
+
+        // ── GAMEPLAY ──
+        function recordThrow(hit) {
+            const p = players[activeIdx];
+            if (p.finished) return;
+
+            p.darts++;
+            p.numberDarts++;
+            if (hit) {
+                p.hits++;
+                p.perNumber[String(sequence[p.seqIndex])] = p.numberDarts;
+                p.numberDarts = 0;
+                if (p.seqIndex === sequence.length - 1) {
+                    p.finished = true;
+                    if (winnerIdx === null) winnerIdx = activeIdx;
+                } else {
+                    p.seqIndex++;
+                }
+            } else {
+                p.misses++;
+            }
+            afterThrow();
+        }
+
+        function afterThrow() {
+            if (clockMode === 'solo') {
+                if (players[0].finished) { finishGame(); return; }
+                updateDisplay();
+                return;
+            }
+
+            const other = 1 - activeIdx;
+
+            if (players[activeIdx].finished) {
+                if (players[other].finished) { finishGame(); return; }
+                // Winner is done — loser may play out their run ("auswerfen")
+                activeIdx   = other;
+                dartInVisit = 1;
+                const banner = document.getElementById('clock-banner');
+                banner.textContent   = `🏆 ${players[winnerIdx].name} hat gewonnen! ${players[other].name} wirft aus.`;
+                banner.style.display = 'block';
+                document.getElementById('clock-end-early-btn').style.display = 'block';
+                updateDisplay();
+                return;
+            }
+
+            if (players[other].finished) {
+                // Play-out phase: no more alternation
+                updateDisplay();
+                return;
+            }
+
+            dartInVisit++;
+            if (dartInVisit > 3) {
+                activeIdx   = other;
+                dartInVisit = 1;
+            }
+            updateDisplay();
+        }
+
+        // ── DISPLAY ──
+        function updateDisplay() {
+            const p = players[activeIdx];
+            document.getElementById('target-number').textContent = sequence[p.seqIndex];
+
+            if (clockMode === 'solo') {
+                document.getElementById('darts-count').textContent = p.darts;
+                document.getElementById('hit-count').textContent   = p.hits;
+                document.getElementById('miss-count').textContent  = p.misses;
+                document.getElementById('avg-count').textContent   =
+                    p.hits > 0 ? (p.darts / p.hits).toFixed(1) : '–';
+                return;
+            }
+
+            const playoutPhase = winnerIdx !== null;
+            document.getElementById('clock-turn-info').textContent = playoutPhase
+                ? `${p.name} wirft aus`
+                : `${p.name} · Wurf ${dartInVisit}/3`;
+
+            document.getElementById('clock-players').innerHTML = players.map((pl, idx) => {
+                const initials = (pl.name || '?').slice(0, 2).toUpperCase();
+                const avatar   = pl.avatarUrl
+                    ? `<span class="lb-avatar lb-avatar--sm"><img src="${pl.avatarUrl}" alt=""></span>`
+                    : `<span class="lb-avatar lb-avatar--sm">${initials}</span>`;
+                const cls = 'clock-player'
+                    + (idx === activeIdx && !pl.finished ? ' clock-player--active' : '')
+                    + (pl.finished ? ' clock-player--done' : '');
+                const target = pl.finished ? '✓' : sequence[pl.seqIndex];
+                return `
+<div class="${cls}">
+    <div class="clock-player-name">${avatar}<span>${pl.name}</span></div>
+    <div class="clock-player-target">${target}</div>
+    <div class="clock-player-meta">Darts: ${pl.darts} · Verfehlt: ${pl.misses}</div>
+</div>`;
+            }).join('');
+        }
+
+        // ── FINISH & SAVE ──
+        async function finishGame() {
+            document.getElementById('play-view').style.display   = 'none';
+            document.getElementById('result-view').style.display = 'block';
+
+            const fullRange = rangeFrom === 1 && rangeTo === 'bull';
+            const bestEl    = document.getElementById('result-best');
+            const me        = players[0];
+
+            if (clockMode === 'solo') {
+                document.getElementById('result-title').textContent = 'GESCHAFFT!';
+                document.getElementById('result-darts').textContent = me.darts;
+                document.getElementById('result-label').textContent = 'Darts benötigt';
+                document.getElementById('result-vs-summary').style.display = 'none';
+
+                if (!fullRange) {
+                    bestEl.textContent = `Bereich ${rangeFrom}–${rangeTo === 'bull' ? 'Bull' : rangeTo} · zählt nicht für die 1–Bull-Bestleistung`;
+                } else if (personalBest === null) {
+                    bestEl.textContent = 'Erste gespeicherte Runde!';
+                } else if (me.darts < personalBest) {
+                    bestEl.textContent = `Neue Bestleistung! (vorher: ${personalBest} Darts)`;
+                } else {
+                    bestEl.textContent = `Persönliche Bestleistung: ${personalBest} Darts`;
+                }
+                if (fullRange) {
+                    personalBest = personalBest === null ? me.darts : Math.min(personalBest, me.darts);
+                }
+            } else {
+                const winner = players[winnerIdx];
+                document.getElementById('result-title').textContent = `SIEGER: ${winner.name.toUpperCase()}`;
+                document.getElementById('result-darts').textContent = winner.darts;
+                document.getElementById('result-label').textContent = 'Darts benötigt';
+
+                const summary = document.getElementById('result-vs-summary');
+                summary.style.display = 'block';
+                summary.innerHTML = players.map(pl => {
+                    const state = pl.finished
+                        ? `${pl.darts} Darts · ${pl.misses} verfehlt`
+                        : `nicht ausgeworfen (${pl.darts} Darts)`;
+                    return `<p class="muted-text" style="margin:4px 0;"><strong>${pl.name}:</strong> ${state}</p>`;
+                }).join('');
+                bestEl.textContent = fullRange ? '' : `Bereich ${rangeFrom}–${rangeTo === 'bull' ? 'Bull' : rangeTo}`;
+            }
+
+            // Save one row per player (vs games included) — even an
+            // unfinished "gave up" loser gets a row now, so the win/loss
+            // record is accurate; meta.finished:false keeps it out of the
+            // Darts-Bestleistung calculations (see isCountableBest above).
+            const rows = players
+                .filter(pl => pl.id)
+                .map(pl => ({
+                    player_id: pl.id,
+                    game:      'clock',
+                    score:     pl.darts,
+                    meta: {
+                        misses:    pl.misses,
+                        hits:      pl.hits,
+                        from:      rangeFrom,
+                        to:        rangeTo,
+                        mode:      clockMode,
+                        opponent:  clockMode === 'vs'
+                            ? (players.find(o => o.id !== pl.id) || {}).id || null
+                            : null,
+                        win:       clockMode === 'vs' ? (pl === players[winnerIdx]) : undefined,
+                        finished:  pl.finished,
+                        perNumber: pl.perNumber
+                    }
+                }));
+            if (rows.length > 0) {
+                await supa.from('training_results').insert(rows);
+            }
+        }
+
+        function resetGame() {
+            document.getElementById('result-view').style.display          = 'none';
+            document.getElementById('clock-setup-view').style.display     = 'block';
+            document.getElementById('clock-leaderboard-card').style.display = 'block';
+            loadLeaderboard();
+        }
+    </script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/fightclub-dart-tracker/sw.js')
+                .catch(() => {});
+        }
+    </script>
+</body>
+</html>

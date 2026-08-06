@@ -113,7 +113,15 @@ body {
 #nav-tournament-view,
 #nav-spectator,
 #nav-punkte,
-#nav-spieltag {
+#nav-spieltag,
+#nav-player-profile,
+#nav-training,
+#nav-training-clock,
+#nav-training-bobs27,
+#nav-training-checkout,
+#nav-training-stats,
+#nav-training-jdc,
+#nav-training-aim {
     position: sticky;
     top: 0;
     z-index: 100;
@@ -511,6 +519,14 @@ body {
 .lb-avatar--gold   { border-color: #ffd700; box-shadow: 0 0 10px rgba(255,215,0,0.35); }
 .lb-avatar--silver { border-color: #c0c0c0; box-shadow: 0 0 10px rgba(192,192,192,0.3); }
 .lb-avatar--bronze { border-color: #cd7f32; box-shadow: 0 0 10px rgba(205,127,50,0.3); }
+
+.lb-avatar--sm {
+    width: 18px;
+    height: 18px;
+    border-width: 1px;
+    font-size: 0.55rem;
+    flex-shrink: 0;
+}
 
 .lb-rank-badge {
     position: absolute;
@@ -2377,12 +2393,22 @@ body {
     transform: translateX(2px);
 }
 
+.fines-row-identity {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+}
+
 .fines-row-name {
     font-family: var(--font-display);
     font-size: 1.05rem;
     font-weight: 700;
     letter-spacing: 1px;
     color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .fines-row-amount {
@@ -2406,6 +2432,12 @@ body {
     align-items: center;
     justify-content: space-between;
     width: 100%;
+}
+
+.fines-detail-identity {
+    display: flex;
+    align-items: center;
+    gap: 14px;
 }
 
 .fines-detail-name {
@@ -3937,19 +3969,73 @@ body {
 .vote-count--yes { color: var(--green); }
 .vote-count--no  { color: var(--red); }
 
+.vote-toggle-icon {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    margin-left: auto;
+}
+
+/* Compact overlapping avatar row — click to expand the full name list below.
+   Keeps a card's height roughly constant regardless of attendee count. */
+.vote-avatar-stack {
+    display: flex;
+    align-items: center;
+    padding: 4px 0 2px;
+}
+
+.lb-avatar--stacked {
+    border-width: 2px;
+    border-color: var(--bg-element);
+    margin-left: -8px;
+}
+.lb-avatar--stacked:first-child { margin-left: 0; }
+
+.vote-avatar-more {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.55rem;
+    font-weight: 800;
+    background: var(--bg-card);
+    border: 2px solid var(--bg-element);
+    color: var(--text-secondary);
+    margin-left: -8px;
+}
+
 .vote-names--col {
     display: flex;
     flex-direction: column;
     gap: 5px;
 }
 
+.vote-names--col.vote-names--collapsed { display: none; }
+
 .vote-name {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     font-size: 0.78rem;
     font-weight: 600;
     padding: 4px 10px;
     border-radius: var(--radius-sm);
     border: 1px solid var(--border);
-    text-align: center;
+}
+
+.vote-name-main {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.vote-name-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .vote-name--yes {
@@ -4104,6 +4190,10 @@ body {
 /* ── PUNKTE ── */
 .menu-card--points { border-top: 3px solid #eab308; }
 .menu-card--points:hover { border-color: #eab308; box-shadow: 0 8px 32px rgba(234,179,8,0.2); }
+
+/* Same blue as the TRAINING appointment-type badge (schedule.js TYPE_COLORS) */
+.menu-card--training { border-top: 3px solid #3b82f6; }
+.menu-card--training:hover { border-color: #3b82f6; box-shadow: 0 8px 32px rgba(59,130,246,0.2); }
 
 .points-row {
     border: 1px solid var(--border);
@@ -4827,4 +4917,427 @@ body {
     border-color: var(--accent);
     color: var(--accent);
     background: var(--accent-dim);
+}
+
+/* ── TRAINING MINI-GAMES ── */
+.training-target-card, .training-result-card { text-align: center; }
+
+.training-target-label {
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.training-target-number {
+    font-family: var(--font-display);
+    font-size: 4.5rem;
+    font-weight: 800;
+    color: var(--accent);
+    line-height: 1.1;
+    margin: 4px 0;
+}
+
+.training-target-number--text { font-size: 3.4rem; }
+
+/* Bob's 27 solo: only two stat boxes — keep them a compact centered pair
+   instead of letting the global ≥768px 4-column stats-grid rule strand
+   them in the left half of the card */
+#bobs-stats {
+    grid-template-columns: 1fr 1fr;
+    max-width: 480px;
+    margin: 20px auto 0;
+}
+
+/* Checkout-Training: three stat boxes, same centering fix */
+#checkout-stats {
+    grid-template-columns: repeat(3, 1fr);
+    max-width: 640px;
+    margin: 20px auto 0;
+}
+
+.training-target-sub {
+    font-size: 1rem;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+}
+
+.training-action-buttons {
+    display: flex;
+    gap: 12px;
+    margin-top: 20px;
+}
+
+.training-action-btn { flex: 1; }
+
+.training-action-buttons--four .training-action-btn {
+    font-size: 1.3rem;
+    padding: 16px;
+}
+
+.training-result-number {
+    font-family: var(--font-display);
+    font-size: 3.5rem;
+    font-weight: 800;
+    color: var(--green);
+    margin-top: 8px;
+}
+
+.training-result-label {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+/* Around the Clock — 2-player scoreboard */
+.clock-players {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 16px;
+}
+
+.clock-player {
+    background: var(--bg-element);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 12px;
+    text-align: center;
+}
+
+.clock-player--active {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent-dim);
+}
+
+.clock-player--done { border-color: var(--green); }
+
+.clock-player--bust { border-color: var(--red); }
+.clock-player--bust .clock-player-target { color: var(--red); }
+
+.clock-player-name {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-weight: 700;
+    font-size: 0.9rem;
+}
+
+.clock-player-target {
+    font-family: var(--font-display);
+    font-size: 2rem;
+    font-weight: 800;
+    color: var(--accent);
+    margin: 6px 0 2px;
+}
+
+.clock-player--done .clock-player-target { color: var(--green); }
+
+.clock-player-meta {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.clock-banner {
+    margin-top: 14px;
+    padding: 10px;
+    border-radius: var(--radius-md);
+    background: var(--green-dim);
+    color: var(--green);
+    font-weight: 700;
+    text-align: center;
+}
+
+/* Member leaderboard shown on each training mini-game's setup screen */
+.training-leaderboard {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.training-leader-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.training-leader-rank {
+    font-family: var(--font-display);
+    font-weight: 800;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    width: 16px;
+    flex-shrink: 0;
+    text-align: center;
+}
+
+.training-leader-info { flex: 1; min-width: 0; }
+
+.training-leader-name {
+    font-size: 0.85rem;
+    font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.training-leader-date {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+}
+
+.training-leader-score {
+    font-family: var(--font-display);
+    font-weight: 800;
+    color: var(--accent);
+    font-size: 0.95rem;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+/* ── TRAINING-STATS.HTML ── */
+.stats-history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 10px;
+}
+
+.stats-history-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    background: var(--bg-element);
+    border-radius: var(--radius-sm);
+    font-size: 0.8rem;
+}
+
+.stats-history-date {
+    color: var(--text-muted);
+    flex-shrink: 0;
+    width: 68px;
+}
+
+.stats-history-detail {
+    flex: 1;
+    min-width: 0;
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.stats-history-result {
+    font-weight: 700;
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+.stats-history-result--win  { color: var(--green); }
+.stats-history-result--loss { color: var(--red); }
+
+/* Heatmap — plain CSS grid, no charting library. Each cell shows its own
+   label + value directly (no hover/tooltip — has to work on touch). */
+.training-heatmap {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 6px;
+    margin: 14px 0;
+}
+
+.training-heatmap--bobs27 { grid-template-columns: repeat(5, 1fr); }
+
+.training-heat-cell {
+    aspect-ratio: 1;
+    border-radius: var(--radius-sm);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    font-family: var(--font-display);
+    border: 1px solid var(--border);
+}
+
+.training-heat-cell-label {
+    font-size: 0.68rem;
+    font-weight: 700;
+    opacity: 0.85;
+}
+
+.training-heat-cell-value {
+    font-size: 0.8rem;
+    font-weight: 800;
+}
+
+.training-heat-cell--empty {
+    background: var(--bg-element);
+    color: var(--text-muted);
+}
+
+.training-heat-cell--muted {
+    background: var(--bg-element);
+    color: var(--text-secondary);
+    border-style: dashed;
+}
+
+/* ============================================================
+   DESKTOP LAYOUT  (min-width: 1100px)
+   A dedicated "real PC monitor" tier, separate from the 768px
+   tablet-landscape block above — that one just uncaps .app-wrapper
+   to 100% width for every page, which is right for a tablet but
+   leaves content on a big desktop monitor as one long, stretched
+   single column. This block gives specific pages actual multi-
+   column layouts instead.
+   ============================================================ */
+@media (min-width: 1100px) {
+
+    /* ── BASE ── */
+    .app-wrapper { max-width: 1400px; } /* keep cards from stretching edge-to-edge on very wide monitors */
+
+    /* ── PLAYER-PROFILE.HTML ── */
+    /* Two independent columns (same pattern as game.html's .setup-col-left/
+       .setup-col-right) — each stacks its own cards top to bottom, so
+       expanding an accordion in the right column can never push the left
+       column's attendance card down. */
+    #profile-layout {
+        display: grid;
+        grid-template-columns: 340px 1fr;
+        gap: 20px;
+        align-items: start;
+    }
+    #profile-col-left, #profile-col-right {
+        display: flex;
+        flex-direction: column;
+    }
+    /* Sidebar is narrower than the old full-width layout — back to 2 columns instead of the 768px 4-column rule */
+    #profile-summary-card .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    /* The four detail accordions in a 2x2 grid instead of strictly stacked —
+       Advanced Analytics top-left, Head-to-Head top-right */
+    #profile-details-card { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    #fold-advanced-section { order: 1; }
+    #fold-h2h-section      { order: 2; }
+    #profile-chart-section { order: 3; }
+    #fold-history-section  { order: 4; }
+
+    /* ── FINES.HTML ── */
+    #fines-members-list, #fines-guests-list {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        gap: 10px;
+    }
+    #fines-members-list .fines-total-row,
+    #fines-guests-list .fines-total-row { grid-column: 1 / -1; }
+    .fines-table { max-width: 900px; } /* stop the single value gutter from stretching across the whole screen */
+
+    /* ── FINES-DETAIL.HTML ── */
+    /* Header spans the top; admin add-entry form left, ledger right (or
+       ledger alone gets the full width when the form is hidden for non-admins) */
+    #fines-detail-layout {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+        align-items: start;
+    }
+    #fines-detail-header-card { grid-column: 1 / -1; }
+    #fines-add-card  { grid-column: 1; }
+    #fines-ledger-card { grid-column: 2; }
+    /* Non-admins never see #fines-add-card — ledger takes the full width instead of leaving column 1 empty */
+    #fines-detail-layout.no-add-card #fines-ledger-card { grid-column: 1 / -1; }
+
+    /* ── PUNKTE.HTML ── */
+    #punkte-wrapper {
+        display: grid;
+        grid-template-columns: 2fr 1fr;
+        gap: 16px;
+        align-items: start;
+    }
+
+    /* ── TOURNAMENTS.HTML ── */
+    #ongoing-list, #finished-list {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+        gap: 14px;
+    }
+
+    /* ── TOURNAMENT-VIEW.HTML ── */
+    #all-matches-list, #current-round-matches, #bounty-matches-list,
+    #swiss-standings, #bounty-standings {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+        gap: 14px;
+    }
+
+    /* ── ADMIN.HTML ── */
+    #admin-fold-columns {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+        align-items: start;
+    }
+
+    /* ── SETTINGS.HTML ── */
+    #settings-wrapper {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+        align-items: start;
+    }
+    #settings-wrapper > .settings-header,
+    #settings-wrapper > #avatar-msg { grid-column: 1 / -1; }
+
+    /* ── SCHEDULE.HTML ── */
+    /* Deliberately no multi-column/grid here — appointment cards vary too
+       much in attendee count to sit side by side without one stretching or
+       leaving gaps around the other. One appointment per row, full width;
+       the vote lists use a compact clickable avatar-stack (see .vote-avatar-stack)
+       so a card's height no longer balloons with attendee count either. */
+
+    /* ── SPIELTAG.HTML ── */
+    #spieltag-list {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        gap: 12px;
+    }
+
+    /* ── SPIELTAG-DETAIL.HTML ── */
+    /* Player pool as a sticky left sidebar (reference while filling brackets);
+       header spans the top; the 3 bracket cards + save button form the right column. */
+    #spieltag-detail-wrapper {
+        display: grid;
+        grid-template-columns: 280px 1fr;
+        gap: 20px;
+        align-items: start;
+    }
+    #spieltag-detail-wrapper > *:first-child { grid-column: 1 / -1; }
+    #spieltag-detail-left, #spieltag-detail-right {
+        display: flex;
+        flex-direction: column;
+    }
+    #spieltag-detail-left  { grid-column: 1; position: sticky; top: 84px; }
+    #spieltag-detail-right { grid-column: 2; }
+
+    /* ── TOURNAMENT-CREATE.HTML ── */
+    /* Setup on the left; participants + doubles team-builder stacked on the right;
+       error message and submit button stay full-width at the bottom. */
+    #tourn-create-wrapper {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+        align-items: start;
+    }
+    #tourn-create-wrapper > *:first-child { grid-column: 1; }
+    #tourn-create-wrapper > #participants-card,
+    #tourn-create-wrapper > #teams-card { grid-column: 2; }
+    #tourn-create-wrapper > #create-error,
+    #tourn-create-wrapper > button { grid-column: 1 / -1; }
+
+    /* ── TRAINING-CLOCK.HTML ── */
+    /* Solo stat row: Darts / Getroffen / Verfehlt / Ø side by side, full width */
+    #clock-stats { grid-template-columns: repeat(4, 1fr); }
 }

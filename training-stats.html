@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlightClub · Meine Statistiken</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0d0d0f">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <script src="config.js"></script>
+    <script src="ui-utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>document.documentElement.setAttribute("data-theme",localStorage.getItem("fc47_theme")||"dark");</script>
+</head>
+<body>
+
+    <nav id="nav-training-stats">
+        <div class="nav-inner nav-inner--default">
+            <a href="index.html" class="nav-brand" style="text-decoration:none;color:inherit;">FLIGHTCLUB</a>
+            <div class="nav-links">
+                <a href="training.html" class="nav-btn">« Training</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="app-wrapper">
+
+        <div class="card">
+            <h2 class="card-title">MEINE STATISTIKEN</h2>
+            <div class="divider"></div>
+            <p class="muted-text" style="font-size:0.85rem;">Alle deine Trainingsergebnisse an einem Ort.</p>
+            <p class="muted-text" style="font-size:0.78rem; margin-top:6px;">💡 Heatmap-Felder färben sich erst ein, sobald für dieses Feld mindestens 3 Trainingsläufe vorliegen — bei weniger Daten wäre die Farbe irreführend.</p>
+        </div>
+
+        <!-- AROUND THE CLOCK -->
+        <div class="card">
+            <div class="fold-header" onclick="toggleStatsFold('clock')">
+                <h2 class="card-title" style="margin:0;">AROUND THE CLOCK</h2>
+                <span class="fold-icon" id="clock-fold-icon">▶</span>
+            </div>
+            <div id="clock-fold" class="fold-body" style="display:none;">
+                <div class="divider" style="margin-top:0;"></div>
+                <div class="stats-grid">
+                    <div class="stat-box">
+                        <div class="stat-label">Beste Runde (1–Bull)</div>
+                        <div class="stat-value" id="clock-best">–</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Ø Darts (letzte 10)</div>
+                        <div class="stat-value" id="clock-avg10">–</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Läufe gesamt</div>
+                        <div class="stat-value" id="clock-total">0</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Bilanz (Vs)</div>
+                        <div class="stat-value" id="clock-record">–</div>
+                    </div>
+                </div>
+
+                <h3 class="section-label" style="margin-top:8px;">Heatmap · Ø Darts je Zahl</h3>
+                <div class="filter-bar" id="clock-filter-bar" style="margin-top:8px;">
+                    <button type="button" class="filter-btn filter-btn--active" onclick="setClockFilter('all', this)">Gesamt</button>
+                    <button type="button" class="filter-btn" onclick="setClockFilter('month', this)">Monat</button>
+                    <button type="button" class="filter-btn" onclick="setClockFilter('week', this)">Woche</button>
+                </div>
+                <div class="training-heatmap" id="clock-heatmap"></div>
+
+                <h3 class="section-label">Verlauf</h3>
+                <div class="stats-history-list" id="clock-history"></div>
+            </div>
+        </div>
+
+        <!-- BOB'S 27 -->
+        <div class="card">
+            <div class="fold-header" onclick="toggleStatsFold('bobs')">
+                <h2 class="card-title" style="margin:0;">BOB'S 27</h2>
+                <span class="fold-icon" id="bobs-fold-icon">▶</span>
+            </div>
+            <div id="bobs-fold" class="fold-body" style="display:none;">
+                <div class="divider" style="margin-top:0;"></div>
+                <div class="stats-grid">
+                    <div class="stat-box">
+                        <div class="stat-label">Highscore</div>
+                        <div class="stat-value" id="bobs-best">–</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Ø Punkte (letzte 10)</div>
+                        <div class="stat-value" id="bobs-avg10">–</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Läufe gesamt</div>
+                        <div class="stat-value" id="bobs-total">0</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Bilanz (Vs)</div>
+                        <div class="stat-value" id="bobs-record">–</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Pleiten-Quote (Vs)</div>
+                        <div class="stat-value" id="bobs-bust-rate">–</div>
+                    </div>
+                </div>
+
+                <h3 class="section-label" style="margin-top:8px;">Heatmap · Ø Trefferquote je Doppel</h3>
+                <div class="filter-bar" id="bobs-filter-bar" style="margin-top:8px;">
+                    <button type="button" class="filter-btn filter-btn--active" onclick="setBobsFilter('all', this)">Gesamt</button>
+                    <button type="button" class="filter-btn" onclick="setBobsFilter('month', this)">Monat</button>
+                    <button type="button" class="filter-btn" onclick="setBobsFilter('week', this)">Woche</button>
+                </div>
+                <div class="training-heatmap training-heatmap--bobs27" id="bobs-heatmap"></div>
+
+                <h3 class="section-label">Verlauf</h3>
+                <div class="stats-history-list" id="bobs-history"></div>
+            </div>
+        </div>
+
+        <!-- CHECKOUT-TRAINING -->
+        <div class="card">
+            <div class="fold-header" onclick="toggleStatsFold('checkout')">
+                <h2 class="card-title" style="margin:0;">CHECKOUT-TRAINING</h2>
+                <span class="fold-icon" id="checkout-fold-icon">▶</span>
+            </div>
+            <div id="checkout-fold" class="fold-body" style="display:none;">
+                <div class="divider" style="margin-top:0;"></div>
+                <div class="stats-grid">
+                    <div class="stat-box">
+                        <div class="stat-label">Beste Quote</div>
+                        <div class="stat-value" id="checkout-best">–</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Ø Quote (letzte 10)</div>
+                        <div class="stat-value" id="checkout-avg10">–</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Versuche gesamt</div>
+                        <div class="stat-value" id="checkout-attempts">0</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Treffer gesamt</div>
+                        <div class="stat-value stat-value--green" id="checkout-hits">0</div>
+                    </div>
+                </div>
+
+                <h3 class="section-label">Verlauf</h3>
+                <div class="stats-history-list" id="checkout-history"></div>
+            </div>
+        </div>
+
+        <!-- GEGEN DEN BOT -->
+        <div class="card">
+            <div class="fold-header" onclick="toggleStatsFold('bot')">
+                <h2 class="card-title" style="margin:0;">GEGEN DEN BOT</h2>
+                <span class="fold-icon" id="bot-fold-icon">▶</span>
+            </div>
+            <div id="bot-fold" class="fold-body" style="display:none;">
+                <div class="divider" style="margin-top:0;"></div>
+                <div class="stats-grid">
+                    <div class="stat-box">
+                        <div class="stat-label">Ø Average (letzte 10)</div>
+                        <div class="stat-value" id="bot-avg10">–</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">180er gesamt</div>
+                        <div class="stat-value" id="bot-180s">0</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Highest Finish</div>
+                        <div class="stat-value" id="bot-highfinish">–</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Bilanz</div>
+                        <div class="stat-value" id="bot-record">–</div>
+                    </div>
+                </div>
+
+                <h3 class="section-label">Verlauf</h3>
+                <div class="stats-history-list" id="bot-history"></div>
+            </div>
+        </div>
+
+        <!-- JDC CHALLENGE -->
+        <div class="card">
+            <div class="fold-header" onclick="toggleStatsFold('jdc')">
+                <h2 class="card-title" style="margin:0;">JDC CHALLENGE</h2>
+                <span class="fold-icon" id="jdc-fold-icon">▶</span>
+            </div>
+            <div id="jdc-fold" class="fold-body" style="display:none;">
+                <div class="divider" style="margin-top:0;"></div>
+                <div class="stats-grid">
+                    <div class="stat-box">
+                        <div class="stat-label">Highscore</div>
+                        <div class="stat-value" id="jdc-best">–</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Ø Score (letzte 10)</div>
+                        <div class="stat-value" id="jdc-avg10">–</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Läufe gesamt</div>
+                        <div class="stat-value" id="jdc-total">0</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Bilanz (Vs)</div>
+                        <div class="stat-value" id="jdc-record">–</div>
+                    </div>
+                </div>
+
+                <h3 class="section-label" style="margin-top:8px;">Heatmap · Ø Punktequote je Zahl (10–20)</h3>
+                <div class="filter-bar" id="jdc-num-filter-bar" style="margin-top:8px;">
+                    <button type="button" class="filter-btn filter-btn--active" onclick="setJdcNumFilter('all', this)">Gesamt</button>
+                    <button type="button" class="filter-btn" onclick="setJdcNumFilter('month', this)">Monat</button>
+                    <button type="button" class="filter-btn" onclick="setJdcNumFilter('week', this)">Woche</button>
+                </div>
+                <div class="training-heatmap training-heatmap--bobs27" id="jdc-num-heatmap"></div>
+
+                <h3 class="section-label">Heatmap · Ø Trefferquote je Doppel</h3>
+                <div class="filter-bar" id="jdc-dbl-filter-bar" style="margin-top:8px;">
+                    <button type="button" class="filter-btn filter-btn--active" onclick="setJdcDblFilter('all', this)">Gesamt</button>
+                    <button type="button" class="filter-btn" onclick="setJdcDblFilter('month', this)">Monat</button>
+                    <button type="button" class="filter-btn" onclick="setJdcDblFilter('week', this)">Woche</button>
+                </div>
+                <div class="training-heatmap" id="jdc-dbl-heatmap"></div>
+
+                <h3 class="section-label">Verlauf</h3>
+                <div class="stats-history-list" id="jdc-history"></div>
+            </div>
+        </div>
+
+        <!-- AIM-TRAINING -->
+        <div class="card">
+            <div class="fold-header" onclick="toggleStatsFold('aim')">
+                <h2 class="card-title" style="margin:0;">AIM-TRAINING</h2>
+                <span class="fold-icon" id="aim-fold-icon">▶</span>
+            </div>
+            <div id="aim-fold" class="fold-body" style="display:none;">
+                <div class="divider" style="margin-top:0;"></div>
+                <div class="stats-grid">
+                    <div class="stat-box">
+                        <div class="stat-label">Beste Quote</div>
+                        <div class="stat-value" id="aim-best">–</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Ø Quote (letzte 10)</div>
+                        <div class="stat-value" id="aim-avg10">–</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Versuche/Treffer gesamt</div>
+                        <div class="stat-value" id="aim-attempts-hits">–</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Bilanz (Vs)</div>
+                        <div class="stat-value" id="aim-record">–</div>
+                    </div>
+                </div>
+
+                <h3 class="section-label" style="margin-top:8px;">Trefferquote je Wurfart</h3>
+                <div class="stats-grid" style="grid-template-columns:repeat(4,1fr); margin-top:8px;">
+                    <div class="stat-box">
+                        <div class="stat-label">Single</div>
+                        <div class="stat-value" id="aim-type-single">–</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Double</div>
+                        <div class="stat-value" id="aim-type-double">–</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Triple</div>
+                        <div class="stat-value" id="aim-type-triple">–</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Bull</div>
+                        <div class="stat-value" id="aim-type-bull">–</div>
+                    </div>
+                </div>
+
+                <h3 class="section-label" style="margin-top:8px;">Heatmap · Ø Trefferquote je Zahl</h3>
+                <div class="filter-bar" id="aim-filter-bar" style="margin-top:8px;">
+                    <button type="button" class="filter-btn filter-btn--active" onclick="setAimFilter('all', this)">Gesamt</button>
+                    <button type="button" class="filter-btn" onclick="setAimFilter('month', this)">Monat</button>
+                    <button type="button" class="filter-btn" onclick="setAimFilter('week', this)">Woche</button>
+                </div>
+                <div class="training-heatmap" id="aim-heatmap"></div>
+
+                <h3 class="section-label">Verlauf</h3>
+                <div class="stats-history-list" id="aim-history"></div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const supa = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
+
+        let currentUser = null;
+        (function() {
+            var raw = sessionStorage.getItem('fc47_user');
+            if (!raw) { window.location.href = 'index.html'; return; }
+            currentUser = JSON.parse(raw);
+            if (currentUser.role === 'ipad') { window.location.href = 'index.html'; return; }
+        })();
+
+        function toggleStatsFold(id) {
+            const body = document.getElementById(id + '-fold');
+            const icon = document.getElementById(id + '-fold-icon');
+            const isOpen = body.style.display !== 'none';
+            body.style.display = isOpen ? 'none' : 'block';
+            icon.textContent   = isOpen ? '▶' : '▼';
+        }
+
+        let allClock = [], allBobs = [], allCheckout = [], allBot = [], allJdc = [], allAim = [];
+        let clockFilterRange   = 'all';
+        let bobsFilterRange    = 'all';
+        let jdcNumFilterRange  = 'all';
+        let jdcDblFilterRange  = 'all';
+        let aimFilterRange     = 'all';
+
+        // ── DATA LOAD (single query, grouped client-side) ──
+        async function loadAll() {
+            if (!currentUser.player_id) return;
+            const { data, error } = await supa
+                .from('training_results')
+                .select('*')
+                .eq('player_id', currentUser.player_id);
+            if (error || !data) return;
+
+            allClock    = data.filter(r => r.game === 'clock');
+            allBobs     = data.filter(r => r.game === 'bobs27');
+            allCheckout = data.filter(r => r.game === 'checkout');
+            allBot      = data.filter(r => r.game === 'bot');
+            allJdc      = data.filter(r => r.game === 'jdc');
+            allAim      = data.filter(r => r.game === 'aim');
+
+            renderClockSection();
+            renderBobsSection();
+            renderCheckoutSection();
+            renderBotSection();
+            renderJdcSection();
+            renderAimSection();
+        }
+        loadAll();
+
+        // Same 7-tier boundaries as training.html/training-jdc.html
+        function getShirt(score) {
+            if (score < 150) return { label: 'Weiß',    emoji: '⚪' };
+            if (score < 300) return { label: 'Lila',     emoji: '🟣' };
+            if (score < 450) return { label: 'Gelb',     emoji: '🟡' };
+            if (score < 600) return { label: 'Grün',     emoji: '🟢' };
+            if (score < 700) return { label: 'Blau',     emoji: '🔵' };
+            if (score < 850) return { label: 'Rot',      emoji: '🔴' };
+            return                 { label: 'Schwarz',  emoji: '⚫' };
+        }
+
+        // ── HELPERS ──
+        function fmtDate(iso) { return new Date(iso).toLocaleDateString('de-DE'); }
+        function byDateDesc(a, b) { return new Date(b.created_at) - new Date(a.created_at); }
+
+        function filterByRange(rows, range) {
+            if (range === 'all') return rows;
+            const cutoff = new Date();
+            if (range === 'month') cutoff.setMonth(cutoff.getMonth() - 1);
+            else if (range === 'week') cutoff.setDate(cutoff.getDate() - 7);
+            return rows.filter(r => new Date(r.created_at) >= cutoff);
+        }
+
+        // Green (good) ↔ red (bad) via hue-only HSL interpolation — avoids
+        // the muddy brown a plain RGB lerp would pass through.
+        function heatColor(t) {
+            const hue = Math.max(0, Math.min(1, t)) * 145;
+            return `hsl(${hue}, 60%, 42%)`;
+        }
+
+        function renderHeatmap(containerEl, cellsData, orderedLabels, invert, formatValue) {
+            const stats = orderedLabels.map(label => {
+                const d = cellsData[label];
+                if (!d || d.n === 0) return { label, n: 0, avg: null };
+                return { label, n: d.n, avg: d.sum / d.n };
+            });
+            const confident = stats.filter(s => s.n >= 3);
+            const min = confident.length ? Math.min(...confident.map(s => s.avg)) : 0;
+            const max = confident.length ? Math.max(...confident.map(s => s.avg)) : 1;
+
+            containerEl.innerHTML = stats.map(s => {
+                if (s.n === 0) {
+                    return `<div class="training-heat-cell training-heat-cell--empty"><div class="training-heat-cell-label">${s.label}</div><div class="training-heat-cell-value">–</div></div>`;
+                }
+                if (s.n < 3) {
+                    return `<div class="training-heat-cell training-heat-cell--muted"><div class="training-heat-cell-label">${s.label}</div><div class="training-heat-cell-value">${formatValue(s.avg)}</div></div>`;
+                }
+                let t = max > min ? (s.avg - min) / (max - min) : 0.5;
+                if (invert) t = 1 - t;
+                return `<div class="training-heat-cell" style="background:${heatColor(t)}; color:#fff; border-color:transparent;"><div class="training-heat-cell-label">${s.label}</div><div class="training-heat-cell-value">${formatValue(s.avg)}</div></div>`;
+            }).join('');
+        }
+
+        // ── AROUND THE CLOCK ──
+        // Rows saved before the range feature existed have no from/to — those
+        // were always full 1–Bull runs. Same rule used on training-clock.html.
+        function isFullRange(row) {
+            const m = row.meta;
+            if (!m) return true;
+            return (m.from === undefined || m.from === 1) && (m.to === undefined || m.to === 'bull');
+        }
+        function isCountableBest(row) {
+            if (row.meta && row.meta.finished === false) return false;
+            return isFullRange(row);
+        }
+
+        function renderClockSection() {
+            const countable = allClock.filter(isCountableBest);
+            document.getElementById('clock-total').textContent = allClock.length;
+
+            if (countable.length > 0) {
+                document.getElementById('clock-best').textContent = Math.min(...countable.map(r => r.score)) + ' Darts';
+                const last10 = [...countable].sort(byDateDesc).slice(0, 10);
+                const avg = last10.reduce((s, r) => s + r.score, 0) / last10.length;
+                document.getElementById('clock-avg10').textContent = avg.toFixed(1);
+            }
+
+            const vsRows = allClock.filter(r => r.meta && r.meta.mode === 'vs');
+            const wins   = vsRows.filter(r => r.meta.win === true).length;
+            const losses = vsRows.filter(r => r.meta.win === false).length;
+            document.getElementById('clock-record').textContent = vsRows.length > 0 ? `${wins}–${losses}` : '–';
+
+            renderClockHeatmap();
+
+            const historyEl = document.getElementById('clock-history');
+            const recent = [...allClock].sort(byDateDesc).slice(0, 10);
+            if (recent.length === 0) {
+                historyEl.innerHTML = '<p class="muted-text" style="font-size:0.8rem;">Noch keine Läufe.</p>';
+            } else {
+                historyEl.innerHTML = recent.map(r => {
+                    const m       = r.meta || {};
+                    const range   = m.from !== undefined ? `${m.from}–${m.to === 'bull' ? 'Bull' : m.to}` : '1–Bull';
+                    const mode    = m.mode === 'vs' ? 'Vs' : 'Allein';
+                    const result  = m.mode === 'vs'
+                        ? `<span class="stats-history-result ${m.win ? 'stats-history-result--win' : 'stats-history-result--loss'}">${m.win ? 'Sieg' : 'Niederlage'}</span>`
+                        : `<span class="stats-history-result">${r.score} Darts</span>`;
+                    return `<div class="stats-history-row"><span class="stats-history-date">${fmtDate(r.created_at)}</span><span class="stats-history-detail">${range} · ${mode}</span>${result}</div>`;
+                }).join('');
+            }
+        }
+
+        function setClockFilter(range, btn) {
+            clockFilterRange = range;
+            document.querySelectorAll('#clock-filter-bar .filter-btn').forEach(b => b.classList.remove('filter-btn--active'));
+            btn.classList.add('filter-btn--active');
+            renderClockHeatmap();
+        }
+
+        function renderClockHeatmap() {
+            const filtered = filterByRange(allClock, clockFilterRange);
+            const cells = {};
+            filtered.forEach(r => {
+                const pn = r.meta && r.meta.perNumber;
+                if (!pn) return;
+                Object.entries(pn).forEach(([num, darts]) => {
+                    if (!cells[num]) cells[num] = { sum: 0, n: 0 };
+                    cells[num].sum += darts;
+                    cells[num].n++;
+                });
+            });
+            const labels = [...Array(20).keys()].map(i => String(i + 1)).concat(['Bull']);
+            renderHeatmap(document.getElementById('clock-heatmap'), cells, labels, true, v => v.toFixed(1));
+        }
+
+        // ── BOB'S 27 ──
+        function renderBobsSection() {
+            document.getElementById('bobs-total').textContent = allBobs.length;
+
+            if (allBobs.length > 0) {
+                document.getElementById('bobs-best').textContent = Math.max(...allBobs.map(r => r.score));
+                const last10 = [...allBobs].sort(byDateDesc).slice(0, 10);
+                const avg = last10.reduce((s, r) => s + r.score, 0) / last10.length;
+                document.getElementById('bobs-avg10').textContent = avg.toFixed(0);
+            }
+
+            const vsRows = allBobs.filter(r => r.meta && r.meta.mode === 'vs');
+            const wins   = vsRows.filter(r => r.meta.win === true).length;
+            const losses = vsRows.filter(r => r.meta.win === false).length;
+            const ties   = vsRows.filter(r => r.meta.win === null).length;
+            document.getElementById('bobs-record').textContent = vsRows.length > 0 ? `${wins}–${losses}–${ties}` : '–';
+
+            const busts = vsRows.filter(r => r.meta.busted).length;
+            document.getElementById('bobs-bust-rate').textContent = vsRows.length > 0
+                ? Math.round((busts / vsRows.length) * 100) + ' %'
+                : '–';
+
+            renderBobsHeatmap();
+
+            const historyEl = document.getElementById('bobs-history');
+            const recent = [...allBobs].sort(byDateDesc).slice(0, 10);
+            if (recent.length === 0) {
+                historyEl.innerHTML = '<p class="muted-text" style="font-size:0.8rem;">Noch keine Läufe.</p>';
+            } else {
+                historyEl.innerHTML = recent.map(r => {
+                    const m      = r.meta || {};
+                    const mode   = m.mode === 'vs' ? 'Vs' : 'Allein';
+                    let result;
+                    if (m.mode === 'vs') {
+                        result = m.win === null
+                            ? `<span class="stats-history-result">Unentschieden</span>`
+                            : `<span class="stats-history-result ${m.win ? 'stats-history-result--win' : 'stats-history-result--loss'}">${m.win ? 'Sieg' : 'Niederlage'}</span>`;
+                    } else {
+                        result = `<span class="stats-history-result">${r.score} Pkt.</span>`;
+                    }
+                    return `<div class="stats-history-row"><span class="stats-history-date">${fmtDate(r.created_at)}</span><span class="stats-history-detail">${mode} · ${r.score} Pkt.</span>${result}</div>`;
+                }).join('');
+            }
+        }
+
+        function setBobsFilter(range, btn) {
+            bobsFilterRange = range;
+            document.querySelectorAll('#bobs-filter-bar .filter-btn').forEach(b => b.classList.remove('filter-btn--active'));
+            btn.classList.add('filter-btn--active');
+            renderBobsHeatmap();
+        }
+
+        function renderBobsHeatmap() {
+            const filtered = filterByRange(allBobs, bobsFilterRange);
+            const cells = {};
+            filtered.forEach(r => {
+                const pr = r.meta && r.meta.perRound;
+                if (!pr) return;
+                Object.entries(pr).forEach(([round, hits]) => {
+                    if (!cells[round]) cells[round] = { sum: 0, n: 0 };
+                    cells[round].sum += hits;
+                    cells[round].n++;
+                });
+            });
+            const labels = [...Array(20).keys()].map(i => String(i + 1));
+            renderHeatmap(document.getElementById('bobs-heatmap'), cells, labels, false, v => Math.round((v / 3) * 100) + '%');
+        }
+
+        // ── CHECKOUT-TRAINING ──
+        function renderCheckoutSection() {
+            if (allCheckout.length > 0) {
+                document.getElementById('checkout-best').textContent = Math.max(...allCheckout.map(r => r.score)) + ' %';
+                const last10 = [...allCheckout].sort(byDateDesc).slice(0, 10);
+                const avg = last10.reduce((s, r) => s + r.score, 0) / last10.length;
+                document.getElementById('checkout-avg10').textContent = avg.toFixed(0) + ' %';
+            }
+            const totalAttempts = allCheckout.reduce((s, r) => s + ((r.meta && r.meta.attempts) || 0), 0);
+            const totalHits     = allCheckout.reduce((s, r) => s + ((r.meta && r.meta.hits) || 0), 0);
+            document.getElementById('checkout-attempts').textContent = totalAttempts;
+            document.getElementById('checkout-hits').textContent     = totalHits;
+
+            const historyEl = document.getElementById('checkout-history');
+            const recent = [...allCheckout].sort(byDateDesc).slice(0, 10);
+            if (recent.length === 0) {
+                historyEl.innerHTML = '<p class="muted-text" style="font-size:0.8rem;">Noch keine Sessions.</p>';
+            } else {
+                historyEl.innerHTML = recent.map(r => {
+                    const m     = r.meta || {};
+                    const range = m.from !== undefined ? `${m.from}–${m.to}` : '';
+                    const mode  = m.mode === 'ladder' ? 'Steigernd' : 'Zufällig';
+                    return `<div class="stats-history-row"><span class="stats-history-date">${fmtDate(r.created_at)}</span><span class="stats-history-detail">${range} · ${mode}</span><span class="stats-history-result">${r.score} %</span></div>`;
+                }).join('');
+            }
+        }
+
+        // ── GEGEN DEN BOT ──
+        function renderBotSection() {
+            if (allBot.length > 0) {
+                const last10 = [...allBot].sort(byDateDesc).slice(0, 10);
+                const avgSum = last10.reduce((s, r) => s + ((r.meta && r.meta.avg) || 0), 0);
+                document.getElementById('bot-avg10').textContent = (avgSum / last10.length).toFixed(1);
+
+                const total180s = allBot.reduce((s, r) => s + ((r.meta && r.meta.oneEighties) || 0), 0);
+                document.getElementById('bot-180s').textContent = total180s;
+
+                const highFinishes = allBot.map(r => (r.meta && r.meta.highFinish) || 0);
+                const best = Math.max(...highFinishes);
+                document.getElementById('bot-highfinish').textContent = best > 0 ? best : '–';
+            }
+
+            const wins   = allBot.filter(r => r.meta && r.meta.win === true).length;
+            const losses = allBot.filter(r => r.meta && r.meta.win === false).length;
+            document.getElementById('bot-record').textContent = allBot.length > 0 ? `${wins}–${losses}` : '–';
+
+            const historyEl = document.getElementById('bot-history');
+            const recent = [...allBot].sort(byDateDesc).slice(0, 10);
+            if (recent.length === 0) {
+                historyEl.innerHTML = '<p class="muted-text" style="font-size:0.8rem;">Noch keine Matches.</p>';
+            } else {
+                historyEl.innerHTML = recent.map(r => {
+                    const m      = r.meta || {};
+                    const detail = `Ø ${(m.avg || 0).toFixed(1)} · ${m.legsWon || 0}–${m.legsLost || 0} Legs`;
+                    const result = `<span class="stats-history-result ${m.win ? 'stats-history-result--win' : 'stats-history-result--loss'}">${m.win ? 'Sieg' : 'Niederlage'}</span>`;
+                    return `<div class="stats-history-row"><span class="stats-history-date">${fmtDate(r.created_at)}</span><span class="stats-history-detail">${detail}</span>${result}</div>`;
+                }).join('');
+            }
+        }
+
+        // ── JDC CHALLENGE ──
+        // True per-number max isn't the 3-triples total (9n) — the bonus
+        // combo (single+double+triple = 6n, plus the +100 bonus) is worth
+        // more for every number in our 10–20 range, so it's the real ceiling
+        // a heatmap ratio should be normalized against.
+        function jdcMaxForNumber(n) {
+            return Math.max(9 * n, 6 * n + 100);
+        }
+
+        function buildJdcNumberHeatmapData(rows) {
+            const cells = {};
+            rows.forEach(r => {
+                const m = r.meta || {};
+                [m.section1, m.section3].forEach(sec => {
+                    if (!sec || !sec.perNumber) return;
+                    Object.entries(sec.perNumber).forEach(([numStr, entry]) => {
+                        const max   = jdcMaxForNumber(parseInt(numStr));
+                        const ratio = max > 0 ? entry.score / max : 0;
+                        if (!cells[numStr]) cells[numStr] = { sum: 0, n: 0 };
+                        cells[numStr].sum += ratio;
+                        cells[numStr].n++;
+                    });
+                });
+            });
+            return cells;
+        }
+
+        function buildJdcDoubleHeatmapData(rows) {
+            const cells = {};
+            rows.forEach(r => {
+                const sec2 = r.meta && r.meta.section2;
+                if (!sec2 || !sec2.perDouble) return;
+                Object.entries(sec2.perDouble).forEach(([label, hit]) => {
+                    if (!cells[label]) cells[label] = { sum: 0, n: 0 };
+                    cells[label].sum += hit ? 1 : 0;
+                    cells[label].n++;
+                });
+            });
+            return cells;
+        }
+
+        function setJdcNumFilter(range, btn) {
+            jdcNumFilterRange = range;
+            document.querySelectorAll('#jdc-num-filter-bar .filter-btn').forEach(b => b.classList.remove('filter-btn--active'));
+            btn.classList.add('filter-btn--active');
+            renderJdcNumHeatmap();
+        }
+
+        function setJdcDblFilter(range, btn) {
+            jdcDblFilterRange = range;
+            document.querySelectorAll('#jdc-dbl-filter-bar .filter-btn').forEach(b => b.classList.remove('filter-btn--active'));
+            btn.classList.add('filter-btn--active');
+            renderJdcDblHeatmap();
+        }
+
+        function renderJdcNumHeatmap() {
+            const filtered = filterByRange(allJdc, jdcNumFilterRange);
+            const cells  = buildJdcNumberHeatmapData(filtered);
+            const labels = [...Array(11).keys()].map(i => String(i + 10)); // 10–20
+            renderHeatmap(document.getElementById('jdc-num-heatmap'), cells, labels, false, v => Math.round(v * 100) + '%');
+        }
+
+        function renderJdcDblHeatmap() {
+            const filtered = filterByRange(allJdc, jdcDblFilterRange);
+            const cells  = buildJdcDoubleHeatmapData(filtered);
+            const labels = [...Array(20).keys()].map(i => String(i + 1)).concat(['Bull']);
+            renderHeatmap(document.getElementById('jdc-dbl-heatmap'), cells, labels, false, v => Math.round(v * 100) + '%');
+        }
+
+        function renderJdcSection() {
+            document.getElementById('jdc-total').textContent = allJdc.length;
+
+            if (allJdc.length > 0) {
+                document.getElementById('jdc-best').textContent = Math.max(...allJdc.map(r => r.score));
+                const last10 = [...allJdc].sort(byDateDesc).slice(0, 10);
+                const avg = last10.reduce((s, r) => s + r.score, 0) / last10.length;
+                document.getElementById('jdc-avg10').textContent = avg.toFixed(0);
+            }
+
+            const vsRows = allJdc.filter(r => r.meta && r.meta.mode === 'vs');
+            const wins   = vsRows.filter(r => r.meta.win === true).length;
+            const losses = vsRows.filter(r => r.meta.win === false).length;
+            const ties   = vsRows.filter(r => r.meta.win === null).length;
+            document.getElementById('jdc-record').textContent = vsRows.length > 0 ? `${wins}–${losses}–${ties}` : '–';
+
+            renderJdcNumHeatmap();
+            renderJdcDblHeatmap();
+
+            const historyEl = document.getElementById('jdc-history');
+            const recent = [...allJdc].sort(byDateDesc).slice(0, 10);
+            if (recent.length === 0) {
+                historyEl.innerHTML = '<p class="muted-text" style="font-size:0.8rem;">Noch keine Läufe.</p>';
+            } else {
+                historyEl.innerHTML = recent.map(r => {
+                    const m     = r.meta || {};
+                    const shirt = getShirt(r.score);
+                    let result;
+                    if (m.mode === 'vs') {
+                        result = m.win === null
+                            ? `<span class="stats-history-result">Unentschieden</span>`
+                            : `<span class="stats-history-result ${m.win ? 'stats-history-result--win' : 'stats-history-result--loss'}">${m.win ? 'Sieg' : 'Niederlage'}</span>`;
+                    } else {
+                        result = `<span class="stats-history-result">${r.score}</span>`;
+                    }
+                    return `<div class="stats-history-row"><span class="stats-history-date">${fmtDate(r.created_at)}</span><span class="stats-history-detail">${shirt.emoji} ${shirt.label}</span>${result}</div>`;
+                }).join('');
+            }
+        }
+
+        // ── AIM-TRAINING ──
+        function setAimFilter(range, btn) {
+            aimFilterRange = range;
+            document.querySelectorAll('#aim-filter-bar .filter-btn').forEach(b => b.classList.remove('filter-btn--active'));
+            btn.classList.add('filter-btn--active');
+            renderAimHeatmap();
+        }
+
+        function renderAimHeatmap() {
+            const filtered = filterByRange(allAim, aimFilterRange);
+            const cells = {};
+            filtered.forEach(r => {
+                const pn = r.meta && r.meta.perNumber;
+                if (!pn) return;
+                Object.entries(pn).forEach(([label, d]) => {
+                    if (!cells[label]) cells[label] = { sum: 0, n: 0 };
+                    cells[label].sum += d.attempts > 0 ? d.hits / d.attempts : 0;
+                    cells[label].n++;
+                });
+            });
+            const labels = [...Array(20).keys()].map(i => String(i + 1)).concat(['Bull']);
+            renderHeatmap(document.getElementById('aim-heatmap'), cells, labels, false, v => Math.round(v * 100) + '%');
+        }
+
+        function renderAimSection() {
+            if (allAim.length > 0) {
+                document.getElementById('aim-best').textContent = Math.max(...allAim.map(r => r.score)) + ' %';
+                const last10 = [...allAim].sort(byDateDesc).slice(0, 10);
+                const avg = last10.reduce((s, r) => s + r.score, 0) / last10.length;
+                document.getElementById('aim-avg10').textContent = avg.toFixed(0) + ' %';
+            }
+
+            const totalAttempts = allAim.reduce((s, r) => s + ((r.meta && r.meta.attempts) || 0), 0);
+            const totalHits     = allAim.reduce((s, r) => s + ((r.meta && r.meta.hits) || 0), 0);
+            document.getElementById('aim-attempts-hits').textContent = allAim.length > 0 ? `${totalHits}/${totalAttempts}` : '–';
+
+            const vsRows = allAim.filter(r => r.meta && r.meta.mode === 'vs');
+            const wins   = vsRows.filter(r => r.meta.win === true).length;
+            const losses = vsRows.filter(r => r.meta.win === false).length;
+            const ties   = vsRows.filter(r => r.meta.win === null).length;
+            document.getElementById('aim-record').textContent = vsRows.length > 0 ? `${wins}–${losses}–${ties}` : '–';
+
+            const typeAgg = { single: {a:0,h:0}, double: {a:0,h:0}, triple: {a:0,h:0}, bull: {a:0,h:0} };
+            allAim.forEach(r => {
+                const pt = r.meta && r.meta.perType;
+                if (!pt) return;
+                ['single', 'double', 'triple', 'bull'].forEach(t => {
+                    if (pt[t]) { typeAgg[t].a += pt[t].attempts || 0; typeAgg[t].h += pt[t].hits || 0; }
+                });
+            });
+            ['single', 'double', 'triple', 'bull'].forEach(t => {
+                const el = document.getElementById(`aim-type-${t}`);
+                el.textContent = typeAgg[t].a > 0 ? Math.round(typeAgg[t].h / typeAgg[t].a * 100) + ' %' : '–';
+            });
+
+            renderAimHeatmap();
+
+            const historyEl = document.getElementById('aim-history');
+            const recent = [...allAim].sort(byDateDesc).slice(0, 10);
+            if (recent.length === 0) {
+                historyEl.innerHTML = '<p class="muted-text" style="font-size:0.8rem;">Noch keine Sessions.</p>';
+            } else {
+                historyEl.innerHTML = recent.map(r => {
+                    const m           = r.meta || {};
+                    const roundsLabel = m.rounds === 'endless' ? 'Endlos' : `${m.rounds} Runden`;
+                    const cleverLabel = m.clever ? 'Clever' : 'Alle';
+                    return `<div class="stats-history-row"><span class="stats-history-date">${fmtDate(r.created_at)}</span><span class="stats-history-detail">${roundsLabel} · ${cleverLabel}</span><span class="stats-history-result">${r.score} %</span></div>`;
+                }).join('');
+            }
+        }
+    </script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/fightclub-dart-tracker/sw.js')
+                .catch(() => {});
+        }
+    </script>
+</body>
+</html>

@@ -427,6 +427,22 @@
         })();
     </script>
     <script>
+        // Handle Training-Dashboard deep link — game.html?opponent=bot
+        // pre-selects the Bot/Training tab instead of requiring a manual switch
+        (function() {
+            var p = new URLSearchParams(window.location.search);
+            if (p.get('opponent') !== 'bot') return;
+            window.addEventListener('DOMContentLoaded', function() {
+                var interval = setInterval(function() {
+                    if (typeof setOpponentType === 'function') {
+                        clearInterval(interval);
+                        setOpponentType('bot');
+                    }
+                }, 100);
+            });
+        })();
+    </script>
+    <script>
         // Handle Online-Modus URL param — invitee arrives here via
         // game.html?online_game_id=<id> from the index.html invite card
         (function() {

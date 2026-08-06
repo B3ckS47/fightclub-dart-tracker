@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlightClub · Spielerprofil</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0d0d0f">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <script src="config.js"></script>
+    <script src="ui-utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>document.documentElement.setAttribute("data-theme",localStorage.getItem("fc47_theme")||"dark");</script>
+</head>
+<body>
+
+    <!-- ── NAV ── -->
+    <nav id="nav-player-profile">
+        <div class="nav-inner nav-inner--default">
+            <a href="index.html" class="nav-brand" style="text-decoration:none;color:inherit;">FLIGHTCLUB</a>
+            <div class="nav-links">
+                <a href="dashboard.html" class="nav-btn">« Dashboard</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="app-wrapper">
+        <div id="profile-layout">
+
+            <!-- LEFT COLUMN: identity + key numbers, attendance directly below —
+                 independent of the right column's height, like game.html's
+                 .setup-col-left/.setup-col-right pattern -->
+            <div id="profile-col-left">
+                <div class="card" id="profile-summary-card">
+                    <div class="profile-header">
+                        <button onclick="showPage('stats-page')" class="btn btn-ghost">« Zurück</button>
+                    </div>
+                    <div class="profile-identity">
+                        <div class="profile-avatar" id="profile-avatar">
+                            <img id="profile-avatar-img" class="profile-avatar-img" style="display:none;" alt="">
+                            <span id="profile-avatar-initials"></span>
+                        </div>
+                        <h2 id="profile-name" class="profile-name-title">Player Name</h2>
+                    </div>
+                    <div id="profile-stats-summary" class="stats-grid"></div>
+                </div>
+
+                <!-- ATTENDANCE CARD -->
+                <div class="card" id="profile-attendance-card" style="display:none;">
+                    <div class="fold-section" style="border-top:none;">
+                        <div class="fold-header" onclick="toggleFold('fold-attendance')">
+                            <h2 class="card-title" style="margin:0;">ANWESENHEIT</h2>
+                            <span class="fold-icon" id="fold-attendance-icon">▶</span>
+                        </div>
+                        <div id="fold-attendance" class="fold-body" style="display:none;">
+                            <div class="divider" style="margin-top:0;"></div>
+                            <div id="profile-attendance-list"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RIGHT COLUMN: Advanced Analytics / Head-to-Head / Chart / Match
+                 History (2x2 on desktop, reordered via CSS), Gefahrenzone below -->
+            <div id="profile-col-right">
+                <div class="card" id="profile-details-card">
+
+                    <!-- Advanced Analytics (foldable) -->
+                    <div class="fold-section" id="fold-advanced-section">
+                        <div class="fold-header" onclick="toggleFold('fold-advanced')">
+                            <h3 class="subsection-title subsection-title--fold">Advanced Analytics</h3>
+                            <span class="fold-icon" id="fold-advanced-icon">▶</span>
+                        </div>
+                        <div id="fold-advanced" class="fold-body" style="display:none;">
+                            <div class="filter-bar" style="margin-bottom:12px;">
+                                <button class="filter-btn filter-btn--active" onclick="setAdvancedFilter('all',  this)">Gesamt</button>
+                                <button class="filter-btn"                    onclick="setAdvancedFilter('3m',   this)">3 Monate</button>
+                                <button class="filter-btn"                    onclick="setAdvancedFilter('30d',  this)">30 Tage</button>
+                            </div>
+                            <div id="profile-advanced-stats" class="advanced-grid"></div>
+                        </div>
+                    </div>
+
+                    <!-- Head-to-Head (foldable) -->
+                    <div class="fold-section" id="fold-h2h-section" style="display:none;">
+                        <div class="fold-header" onclick="toggleFold('fold-h2h')">
+                            <h3 class="subsection-title subsection-title--fold">Head-to-Head</h3>
+                            <span class="fold-icon" id="fold-h2h-icon">▶</span>
+                        </div>
+                        <div id="fold-h2h" class="fold-body" style="display:none;">
+                            <div id="profile-h2h"></div>
+                        </div>
+                    </div>
+
+                    <!-- Performance Chart (foldable) -->
+                    <div class="fold-section" id="profile-chart-section" style="display:none;">
+                        <div class="fold-header" onclick="toggleFold('fold-chart')">
+                            <h3 class="subsection-title subsection-title--fold">Performance · Last 5 Games</h3>
+                            <span class="fold-icon" id="fold-chart-icon">▶</span>
+                        </div>
+                        <div id="fold-chart" class="fold-body" style="display:none;">
+                            <div id="profile-chart" class="profile-chart-box"></div>
+                        </div>
+                    </div>
+
+                    <!-- Match History (foldable) -->
+                    <div class="fold-section" id="fold-history-section">
+                        <div class="fold-header" onclick="toggleFold('fold-history')">
+                            <h3 class="subsection-title subsection-title--fold">Recent Match History</h3>
+                            <span class="fold-icon" id="fold-history-icon">▶</span>
+                        </div>
+                        <div id="fold-history" class="fold-body" style="display:none;">
+                            <div id="profile-history-list"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ADMIN ONLY: DELETE CARD -->
+                <div class="card" id="danger-zone" style="display:none;">
+                    <h2 class="card-title" style="color:var(--red);">GEFAHRENZONE</h2>
+                    <div class="divider"></div>
+                    <p class="muted-text" style="margin-bottom:16px; font-size:0.85rem;">Das Löschen eines Spielers entfernt auch alle Spieldaten unwiderruflich.</p>
+                    <button id="delete-player-btn" class="btn btn-danger-outline">DELETE PLAYER PROFILE</button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        function toggleFold(id) {
+            const body = document.getElementById(id);
+            const icon = document.getElementById(id + '-icon');
+            const isOpen = body.style.display !== 'none';
+            body.style.display = isOpen ? 'none' : 'block';
+            icon.textContent   = isOpen ? '▶' : '▼';
+        }
+
+        function setAdvancedFilter(range, btn) {
+            document.querySelectorAll('#fold-advanced .filter-btn').forEach(b => b.classList.remove('filter-btn--active'));
+            btn.classList.add('filter-btn--active');
+            const now = new Date();
+            let fromDate = null;
+            if (range === '30d') { fromDate = new Date(now); fromDate.setDate(fromDate.getDate() - 30); }
+            else if (range === '3m') { fromDate = new Date(now); fromDate.setMonth(fromDate.getMonth() - 3); }
+            if (typeof renderAdvancedStats === 'function') renderAdvancedStats(fromDate);
+        }
+    </script>
+    <script src="database.js"></script>
+    <script src="ui-manager-player-profile.js"></script>
+
+    <script>
+        // Auth guard + show danger zone for admins only
+        (function() {
+            var raw = sessionStorage.getItem('fc47_user');
+            if (!raw) { window.location.href = 'index.html'; return; }
+            var u = JSON.parse(raw);
+            if (u.role === 'ipad') window.location.href = 'game.html';
+            if (u.role === 'admin') document.getElementById('danger-zone').style.display = 'block';
+            window.loggedInUser = u;
+        })();
+    </script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/fightclub-dart-tracker/sw.js')
+                .catch(() => {}); // silently ignore errors on local dev
+        }
+    </script>
+</body>
+</html>

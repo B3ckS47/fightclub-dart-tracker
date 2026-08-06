@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlightClub · Aim-Training</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0d0d0f">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <script src="config.js"></script>
+    <script src="ui-utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>document.documentElement.setAttribute("data-theme",localStorage.getItem("fc47_theme")||"dark");</script>
+</head>
+<body>
+
+    <nav id="nav-training-aim">
+        <div class="nav-inner nav-inner--default">
+            <a href="index.html" class="nav-brand" style="text-decoration:none;color:inherit;">FLIGHTCLUB</a>
+            <div class="nav-links">
+                <a href="training.html" class="nav-btn">« Training</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="app-wrapper">
+
+        <div class="card">
+            <h2 class="card-title">AIM-TRAINING</h2>
+            <div class="divider"></div>
+            <p class="muted-text" style="font-size:0.85rem;">Pro Runde 3 zufällige Ziele, ein Dart je Ziel. Im Vs-Modus bekommen beide Spieler dieselben Ziele je Runde.</p>
+        </div>
+
+        <!-- MEMBER LEADERBOARD -->
+        <div class="card" id="aim-leaderboard-card">
+            <h3 class="section-label">Bestenliste · Mitglieder</h3>
+            <div class="training-leaderboard" id="aim-leaderboard-list">
+                <p class="muted-text" style="font-size:0.8rem;">Lade…</p>
+            </div>
+        </div>
+
+        <!-- SETUP -->
+        <div class="card" id="aim-setup-view">
+            <h3 class="section-label">Modus</h3>
+            <div class="game-type-selector" style="margin-top:10px;">
+                <button type="button" id="aim-mode-solo" class="game-type-btn game-type-btn--active" onclick="setAimMode('solo')">
+                    <span class="game-type-icon">🎯</span>
+                    <span class="game-type-label">ALLEIN</span>
+                    <span class="game-type-sub">Solo-Training</span>
+                </button>
+                <button type="button" id="aim-mode-vs" class="game-type-btn" onclick="setAimMode('vs')">
+                    <span class="game-type-icon">⚔️</span>
+                    <span class="game-type-label">GEGENEINANDER</span>
+                    <span class="game-type-sub">2 Spieler</span>
+                </button>
+            </div>
+
+            <div id="aim-opponent-wrap" style="display:none; margin-top:18px;">
+                <h3 class="section-label">Gegner</h3>
+                <select id="aim-opponent-select" class="select-field" style="display:block; width:100%; margin-top:8px;">
+                    <option value="">– Mitglied wählen –</option>
+                </select>
+            </div>
+
+            <div style="margin-top:18px;">
+                <h3 class="section-label">Rundenanzahl</h3>
+                <select id="aim-rounds-select" class="select-field" style="display:block; width:100%; margin-top:8px;">
+                    <option value="5">5 Runden</option>
+                    <option value="10" selected>10 Runden</option>
+                    <option value="15">15 Runden</option>
+                    <option value="20">20 Runden</option>
+                    <option value="endless">Endlos (nur Allein)</option>
+                </select>
+            </div>
+
+            <div style="margin-top:18px;">
+                <h3 class="section-label">Zahlenauswahl</h3>
+                <div class="game-type-selector" style="margin-top:10px;">
+                    <button type="button" id="aim-pool-all" class="game-type-btn game-type-btn--active" onclick="setAimPool(false)">
+                        <span class="game-type-icon">🔢</span>
+                        <span class="game-type-label">ALLE ZAHLEN</span>
+                        <span class="game-type-sub">Single/Double/Triple + Bull</span>
+                    </button>
+                    <button type="button" id="aim-pool-clever" class="game-type-btn" onclick="setAimPool(true)">
+                        <span class="game-type-icon">🧠</span>
+                        <span class="game-type-label">CLEVER MODUS</span>
+                        <span class="game-type-sub">Ohne Triple 1–6</span>
+                    </button>
+                </div>
+            </div>
+
+            <button class="btn btn-primary btn-full" style="margin-top:20px;" onclick="startAimGame()">START</button>
+        </div>
+
+        <!-- PLAY -->
+        <div class="card training-target-card" id="play-view" style="display:none;">
+            <div class="training-target-label" id="aim-round-label">RUNDE 1</div>
+            <div class="training-target-number training-target-number--text" id="target-number">SINGLE 20</div>
+            <div class="training-target-sub" id="aim-sub-info">Dart 1/3</div>
+
+            <div class="stats-grid" id="aim-stats" style="margin-top:20px;">
+                <div class="stat-box">
+                    <div class="stat-label">Versuche</div>
+                    <div class="stat-value" id="aim-attempts">0</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">Treffer</div>
+                    <div class="stat-value stat-value--green" id="aim-hits">0</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">Quote</div>
+                    <div class="stat-value" id="aim-rate">0 %</div>
+                </div>
+            </div>
+
+            <div class="clock-players" id="aim-players" style="display:none;"></div>
+
+            <div class="training-action-buttons">
+                <button class="btn btn-accent training-action-btn" onclick="recordAimThrow(true)">✓ Getroffen</button>
+                <button class="btn btn-danger-outline training-action-btn" onclick="recordAimThrow(false)">✗ Verfehlt</button>
+            </div>
+            <button class="btn btn-full" style="margin-top:16px;" onclick="finishAimGame()">Beenden</button>
+        </div>
+
+        <!-- RESULT -->
+        <div class="card training-result-card" id="result-view" style="display:none;">
+            <h2 class="card-title" id="result-title">SESSION BEENDET</h2>
+            <div class="divider"></div>
+            <div class="training-result-number" id="result-rate">0 %</div>
+            <div class="training-result-label">Trefferquote</div>
+            <div id="result-vs-summary" style="display:none; margin-top:14px;"></div>
+            <p class="muted-text" id="result-best" style="margin-top:12px;"></p>
+            <div class="training-action-buttons" style="margin-top:20px;">
+                <button class="btn btn-primary training-action-btn" onclick="resetGame()">Nochmal</button>
+                <button class="btn btn-full training-action-btn" onclick="window.location.href='training.html'">Fertig</button>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const supa = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
+
+        let currentUser = null;
+        (function() {
+            var raw = sessionStorage.getItem('fc47_user');
+            if (!raw) { window.location.href = 'index.html'; return; }
+            currentUser = JSON.parse(raw);
+            if (currentUser.role === 'ipad') { window.location.href = 'index.html'; return; }
+        })();
+
+        const TYPE_LABEL = { single: 'SINGLE', double: 'DOUBLE', triple: 'TRIPLE', bull: 'BULL' };
+
+        function buildTargetPool(clever) {
+            const pool = [];
+            for (let n = 1; n <= 20; n++) {
+                pool.push({ type: 'single', number: n });
+                pool.push({ type: 'double', number: n });
+                if (!(clever && n <= 6)) pool.push({ type: 'triple', number: n });
+            }
+            pool.push({ type: 'bull', number: 'Bull' });
+            return pool;
+        }
+
+        // ── SETUP STATE ──
+        let aimMode    = 'solo';
+        let cleverMode = false;
+        let allMembers = [];
+        let myPlayer   = null;
+
+        async function loadMembers() {
+            const [playersRes, usersRes] = await Promise.all([
+                supa.from('players').select('id, name, avatar_url').order('name'),
+                supa.from('app_users').select('player_id').in('role', ['admin', 'member'])
+            ]);
+            const memberIds = new Set((usersRes.data || []).map(u => u.player_id).filter(Boolean));
+            allMembers = (playersRes.data || []).filter(p => memberIds.has(p.id));
+
+            myPlayer = allMembers.find(p => p.id === currentUser.player_id)
+                || { id: currentUser.player_id, name: currentUser.username, avatar_url: null };
+
+            const sel = document.getElementById('aim-opponent-select');
+            allMembers
+                .filter(p => p.id !== currentUser.player_id)
+                .forEach(p => {
+                    const opt = document.createElement('option');
+                    opt.value = p.id;
+                    opt.textContent = p.name;
+                    sel.appendChild(opt);
+                });
+        }
+
+        let personalBest = null;
+        async function loadPersonalBest() {
+            if (!currentUser.player_id) return;
+            const { data } = await supa
+                .from('training_results')
+                .select('score')
+                .eq('player_id', currentUser.player_id)
+                .eq('game', 'aim');
+            if (data && data.length > 0) {
+                personalBest = Math.max(...data.map(r => r.score));
+            }
+        }
+
+        async function loadLeaderboard() {
+            const listEl = document.getElementById('aim-leaderboard-list');
+            const { data } = await supa
+                .from('training_results')
+                .select('player_id, score, created_at')
+                .eq('game', 'aim')
+                .neq('player_id', currentUser.player_id || '');
+
+            const bestByPlayer = {};
+            (data || []).forEach(r => {
+                const cur = bestByPlayer[r.player_id];
+                if (!cur || r.score > cur.score) bestByPlayer[r.player_id] = r;
+            });
+
+            const rows = Object.entries(bestByPlayer)
+                .map(([playerId, r]) => ({ playerId, ...r }))
+                .sort((a, b) => b.score - a.score)
+                .slice(0, 5);
+
+            if (rows.length === 0) {
+                listEl.innerHTML = '<p class="muted-text" style="font-size:0.8rem;">Noch keine Einträge von anderen Mitgliedern.</p>';
+                return;
+            }
+
+            listEl.innerHTML = rows.map((r, i) => {
+                const p        = allMembers.find(m => m.id === r.playerId);
+                const name     = p ? p.name : '?';
+                const initials = name.slice(0, 2).toUpperCase();
+                const avatar   = p && p.avatar_url
+                    ? `<span class="lb-avatar lb-avatar--sm"><img src="${p.avatar_url}" alt=""></span>`
+                    : `<span class="lb-avatar lb-avatar--sm">${initials}</span>`;
+                const date = new Date(r.created_at).toLocaleDateString('de-DE');
+                return `
+<div class="training-leader-row">
+    <span class="training-leader-rank">${i + 1}</span>
+    ${avatar}
+    <div class="training-leader-info">
+        <div class="training-leader-name">${name}</div>
+        <div class="training-leader-date">${date}</div>
+    </div>
+    <div class="training-leader-score">${r.score} %</div>
+</div>`;
+            }).join('');
+        }
+
+        (async function init() {
+            await loadMembers();
+            loadPersonalBest();
+            loadLeaderboard();
+        })();
+
+        // ── SETUP UI ──
+        function setAimMode(mode) {
+            aimMode = mode;
+            document.getElementById('aim-mode-solo').classList.toggle('game-type-btn--active', mode === 'solo');
+            document.getElementById('aim-mode-vs').classList.toggle('game-type-btn--active', mode === 'vs');
+            document.getElementById('aim-opponent-wrap').style.display = mode === 'vs' ? 'block' : 'none';
+        }
+
+        function setAimPool(clever) {
+            cleverMode = clever;
+            document.getElementById('aim-pool-all').classList.toggle('game-type-btn--active', !clever);
+            document.getElementById('aim-pool-clever').classList.toggle('game-type-btn--active', clever);
+        }
+
+        // ── GAME STATE ──
+        let players            = [];
+        let activeIdx          = 0;
+        let currentRoundTargets = [];
+        let totalRounds        = 10;
+        let roundNum           = 1;
+
+        function generateRoundTargets() {
+            const pool = buildTargetPool(cleverMode);
+            currentRoundTargets = [0, 1, 2].map(() => pool[Math.floor(Math.random() * pool.length)]);
+        }
+
+        function targetLabel(t) {
+            return t.type === 'bull' ? 'BULL' : `${TYPE_LABEL[t.type]} ${t.number}`;
+        }
+
+        function startAimGame() {
+            const roundsVal = document.getElementById('aim-rounds-select').value;
+            if (aimMode === 'vs' && roundsVal === 'endless') {
+                showToast('Endlos ist nur im Solo-Modus möglich.', 'error');
+                return;
+            }
+            totalRounds = roundsVal === 'endless' ? 'endless' : parseInt(roundsVal);
+
+            const mkPlayer = p => ({
+                id: p.id, name: p.name, avatarUrl: p.avatar_url || null,
+                attempts: 0, hits: 0, dartInRound: 0, roundsDone: 0, finished: false,
+                perNumber: {}, perType: { single: {attempts:0,hits:0}, double: {attempts:0,hits:0}, triple: {attempts:0,hits:0}, bull: {attempts:0,hits:0} }
+            });
+
+            players = [mkPlayer(myPlayer)];
+            if (aimMode === 'vs') {
+                const oppId = document.getElementById('aim-opponent-select').value;
+                if (!oppId) { showToast('Bitte einen Gegner auswählen.', 'error'); return; }
+                players.push(mkPlayer(allMembers.find(p => p.id === oppId)));
+            }
+            activeIdx = 0;
+            roundNum  = 1;
+            generateRoundTargets();
+
+            document.getElementById('aim-setup-view').style.display       = 'none';
+            document.getElementById('aim-leaderboard-card').style.display = 'none';
+            document.getElementById('play-view').style.display            = 'block';
+            document.getElementById('result-view').style.display          = 'none';
+            document.getElementById('aim-stats').style.display   = aimMode === 'solo' ? 'grid' : 'none';
+            document.getElementById('aim-players').style.display = aimMode === 'vs' ? 'grid' : 'none';
+
+            updateAimDisplay();
+        }
+
+        // ── GAMEPLAY ──
+        function recordAimThrow(hit) {
+            const p      = players[activeIdx];
+            const target = currentRoundTargets[p.dartInRound];
+
+            p.attempts++;
+            if (hit) p.hits++;
+
+            const numKey = String(target.number);
+            if (!p.perNumber[numKey]) p.perNumber[numKey] = { attempts: 0, hits: 0 };
+            p.perNumber[numKey].attempts++;
+            if (hit) p.perNumber[numKey].hits++;
+
+            p.perType[target.type].attempts++;
+            if (hit) p.perType[target.type].hits++;
+
+            p.dartInRound++;
+            if (p.dartInRound === 3) {
+                p.dartInRound = 0;
+                p.roundsDone++;
+                if (totalRounds !== 'endless' && p.roundsDone >= totalRounds) p.finished = true;
+            }
+
+            afterAimThrow();
+        }
+
+        function afterAimThrow() {
+            if (aimMode === 'solo') {
+                if (players[0].finished) { finishAimGame(); return; }
+                if (players[0].dartInRound === 0) { roundNum++; generateRoundTargets(); }
+                updateAimDisplay();
+                return;
+            }
+
+            // vs mode: fixed rounds only, both players always play the exact
+            // same round in lockstep, so they can only ever finish together
+            if (players[activeIdx].dartInRound !== 0) { updateAimDisplay(); return; }
+
+            if (activeIdx === 0) {
+                activeIdx = 1; // player 2 attempts the SAME round's targets
+            } else {
+                if (players.every(pl => pl.finished)) { finishAimGame(); return; }
+                roundNum++;
+                generateRoundTargets();
+                activeIdx = 0;
+            }
+            updateAimDisplay();
+        }
+
+        // ── DISPLAY ──
+        function updateAimDisplay() {
+            const p      = players[activeIdx];
+            const target = currentRoundTargets[p.dartInRound];
+
+            document.getElementById('aim-round-label').textContent = totalRounds === 'endless'
+                ? `RUNDE ${roundNum}`
+                : `RUNDE ${roundNum} / ${totalRounds}`;
+            document.getElementById('target-number').textContent = targetLabel(target);
+            document.getElementById('aim-sub-info').textContent  = `Dart ${p.dartInRound + 1}/3`;
+
+            if (aimMode === 'solo') {
+                document.getElementById('aim-attempts').textContent = p.attempts;
+                document.getElementById('aim-hits').textContent     = p.hits;
+                document.getElementById('aim-rate').textContent     = (p.attempts > 0 ? Math.round(p.hits / p.attempts * 100) : 0) + ' %';
+                return;
+            }
+
+            document.getElementById('aim-players').innerHTML = players.map((pl, idx) => {
+                const initials = (pl.name || '?').slice(0, 2).toUpperCase();
+                const avatar   = pl.avatarUrl
+                    ? `<span class="lb-avatar lb-avatar--sm"><img src="${pl.avatarUrl}" alt=""></span>`
+                    : `<span class="lb-avatar lb-avatar--sm">${initials}</span>`;
+                const cls = 'clock-player'
+                    + (idx === activeIdx && !pl.finished ? ' clock-player--active' : '')
+                    + (pl.finished ? ' clock-player--done' : '');
+                const rate = pl.attempts > 0 ? Math.round(pl.hits / pl.attempts * 100) : 0;
+                const meta = pl.finished ? 'Fertig' : `Runde ${pl.roundsDone + 1}${totalRounds !== 'endless' ? '/' + totalRounds : ''}`;
+                return `
+<div class="${cls}">
+    <div class="clock-player-name">${avatar}<span>${pl.name}</span></div>
+    <div class="clock-player-target">${rate} %</div>
+    <div class="clock-player-meta">${meta} · ${pl.hits}/${pl.attempts}</div>
+</div>`;
+            }).join('');
+        }
+
+        // ── FINISH & SAVE ──
+        async function finishAimGame() {
+            document.getElementById('play-view').style.display   = 'none';
+            document.getElementById('result-view').style.display = 'block';
+
+            const me   = players[0];
+            const rate = me.attempts > 0 ? Math.round(me.hits / me.attempts * 100) : 0;
+            document.getElementById('result-rate').textContent = rate + ' %';
+
+            const bestEl  = document.getElementById('result-best');
+            const summary = document.getElementById('result-vs-summary');
+
+            if (aimMode === 'vs') {
+                const other = players[1];
+                const a = me.hits * other.attempts;
+                const b = other.hits * me.attempts;
+                const winner = a === b ? null : (a > b ? me : other);
+
+                document.getElementById('result-title').textContent = winner
+                    ? `SIEGER: ${winner.name.toUpperCase()}`
+                    : 'UNENTSCHIEDEN';
+
+                summary.style.display = 'block';
+                summary.innerHTML = players.map(pl => {
+                    const r = pl.attempts > 0 ? Math.round(pl.hits / pl.attempts * 100) : 0;
+                    return `<p class="muted-text" style="margin:4px 0;"><strong>${pl.name}:</strong> ${r} % (${pl.hits}/${pl.attempts})</p>`;
+                }).join('');
+                bestEl.textContent = '';
+            } else {
+                document.getElementById('result-title').textContent = 'SESSION BEENDET';
+                summary.style.display = 'none';
+
+                if (me.attempts === 0) {
+                    bestEl.textContent = '';
+                } else if (personalBest === null) {
+                    bestEl.textContent = 'Erste gespeicherte Session!';
+                } else if (rate > personalBest) {
+                    bestEl.textContent = `Neue Bestleistung! (vorher: ${personalBest} %)`;
+                } else {
+                    bestEl.textContent = `Persönliche Bestleistung: ${personalBest} %`;
+                }
+                if (me.attempts > 0) {
+                    personalBest = personalBest === null ? rate : Math.max(personalBest, rate);
+                }
+            }
+
+            const rows = players
+                .filter(pl => pl.id && pl.attempts > 0)
+                .map(pl => {
+                    const pRate = Math.round(pl.hits / pl.attempts * 100);
+                    let win;
+                    if (aimMode === 'vs') {
+                        const other = players.find(o => o !== pl);
+                        const a = pl.hits * other.attempts, b = other.hits * pl.attempts;
+                        win = a === b ? null : a > b;
+                    }
+                    return {
+                        player_id: pl.id,
+                        game:      'aim',
+                        score:     pRate,
+                        meta: {
+                            mode: aimMode, win, rounds: totalRounds, clever: cleverMode,
+                            attempts: pl.attempts, hits: pl.hits,
+                            perNumber: pl.perNumber, perType: pl.perType,
+                            opponent: aimMode === 'vs'
+                                ? (players.find(o => o.id !== pl.id) || {}).id || null
+                                : null
+                        }
+                    };
+                });
+            if (rows.length > 0) {
+                await supa.from('training_results').insert(rows);
+            }
+        }
+
+        function resetGame() {
+            document.getElementById('result-view').style.display         = 'none';
+            document.getElementById('aim-setup-view').style.display      = 'block';
+            document.getElementById('aim-leaderboard-card').style.display = 'block';
+            loadLeaderboard();
+        }
+    </script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/fightclub-dart-tracker/sw.js')
+                .catch(() => {});
+        }
+    </script>
+</body>
+</html>

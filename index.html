@@ -278,6 +278,20 @@
             `;
             cards.appendChild(pointsCard);
 
+            // training card — member + admin only (results are tied to a player_id)
+            const trainingCard = document.createElement('a');
+            trainingCard.href      = 'training.html';
+            trainingCard.className = 'menu-card menu-card--training';
+            trainingCard.innerHTML = `
+                <div class="menu-card-icon">🔁</div>
+                <div class="menu-card-body">
+                    <div class="menu-card-title">TRAINING</div>
+                    <div class="menu-card-sub">Bot · Around the Clock · Bob's 27 · Checkout</div>
+                </div>
+                <div class="menu-card-arrow">»</div>
+            `;
+            cards.appendChild(trainingCard);
+
             // admin: add admin card + Spieltagsplanung
             if (user.role === 'admin') {
                 const cards = document.getElementById('menu-cards');
