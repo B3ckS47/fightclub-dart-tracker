@@ -140,6 +140,19 @@
 
         const ALL_NUMBERS = Object.keys(checkouts).map(Number).sort((a, b) => a - b);
 
+        // Every checkout path ends on a double (or Bull) — that finishing
+        // segment is the real skill being drilled, and it's what the stats
+        // page's "Ø Trefferquote je Doppel" heatmap groups attempts by.
+        function finishingDouble(num) {
+            const path = checkouts[num];
+            if (!path) return null;
+            const tokens = path.trim().split(/\s+/);
+            const last   = tokens[tokens.length - 1];
+            if (last === 'Bull') return 'Bull';
+            if (last[0] === 'D') return last.slice(1);
+            return null;
+        }
+
         // ── SETUP STATE ──
         let checkoutMode = 'random';   // 'random' | 'ladder'
 
@@ -185,6 +198,7 @@
         let rangeTo         = 170;
         let attempts        = 0;
         let hits            = 0;
+        let perDoubleTally  = {}; // { "20": {attempts, hits}, "Bull": {...}, ... }
         let personalBest    = null;
 
         let allMembers = [];
@@ -276,6 +290,7 @@
             ladderIdx      = 0;
             attempts       = 0;
             hits           = 0;
+            perDoubleTally = {};
 
             document.getElementById('checkout-setup-view').style.display       = 'none';
             document.getElementById('checkout-leaderboard-card').style.display = 'none';
@@ -306,6 +321,14 @@
         function recordAttempt(success) {
             attempts++;
             if (success) hits++;
+
+            const dbl = finishingDouble(currentTarget);
+            if (dbl) {
+                if (!perDoubleTally[dbl]) perDoubleTally[dbl] = { attempts: 0, hits: 0 };
+                perDoubleTally[dbl].attempts++;
+                if (success) perDoubleTally[dbl].hits++;
+            }
+
             updateStats();
 
             if (checkoutMode === 'ladder') {
@@ -356,7 +379,8 @@
                         mode:  checkoutMode,
                         from:  rangeFrom,
                         to:    rangeTo,
-                        darts: dartsPerAttempt
+                        darts: dartsPerAttempt,
+                        perDouble: perDoubleTally
                     }
                 }]);
             }

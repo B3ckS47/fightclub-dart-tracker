@@ -29,17 +29,27 @@
         </div>
     </nav>
 
-    <div class="app-wrapper">
+    <div class="app-wrapper" id="stats-layout">
 
         <div class="card">
             <h2 class="card-title">MEINE STATISTIKEN</h2>
             <div class="divider"></div>
             <p class="muted-text" style="font-size:0.85rem;">Alle deine Trainingsergebnisse an einem Ort.</p>
-            <p class="muted-text" style="font-size:0.78rem; margin-top:6px;">💡 Heatmap-Felder färben sich erst ein, sobald für dieses Feld mindestens 3 Trainingsläufe vorliegen — bei weniger Daten wäre die Farbe irreführend.</p>
         </div>
 
+        <nav class="stats-toc" id="stats-toc">
+            <a href="#clock-section" class="stats-toc-link">Around the Clock</a>
+            <a href="#bobs-section" class="stats-toc-link">Bob's 27</a>
+            <a href="#checkout-section" class="stats-toc-link">Checkout-Training</a>
+            <a href="#bot-section" class="stats-toc-link">Gegen den Bot</a>
+            <a href="#jdc-section" class="stats-toc-link">JDC Challenge</a>
+            <a href="#aim-section" class="stats-toc-link">Aim-Training</a>
+        </nav>
+
+        <div id="stats-sections">
+
         <!-- AROUND THE CLOCK -->
-        <div class="card">
+        <div class="card" id="clock-section">
             <div class="fold-header" onclick="toggleStatsFold('clock')">
                 <h2 class="card-title" style="margin:0;">AROUND THE CLOCK</h2>
                 <span class="fold-icon" id="clock-fold-icon">▶</span>
@@ -71,7 +81,10 @@
                     <button type="button" class="filter-btn" onclick="setClockFilter('month', this)">Monat</button>
                     <button type="button" class="filter-btn" onclick="setClockFilter('week', this)">Woche</button>
                 </div>
-                <div class="training-heatmap" id="clock-heatmap"></div>
+                <div class="heatmap-board-pair">
+                    <div class="training-heatmap" id="clock-heatmap"></div>
+                    <svg class="training-dartboard" id="clock-dartboard" viewBox="0 0 200 200"></svg>
+                </div>
 
                 <h3 class="section-label">Verlauf</h3>
                 <div class="stats-history-list" id="clock-history"></div>
@@ -79,7 +92,7 @@
         </div>
 
         <!-- BOB'S 27 -->
-        <div class="card">
+        <div class="card" id="bobs-section">
             <div class="fold-header" onclick="toggleStatsFold('bobs')">
                 <h2 class="card-title" style="margin:0;">BOB'S 27</h2>
                 <span class="fold-icon" id="bobs-fold-icon">▶</span>
@@ -115,7 +128,10 @@
                     <button type="button" class="filter-btn" onclick="setBobsFilter('month', this)">Monat</button>
                     <button type="button" class="filter-btn" onclick="setBobsFilter('week', this)">Woche</button>
                 </div>
-                <div class="training-heatmap training-heatmap--bobs27" id="bobs-heatmap"></div>
+                <div class="heatmap-board-pair">
+                    <div class="training-heatmap training-heatmap--bobs27" id="bobs-heatmap"></div>
+                    <svg class="training-dartboard" id="bobs-dartboard" viewBox="0 0 200 200"></svg>
+                </div>
 
                 <h3 class="section-label">Verlauf</h3>
                 <div class="stats-history-list" id="bobs-history"></div>
@@ -123,7 +139,7 @@
         </div>
 
         <!-- CHECKOUT-TRAINING -->
-        <div class="card">
+        <div class="card" id="checkout-section">
             <div class="fold-header" onclick="toggleStatsFold('checkout')">
                 <h2 class="card-title" style="margin:0;">CHECKOUT-TRAINING</h2>
                 <span class="fold-icon" id="checkout-fold-icon">▶</span>
@@ -149,13 +165,24 @@
                     </div>
                 </div>
 
+                <h3 class="section-label" style="margin-top:8px;">Heatmap · Ø Trefferquote je Doppel</h3>
+                <div class="filter-bar" id="checkout-filter-bar" style="margin-top:8px;">
+                    <button type="button" class="filter-btn filter-btn--active" onclick="setCheckoutFilter('all', this)">Gesamt</button>
+                    <button type="button" class="filter-btn" onclick="setCheckoutFilter('month', this)">Monat</button>
+                    <button type="button" class="filter-btn" onclick="setCheckoutFilter('week', this)">Woche</button>
+                </div>
+                <div class="heatmap-board-pair">
+                    <div class="training-heatmap" id="checkout-heatmap"></div>
+                    <svg class="training-dartboard" id="checkout-dartboard" viewBox="0 0 200 200"></svg>
+                </div>
+
                 <h3 class="section-label">Verlauf</h3>
                 <div class="stats-history-list" id="checkout-history"></div>
             </div>
         </div>
 
         <!-- GEGEN DEN BOT -->
-        <div class="card">
+        <div class="card" id="bot-section">
             <div class="fold-header" onclick="toggleStatsFold('bot')">
                 <h2 class="card-title" style="margin:0;">GEGEN DEN BOT</h2>
                 <span class="fold-icon" id="bot-fold-icon">▶</span>
@@ -187,7 +214,7 @@
         </div>
 
         <!-- JDC CHALLENGE -->
-        <div class="card">
+        <div class="card" id="jdc-section">
             <div class="fold-header" onclick="toggleStatsFold('jdc')">
                 <h2 class="card-title" style="margin:0;">JDC CHALLENGE</h2>
                 <span class="fold-icon" id="jdc-fold-icon">▶</span>
@@ -213,21 +240,32 @@
                     </div>
                 </div>
 
-                <h3 class="section-label" style="margin-top:8px;">Heatmap · Ø Punktequote je Zahl (10–20)</h3>
-                <div class="filter-bar" id="jdc-num-filter-bar" style="margin-top:8px;">
-                    <button type="button" class="filter-btn filter-btn--active" onclick="setJdcNumFilter('all', this)">Gesamt</button>
-                    <button type="button" class="filter-btn" onclick="setJdcNumFilter('month', this)">Monat</button>
-                    <button type="button" class="filter-btn" onclick="setJdcNumFilter('week', this)">Woche</button>
+                <div class="jdc-heatmaps-row">
+                    <div class="jdc-heatmap-col">
+                        <h3 class="section-label" style="margin-top:8px;">Heatmap · Ø Punktequote je Zahl (10–20)</h3>
+                        <div class="filter-bar" id="jdc-num-filter-bar" style="margin-top:8px;">
+                            <button type="button" class="filter-btn filter-btn--active" onclick="setJdcNumFilter('all', this)">Gesamt</button>
+                            <button type="button" class="filter-btn" onclick="setJdcNumFilter('month', this)">Monat</button>
+                            <button type="button" class="filter-btn" onclick="setJdcNumFilter('week', this)">Woche</button>
+                        </div>
+                        <div class="heatmap-board-pair">
+                            <div class="training-heatmap training-heatmap--bobs27" id="jdc-num-heatmap"></div>
+                            <svg class="training-dartboard" id="jdc-num-dartboard" viewBox="0 0 200 200"></svg>
+                        </div>
+                    </div>
+                    <div class="jdc-heatmap-col">
+                        <h3 class="section-label" style="margin-top:8px;">Heatmap · Ø Trefferquote je Doppel</h3>
+                        <div class="filter-bar" id="jdc-dbl-filter-bar" style="margin-top:8px;">
+                            <button type="button" class="filter-btn filter-btn--active" onclick="setJdcDblFilter('all', this)">Gesamt</button>
+                            <button type="button" class="filter-btn" onclick="setJdcDblFilter('month', this)">Monat</button>
+                            <button type="button" class="filter-btn" onclick="setJdcDblFilter('week', this)">Woche</button>
+                        </div>
+                        <div class="heatmap-board-pair">
+                            <div class="training-heatmap" id="jdc-dbl-heatmap"></div>
+                            <svg class="training-dartboard" id="jdc-dbl-dartboard" viewBox="0 0 200 200"></svg>
+                        </div>
+                    </div>
                 </div>
-                <div class="training-heatmap training-heatmap--bobs27" id="jdc-num-heatmap"></div>
-
-                <h3 class="section-label">Heatmap · Ø Trefferquote je Doppel</h3>
-                <div class="filter-bar" id="jdc-dbl-filter-bar" style="margin-top:8px;">
-                    <button type="button" class="filter-btn filter-btn--active" onclick="setJdcDblFilter('all', this)">Gesamt</button>
-                    <button type="button" class="filter-btn" onclick="setJdcDblFilter('month', this)">Monat</button>
-                    <button type="button" class="filter-btn" onclick="setJdcDblFilter('week', this)">Woche</button>
-                </div>
-                <div class="training-heatmap" id="jdc-dbl-heatmap"></div>
 
                 <h3 class="section-label">Verlauf</h3>
                 <div class="stats-history-list" id="jdc-history"></div>
@@ -235,7 +273,7 @@
         </div>
 
         <!-- AIM-TRAINING -->
-        <div class="card">
+        <div class="card" id="aim-section">
             <div class="fold-header" onclick="toggleStatsFold('aim')">
                 <h2 class="card-title" style="margin:0;">AIM-TRAINING</h2>
                 <span class="fold-icon" id="aim-fold-icon">▶</span>
@@ -287,11 +325,16 @@
                     <button type="button" class="filter-btn" onclick="setAimFilter('month', this)">Monat</button>
                     <button type="button" class="filter-btn" onclick="setAimFilter('week', this)">Woche</button>
                 </div>
-                <div class="training-heatmap" id="aim-heatmap"></div>
+                <div class="heatmap-board-pair">
+                    <div class="training-heatmap" id="aim-heatmap"></div>
+                    <svg class="training-dartboard" id="aim-dartboard" viewBox="0 0 200 200"></svg>
+                </div>
 
                 <h3 class="section-label">Verlauf</h3>
                 <div class="stats-history-list" id="aim-history"></div>
             </div>
+        </div>
+
         </div>
 
     </div>
@@ -315,12 +358,44 @@
             icon.textContent   = isOpen ? '▶' : '▼';
         }
 
+        // Desktop has room to spare — no need to hide these behind a fold
+        if (window.matchMedia('(min-width: 1100px)').matches) {
+            ['clock', 'bobs', 'checkout', 'bot', 'jdc', 'aim'].forEach(id => {
+                const body = document.getElementById(id + '-fold');
+                const icon = document.getElementById(id + '-fold-icon');
+                if (body) body.style.display = 'block';
+                if (icon) icon.textContent = '▼';
+            });
+            initStatsToc();
+        }
+
+        // Sticky TOC (desktop only) — highlights the section currently in view.
+        function initStatsToc() {
+            const links = Array.from(document.querySelectorAll('#stats-toc .stats-toc-link'));
+            const sections = links
+                .map(a => document.getElementById(a.getAttribute('href').slice(1)))
+                .filter(Boolean);
+            if (!sections.length) return;
+
+            const setActive = id => {
+                links.forEach(a => a.classList.toggle('stats-toc-link--active', a.getAttribute('href') === '#' + id));
+            };
+
+            const observer = new IntersectionObserver(entries => {
+                entries.forEach(entry => { if (entry.isIntersecting) setActive(entry.target.id); });
+            }, { rootMargin: '-100px 0px -70% 0px', threshold: 0 });
+
+            sections.forEach(sec => observer.observe(sec));
+            setActive(sections[0].id);
+        }
+
         let allClock = [], allBobs = [], allCheckout = [], allBot = [], allJdc = [], allAim = [];
         let clockFilterRange   = 'all';
         let bobsFilterRange    = 'all';
         let jdcNumFilterRange  = 'all';
         let jdcDblFilterRange  = 'all';
         let aimFilterRange     = 'all';
+        let checkoutFilterRange = 'all';
 
         // ── DATA LOAD (single query, grouped client-side) ──
         async function loadAll() {
@@ -377,27 +452,101 @@
             return `hsl(${hue}, 60%, 42%)`;
         }
 
-        function renderHeatmap(containerEl, cellsData, orderedLabels, invert, formatValue) {
+        // Shared by renderHeatmap() (table) and renderDartboard() (SVG) so
+        // identical data always maps to an identical color in both places.
+        function computeHeatStats(cellsData, orderedLabels, invert) {
             const stats = orderedLabels.map(label => {
                 const d = cellsData[label];
-                if (!d || d.n === 0) return { label, n: 0, avg: null };
+                if (!d || d.n === 0) return { label, n: 0, avg: null, t: null, color: null };
                 return { label, n: d.n, avg: d.sum / d.n };
             });
-            const confident = stats.filter(s => s.n >= 3);
-            const min = confident.length ? Math.min(...confident.map(s => s.avg)) : 0;
-            const max = confident.length ? Math.max(...confident.map(s => s.avg)) : 1;
+            const withData = stats.filter(s => s.n > 0);
+            const min = withData.length ? Math.min(...withData.map(s => s.avg)) : 0;
+            const max = withData.length ? Math.max(...withData.map(s => s.avg)) : 1;
 
+            return stats.map(s => {
+                if (s.n === 0) return s;
+                let t = max > min ? (s.avg - min) / (max - min) : 0.5;
+                if (invert) t = 1 - t;
+                return { ...s, t, color: heatColor(t) };
+            });
+        }
+
+        function renderHeatmap(containerEl, cellsData, orderedLabels, invert, formatValue) {
+            const stats = computeHeatStats(cellsData, orderedLabels, invert);
             containerEl.innerHTML = stats.map(s => {
                 if (s.n === 0) {
                     return `<div class="training-heat-cell training-heat-cell--empty"><div class="training-heat-cell-label">${s.label}</div><div class="training-heat-cell-value">–</div></div>`;
                 }
-                if (s.n < 3) {
-                    return `<div class="training-heat-cell training-heat-cell--muted"><div class="training-heat-cell-label">${s.label}</div><div class="training-heat-cell-value">${formatValue(s.avg)}</div></div>`;
-                }
-                let t = max > min ? (s.avg - min) / (max - min) : 0.5;
-                if (invert) t = 1 - t;
-                return `<div class="training-heat-cell" style="background:${heatColor(t)}; color:#fff; border-color:transparent;"><div class="training-heat-cell-label">${s.label}</div><div class="training-heat-cell-value">${formatValue(s.avg)}</div></div>`;
+                return `<div class="training-heat-cell" style="background:${s.color}; color:#fff; border-color:transparent;"><div class="training-heat-cell-label">${s.label}</div><div class="training-heat-cell-value">${formatValue(s.avg)}</div></div>`;
             }).join('');
+        }
+
+        // ── DARTBOARD SVG ──
+        const SECTOR_ORDER = [20,1,18,4,13,6,10,15,2,17,3,19,7,16,8,11,14,9,12,5]; // clockwise from 12 o'clock
+
+        function polar(r, thetaDeg, cx, cy) {
+            const rad = thetaDeg * Math.PI / 180;
+            return { x: cx + r * Math.sin(rad), y: cy - r * Math.cos(rad) }; // θ=0 → top, clockwise
+        }
+
+        // Sector i is CENTERED on i*18°: [i*18-9, i*18+9) — not [i*18, (i+1)*18)!
+        function annularSectorPath(rIn, rOut, theta1, theta2, cx, cy) {
+            const p1 = polar(rIn, theta1, cx, cy), p2 = polar(rOut, theta1, cx, cy);
+            const p3 = polar(rOut, theta2, cx, cy), p4 = polar(rIn, theta2, cx, cy);
+            return `M ${p1.x} ${p1.y} L ${p2.x} ${p2.y} A ${rOut} ${rOut} 0 0 1 ${p3.x} ${p3.y} L ${p4.x} ${p4.y} A ${rIn} ${rIn} 0 0 0 ${p1.x} ${p1.y} Z`;
+        }
+
+        // Hardcoded, theme-independent neutral tones — a real black/cream/red/green
+        // board pattern would muddy the color overlay (e.g. green on red = brown).
+        const DARTBOARD_BASE_A     = '#3a3a3f';
+        const DARTBOARD_BASE_B     = '#48484e';
+        const DARTBOARD_RING_STROKE = '#5c5c63';
+        const DARTBOARD_LABEL_COLOR = '#c9c9d1';
+
+        function buildBoardBase(cx, cy, R) {
+            const rBull = R * 0.10, rInner = R * 0.93;
+            let svg = '';
+            SECTOR_ORDER.forEach((num, i) => {
+                const theta1 = i * 18 - 9, theta2 = i * 18 + 9;
+                const fill = i % 2 === 0 ? DARTBOARD_BASE_A : DARTBOARD_BASE_B;
+                svg += `<path d="${annularSectorPath(rBull, R, theta1, theta2, cx, cy)}" fill="${fill}" stroke="${DARTBOARD_RING_STROKE}" stroke-width="0.5"/>`;
+            });
+            svg += `<circle cx="${cx}" cy="${cy}" r="${rInner}" fill="none" stroke="${DARTBOARD_RING_STROKE}" stroke-width="0.5"/>`;
+            svg += `<circle cx="${cx}" cy="${cy}" r="${rBull}" fill="none" stroke="${DARTBOARD_RING_STROKE}" stroke-width="0.5"/>`;
+            SECTOR_ORDER.forEach((num, i) => {
+                const p = polar(R * 1.09, i * 18, cx, cy);
+                svg += `<text x="${p.x}" y="${p.y}" text-anchor="middle" dominant-baseline="middle" font-size="${R * 0.11}" fill="${DARTBOARD_LABEL_COLOR}" font-family="Barlow Condensed, sans-serif" font-weight="700">${num}</text>`;
+            });
+            return svg;
+        }
+
+        // mode: 'wedge' (whole number, rIn=0.10R) or 'ring' (double only, rIn=0.93R).
+        // Bull is shown whenever statsArray has a 'Bull' entry with n>0 — independent
+        // of mode, since Checkout/JDC-Doppel heatmaps carry Bull data too.
+        function renderDartboard(svgEl, statsArray, mode) {
+            const cx = 100, cy = 100, R = 82;
+            let svg = buildBoardBase(cx, cy, R);
+
+            const byLabel = {};
+            statsArray.forEach(s => { byLabel[s.label] = s; });
+
+            const rIn  = mode === 'ring' ? R * 0.93 : R * 0.10;
+            const rOut = R;
+
+            SECTOR_ORDER.forEach((num, i) => {
+                const s = byLabel[String(num)];
+                if (!s || s.n === 0) return;
+                const theta1 = i * 18 - 9, theta2 = i * 18 + 9;
+                svg += `<path d="${annularSectorPath(rIn, rOut, theta1, theta2, cx, cy)}" fill="${s.color}" fill-opacity="0.65"/>`;
+            });
+
+            const bull = byLabel['Bull'];
+            if (bull && bull.n > 0) {
+                svg += `<circle cx="${cx}" cy="${cy}" r="${R * 0.10}" fill="${bull.color}" fill-opacity="0.65"/>`;
+            }
+
+            svgEl.innerHTML = svg;
         }
 
         // ── AROUND THE CLOCK ──
@@ -469,6 +618,7 @@
             });
             const labels = [...Array(20).keys()].map(i => String(i + 1)).concat(['Bull']);
             renderHeatmap(document.getElementById('clock-heatmap'), cells, labels, true, v => v.toFixed(1));
+            renderDartboard(document.getElementById('clock-dartboard'), computeHeatStats(cells, labels, true), 'wedge');
         }
 
         // ── BOB'S 27 ──
@@ -537,6 +687,7 @@
             });
             const labels = [...Array(20).keys()].map(i => String(i + 1));
             renderHeatmap(document.getElementById('bobs-heatmap'), cells, labels, false, v => Math.round((v / 3) * 100) + '%');
+            renderDartboard(document.getElementById('bobs-dartboard'), computeHeatStats(cells, labels, false), 'ring');
         }
 
         // ── CHECKOUT-TRAINING ──
@@ -552,6 +703,8 @@
             document.getElementById('checkout-attempts').textContent = totalAttempts;
             document.getElementById('checkout-hits').textContent     = totalHits;
 
+            renderCheckoutHeatmap();
+
             const historyEl = document.getElementById('checkout-history');
             const recent = [...allCheckout].sort(byDateDesc).slice(0, 10);
             if (recent.length === 0) {
@@ -564,6 +717,30 @@
                     return `<div class="stats-history-row"><span class="stats-history-date">${fmtDate(r.created_at)}</span><span class="stats-history-detail">${range} · ${mode}</span><span class="stats-history-result">${r.score} %</span></div>`;
                 }).join('');
             }
+        }
+
+        function setCheckoutFilter(range, btn) {
+            checkoutFilterRange = range;
+            document.querySelectorAll('#checkout-filter-bar .filter-btn').forEach(b => b.classList.remove('filter-btn--active'));
+            btn.classList.add('filter-btn--active');
+            renderCheckoutHeatmap();
+        }
+
+        function renderCheckoutHeatmap() {
+            const filtered = filterByRange(allCheckout, checkoutFilterRange);
+            const cells = {};
+            filtered.forEach(r => {
+                const pd = r.meta && r.meta.perDouble;
+                if (!pd) return;
+                Object.entries(pd).forEach(([label, d]) => {
+                    if (!cells[label]) cells[label] = { sum: 0, n: 0 };
+                    cells[label].sum += d.attempts > 0 ? d.hits / d.attempts : 0;
+                    cells[label].n++;
+                });
+            });
+            const labels = [...Array(20).keys()].map(i => String(i + 1)).concat(['Bull']);
+            renderHeatmap(document.getElementById('checkout-heatmap'), cells, labels, false, v => Math.round(v * 100) + '%');
+            renderDartboard(document.getElementById('checkout-dartboard'), computeHeatStats(cells, labels, false), 'ring');
         }
 
         // ── GEGEN DEN BOT ──
@@ -659,6 +836,7 @@
             const cells  = buildJdcNumberHeatmapData(filtered);
             const labels = [...Array(11).keys()].map(i => String(i + 10)); // 10–20
             renderHeatmap(document.getElementById('jdc-num-heatmap'), cells, labels, false, v => Math.round(v * 100) + '%');
+            renderDartboard(document.getElementById('jdc-num-dartboard'), computeHeatStats(cells, labels, false), 'wedge');
         }
 
         function renderJdcDblHeatmap() {
@@ -666,6 +844,7 @@
             const cells  = buildJdcDoubleHeatmapData(filtered);
             const labels = [...Array(20).keys()].map(i => String(i + 1)).concat(['Bull']);
             renderHeatmap(document.getElementById('jdc-dbl-heatmap'), cells, labels, false, v => Math.round(v * 100) + '%');
+            renderDartboard(document.getElementById('jdc-dbl-dartboard'), computeHeatStats(cells, labels, false), 'ring');
         }
 
         function renderJdcSection() {
@@ -730,6 +909,7 @@
             });
             const labels = [...Array(20).keys()].map(i => String(i + 1)).concat(['Bull']);
             renderHeatmap(document.getElementById('aim-heatmap'), cells, labels, false, v => Math.round(v * 100) + '%');
+            renderDartboard(document.getElementById('aim-dartboard'), computeHeatStats(cells, labels, false), 'wedge');
         }
 
         function renderAimSection() {

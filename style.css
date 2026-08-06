@@ -4971,10 +4971,21 @@ body {
 
 .training-action-btn { flex: 1; }
 
+/* Four buttons in a row (JDC's Single/Double/Triple/Miss) don't fit narrow
+   phones at their full size — wrap to 2x2 once each button would drop below
+   ~130px, no breakpoint needed since it's driven by available width. */
+.training-action-buttons--four {
+    flex-wrap: wrap;
+}
 .training-action-buttons--four .training-action-btn {
+    flex: 1 1 130px;
     font-size: 1.3rem;
     padding: 16px;
 }
+
+/* Aim-Training's 3 stat boxes (Versuche/Treffer/Quote) stay side by side at
+   every width — no max-width cap, so on desktop they use the full card. */
+#aim-stats { grid-template-columns: repeat(3, 1fr); }
 
 .training-result-number {
     font-family: var(--font-display);
@@ -5180,10 +5191,61 @@ body {
     color: var(--text-muted);
 }
 
-.training-heat-cell--muted {
-    background: var(--bg-element);
+/* JDC's two heatmaps — stacked full-width by default (mobile/tablet),
+   side by side on desktop (see DESKTOP LAYOUT block) so cells don't balloon */
+.jdc-heatmaps-row {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+/* Table + SVG dartboard shown together for every heatmap — stacked on
+   mobile/tablet, side by side on desktop (see DESKTOP LAYOUT block). */
+.heatmap-board-pair {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin: 14px 0;
+}
+
+.heatmap-board-pair .training-heatmap { margin: 0; }
+
+.training-dartboard {
+    width: 100%;
+    max-width: 260px;
+    margin: 0 auto;
+    display: block;
+}
+
+/* Sticky table-of-contents for training-stats.html — visible ≥1100px only
+   (see DESKTOP LAYOUT block for the grid + sticky positioning). */
+.stats-toc {
+    display: none;
+}
+
+.stats-toc-link {
+    display: block;
+    padding: 10px 14px;
+    border-radius: var(--radius-sm);
     color: var(--text-secondary);
-    border-style: dashed;
+    text-decoration: none;
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 0.92rem;
+    letter-spacing: 0.3px;
+    border-left: 3px solid transparent;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.stats-toc-link:hover {
+    background: var(--bg-element);
+    color: var(--text-primary);
+}
+
+.stats-toc-link--active {
+    color: var(--accent);
+    border-left-color: var(--accent);
+    background: var(--bg-element);
 }
 
 /* ============================================================
@@ -5340,4 +5402,50 @@ body {
     /* ── TRAINING-CLOCK.HTML ── */
     /* Solo stat row: Darts / Getroffen / Verfehlt / Ø side by side, full width */
     #clock-stats { grid-template-columns: repeat(4, 1fr); }
+
+    /* ── TRAINING-STATS.HTML ── */
+    /* Sticky table-of-contents sidebar, same pattern as spieltag-detail.html's
+       player-pool sidebar — intro card spans the top, TOC sits left, the six
+       game sections stack in the right column. */
+    #stats-layout {
+        display: grid;
+        grid-template-columns: 280px 1fr;
+        gap: 20px;
+        align-items: start;
+    }
+    #stats-layout > *:first-child { grid-column: 1 / -1; }
+    .stats-toc {
+        display: block;
+        grid-column: 1;
+        position: sticky;
+        top: 84px;
+    }
+    #stats-sections {
+        grid-column: 2;
+        display: flex;
+        flex-direction: column;
+    }
+
+    /* Heatmap table + dartboard side by side instead of stacked */
+    .heatmap-board-pair {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+        align-items: start;
+    }
+
+    /* JDC's two heatmaps side by side instead of stacked full-width — each
+       cell was ballooning to ~180px on a 1350px-wide single-column card */
+    .jdc-heatmaps-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+        align-items: start;
+    }
+    /* ...but within each of those already-narrow columns, table+board stay
+       stacked — a third side-by-side nesting level would be too cramped */
+    .jdc-heatmap-col .heatmap-board-pair {
+        display: flex;
+        flex-direction: column;
+    }
 }
