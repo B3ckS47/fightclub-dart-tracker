@@ -91,6 +91,7 @@
             <div class="training-target-number" id="target-number">170</div>
             <div class="training-target-sub" id="checkout-path">T20 T20 Bull</div>
             <p class="muted-text" id="checkout-darts-info" style="font-size:0.8rem; margin-top:4px;"></p>
+            <button type="button" class="btn btn-ghost training-undo-btn" id="checkout-undo-btn" onclick="undoLast()" disabled>↩ Rückgängig</button>
             <div class="stats-grid" id="checkout-stats">
                 <div class="stat-box">
                     <div class="stat-label">Versuche</div>
@@ -200,6 +201,7 @@
         let hits            = 0;
         let perDoubleTally  = {}; // { "20": {attempts, hits}, "Bull": {...}, ... }
         let personalBest    = null;
+        let undoStack       = [];
 
         let allMembers = [];
 
@@ -291,6 +293,7 @@
             attempts       = 0;
             hits           = 0;
             perDoubleTally = {};
+            undoStack      = [];
 
             document.getElementById('checkout-setup-view').style.display       = 'none';
             document.getElementById('checkout-leaderboard-card').style.display = 'none';
@@ -301,12 +304,39 @@
 
             pickTarget();
             updateStats();
+            updateUndoButton();
+        }
+
+        // ── UNDO ──
+        function pushUndo() {
+            undoStack.push(structuredClone({ attempts, hits, perDoubleTally, currentTarget, ladderIdx }));
+            updateUndoButton();
+        }
+        function undoLast() {
+            if (undoStack.length === 0) return;
+            const snap     = undoStack.pop();
+            attempts       = snap.attempts;
+            hits           = snap.hits;
+            perDoubleTally = snap.perDoubleTally;
+            currentTarget  = snap.currentTarget;
+            ladderIdx      = snap.ladderIdx;
+            renderTarget();
+            updateStats();
+            updateUndoButton();
+        }
+        function updateUndoButton() {
+            const btn = document.getElementById('checkout-undo-btn');
+            if (btn) btn.disabled = undoStack.length === 0;
         }
 
         function pickTarget() {
             currentTarget = checkoutMode === 'ladder'
                 ? sessionNumbers[ladderIdx]
                 : sessionNumbers[Math.floor(Math.random() * sessionNumbers.length)];
+            renderTarget();
+        }
+
+        function renderTarget() {
             document.getElementById('target-number').textContent = currentTarget;
             document.getElementById('checkout-path').textContent = checkouts[currentTarget] || '';
         }
@@ -319,6 +349,7 @@
         }
 
         function recordAttempt(success) {
+            pushUndo();
             attempts++;
             if (success) hits++;
 
@@ -349,6 +380,7 @@
 
         async function finishSession(ladderComplete) {
             if (attempts === 0) { window.location.href = 'training.html'; return; }
+            undoStack = [];
 
             const rate = Math.round((hits / attempts) * 100);
             document.getElementById('play-view').style.display   = 'none';

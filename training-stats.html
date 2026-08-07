@@ -86,6 +86,9 @@
                     <svg class="training-dartboard" id="clock-dartboard" viewBox="0 0 200 200"></svg>
                 </div>
 
+                <h3 class="section-label">Verlauf-Chart · Darts bis Bull (weniger = besser)</h3>
+                <div class="training-trend-chart" id="clock-trend"></div>
+
                 <h3 class="section-label">Verlauf</h3>
                 <div class="stats-history-list" id="clock-history"></div>
             </div>
@@ -133,6 +136,9 @@
                     <svg class="training-dartboard" id="bobs-dartboard" viewBox="0 0 200 200"></svg>
                 </div>
 
+                <h3 class="section-label">Verlauf-Chart · Endstand</h3>
+                <div class="training-trend-chart" id="bobs-trend"></div>
+
                 <h3 class="section-label">Verlauf</h3>
                 <div class="stats-history-list" id="bobs-history"></div>
             </div>
@@ -176,6 +182,9 @@
                     <svg class="training-dartboard" id="checkout-dartboard" viewBox="0 0 200 200"></svg>
                 </div>
 
+                <h3 class="section-label">Verlauf-Chart · Trefferquote</h3>
+                <div class="training-trend-chart" id="checkout-trend"></div>
+
                 <h3 class="section-label">Verlauf</h3>
                 <div class="stats-history-list" id="checkout-history"></div>
             </div>
@@ -207,6 +216,14 @@
                         <div class="stat-value" id="bot-record">–</div>
                     </div>
                 </div>
+
+                <h3 class="section-label" style="margin-top:8px;">Verlauf-Chart · Ø Average</h3>
+                <div class="filter-bar" id="bot-filter-bar" style="margin-top:8px;">
+                    <button type="button" class="filter-btn filter-btn--active" onclick="setBotFilter('all', this)">Gesamt</button>
+                    <button type="button" class="filter-btn" onclick="setBotFilter('month', this)">Monat</button>
+                    <button type="button" class="filter-btn" onclick="setBotFilter('week', this)">Woche</button>
+                </div>
+                <div class="training-trend-chart" id="bot-trend"></div>
 
                 <h3 class="section-label">Verlauf</h3>
                 <div class="stats-history-list" id="bot-history"></div>
@@ -266,6 +283,14 @@
                         </div>
                     </div>
                 </div>
+
+                <h3 class="section-label" style="margin-top:8px;">Verlauf-Chart · Gesamtpunkte</h3>
+                <div class="filter-bar" id="jdc-trend-filter-bar" style="margin-top:8px;">
+                    <button type="button" class="filter-btn filter-btn--active" onclick="setJdcTrendFilter('all', this)">Gesamt</button>
+                    <button type="button" class="filter-btn" onclick="setJdcTrendFilter('month', this)">Monat</button>
+                    <button type="button" class="filter-btn" onclick="setJdcTrendFilter('week', this)">Woche</button>
+                </div>
+                <div class="training-trend-chart" id="jdc-trend"></div>
 
                 <h3 class="section-label">Verlauf</h3>
                 <div class="stats-history-list" id="jdc-history"></div>
@@ -329,6 +354,9 @@
                     <div class="training-heatmap" id="aim-heatmap"></div>
                     <svg class="training-dartboard" id="aim-dartboard" viewBox="0 0 200 200"></svg>
                 </div>
+
+                <h3 class="section-label">Verlauf-Chart · Trefferquote</h3>
+                <div class="training-trend-chart" id="aim-trend"></div>
 
                 <h3 class="section-label">Verlauf</h3>
                 <div class="stats-history-list" id="aim-history"></div>
@@ -396,6 +424,8 @@
         let jdcDblFilterRange  = 'all';
         let aimFilterRange     = 'all';
         let checkoutFilterRange = 'all';
+        let botFilterRange      = 'all';
+        let jdcTrendFilterRange = 'all';
 
         // ── DATA LOAD (single query, grouped client-side) ──
         async function loadAll() {
@@ -549,6 +579,99 @@
             svgEl.innerHTML = svg;
         }
 
+        // ── TREND CHART ──
+        // Shared by all 6 sections — a stock-chart-style line+area of
+        // valueFn(row) over time: colored by whether the period trended
+        // toward a BETTER result (green) or worse (red) — not just "up",
+        // since for invert=true games (Clock: fewer darts is better) a
+        // downward line is the good outcome. Min/max gridline labels and a
+        // bold current-value label make the axis readable without hovering;
+        // hover (mouse) and tap (touch, this app is iPad-first) still show
+        // the nearest point's exact date+value in a small tooltip.
+        function renderTrendChart(containerEl, rows, valueFn, formatValue, invert) {
+            const points = rows
+                .map(r => ({ t: new Date(r.created_at).getTime(), v: valueFn(r), date: r.created_at }))
+                .filter(p => Number.isFinite(p.v))
+                .sort((a, b) => a.t - b.t);
+
+            if (points.length < 2) {
+                containerEl.innerHTML = '<p class="muted-text training-trend-empty">Noch nicht genug Daten für einen Verlauf.</p>';
+                return;
+            }
+
+            const W = 600, H = 150, padL = 60, padR = 14, padT = 22, padB = 20;
+            const minT = points[0].t, maxT = points[points.length - 1].t;
+            const vals = points.map(p => p.v);
+            const minV = Math.min(...vals), maxV = Math.max(...vals);
+            const spanV = maxV > minV ? maxV - minV : 1;
+
+            const xPos = t => minT === maxT ? (padL + W - padR) / 2 : padL + (t - minT) / (maxT - minT) * (W - padL - padR);
+            const yPos = v => H - padB - (v - minV) / spanV * (H - padT - padB);
+
+            const coords = points.map(p => ({ x: xPos(p.t), y: yPos(p.v), v: p.v, date: p.date }));
+            const pathD  = coords.map((c, i) => (i === 0 ? 'M' : 'L') + ` ${c.x.toFixed(1)} ${c.y.toFixed(1)}`).join(' ');
+            const baseY  = (H - padB).toFixed(1);
+            const areaD  = `${pathD} L ${coords[coords.length - 1].x.toFixed(1)} ${baseY} L ${coords[0].x.toFixed(1)} ${baseY} Z`;
+
+            const first = points[0].v, last = points[points.length - 1].v;
+            let trendColor = 'var(--accent)';
+            if (last !== first) {
+                const improving = invert ? last < first : last > first;
+                trendColor = improving ? 'var(--green)' : 'var(--red)';
+            }
+
+            const dots = coords.map(c => `<circle cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="3.5" fill="${trendColor}"/>`).join('');
+
+            const uid    = 'trend-' + Math.random().toString(36).slice(2, 8);
+            const gradId = uid + '-grad';
+            const maxY   = yPos(maxV), minY = yPos(minV);
+            const lastC  = coords[coords.length - 1];
+            // Keep the current-value label from clipping off the top edge
+            const lastLabelY = lastC.y < padT + 12 ? lastC.y + 16 : lastC.y - 10;
+
+            containerEl.innerHTML = `
+                <svg class="training-trend-svg" id="${uid}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+                    <defs>
+                        <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stop-color="${trendColor}" stop-opacity="0.35"/>
+                            <stop offset="100%" stop-color="${trendColor}" stop-opacity="0"/>
+                        </linearGradient>
+                    </defs>
+                    <line x1="${padL}" y1="${maxY.toFixed(1)}" x2="${W - padR}" y2="${maxY.toFixed(1)}" stroke="var(--border)" stroke-width="1" stroke-dasharray="3,3"/>
+                    <text x="${padL - 6}" y="${(maxY + 3).toFixed(1)}" text-anchor="end" font-size="11" fill="var(--text-secondary)">${formatValue(maxV)}</text>
+                    <line x1="${padL}" y1="${minY.toFixed(1)}" x2="${W - padR}" y2="${minY.toFixed(1)}" stroke="var(--border)" stroke-width="1" stroke-dasharray="3,3"/>
+                    <text x="${padL - 6}" y="${(minY + 3).toFixed(1)}" text-anchor="end" font-size="11" fill="var(--text-secondary)">${formatValue(minV)}</text>
+                    <text x="${padL}" y="${H - 4}" font-size="10" fill="var(--text-secondary)">${fmtDate(points[0].date)}</text>
+                    <text x="${W - padR}" y="${H - 4}" text-anchor="end" font-size="10" fill="var(--text-secondary)">${fmtDate(points[points.length - 1].date)}</text>
+                    <path d="${areaD}" fill="url(#${gradId})" stroke="none"/>
+                    <path d="${pathD}" fill="none" stroke="${trendColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    ${dots}
+                    <text x="${lastC.x.toFixed(1)}" y="${lastLabelY.toFixed(1)}" text-anchor="end" font-size="11" font-weight="700" fill="var(--text-primary)">${formatValue(last)}</text>
+                </svg>
+                <div class="training-trend-tooltip" id="${uid}-tip"></div>
+            `;
+
+            const svgEl = document.getElementById(uid);
+            const tipEl = document.getElementById(uid + '-tip');
+
+            function showNearest(clientX) {
+                const rect  = svgEl.getBoundingClientRect();
+                const relX  = (clientX - rect.left) / rect.width * W;
+                let nearest = coords[0], minDist = Infinity;
+                coords.forEach(c => {
+                    const d = Math.abs(c.x - relX);
+                    if (d < minDist) { minDist = d; nearest = c; }
+                });
+                tipEl.style.display = 'block';
+                tipEl.style.left    = (nearest.x / W * 100) + '%';
+                tipEl.textContent   = `${fmtDate(nearest.date)} · ${formatValue(nearest.v)}`;
+            }
+
+            svgEl.addEventListener('mousemove', e => showNearest(e.clientX));
+            svgEl.addEventListener('mouseleave', () => { tipEl.style.display = 'none'; });
+            svgEl.addEventListener('touchstart', e => showNearest(e.touches[0].clientX), { passive: true });
+        }
+
         // ── AROUND THE CLOCK ──
         // Rows saved before the range feature existed have no from/to — those
         // were always full 1–Bull runs. Same rule used on training-clock.html.
@@ -579,6 +702,7 @@
             document.getElementById('clock-record').textContent = vsRows.length > 0 ? `${wins}–${losses}` : '–';
 
             renderClockHeatmap();
+            renderClockTrendChart();
 
             const historyEl = document.getElementById('clock-history');
             const recent = [...allClock].sort(byDateDesc).slice(0, 10);
@@ -602,6 +726,7 @@
             document.querySelectorAll('#clock-filter-bar .filter-btn').forEach(b => b.classList.remove('filter-btn--active'));
             btn.classList.add('filter-btn--active');
             renderClockHeatmap();
+            renderClockTrendChart();
         }
 
         function renderClockHeatmap() {
@@ -619,6 +744,13 @@
             const labels = [...Array(20).keys()].map(i => String(i + 1)).concat(['Bull']);
             renderHeatmap(document.getElementById('clock-heatmap'), cells, labels, true, v => v.toFixed(1));
             renderDartboard(document.getElementById('clock-dartboard'), computeHeatStats(cells, labels, true), 'wedge');
+        }
+
+        // Only full 1–Bull, completed runs are comparable on this chart — a
+        // partial-range run's dart count isn't on the same scale.
+        function renderClockTrendChart() {
+            const filtered = filterByRange(allClock.filter(isCountableBest), clockFilterRange);
+            renderTrendChart(document.getElementById('clock-trend'), filtered, r => r.score, v => v.toFixed(0) + ' Darts', true);
         }
 
         // ── BOB'S 27 ──
@@ -644,6 +776,7 @@
                 : '–';
 
             renderBobsHeatmap();
+            renderBobsTrendChart();
 
             const historyEl = document.getElementById('bobs-history');
             const recent = [...allBobs].sort(byDateDesc).slice(0, 10);
@@ -671,6 +804,7 @@
             document.querySelectorAll('#bobs-filter-bar .filter-btn').forEach(b => b.classList.remove('filter-btn--active'));
             btn.classList.add('filter-btn--active');
             renderBobsHeatmap();
+            renderBobsTrendChart();
         }
 
         function renderBobsHeatmap() {
@@ -690,6 +824,11 @@
             renderDartboard(document.getElementById('bobs-dartboard'), computeHeatStats(cells, labels, false), 'ring');
         }
 
+        function renderBobsTrendChart() {
+            const filtered = filterByRange(allBobs, bobsFilterRange);
+            renderTrendChart(document.getElementById('bobs-trend'), filtered, r => r.score, v => v.toFixed(0), false);
+        }
+
         // ── CHECKOUT-TRAINING ──
         function renderCheckoutSection() {
             if (allCheckout.length > 0) {
@@ -704,6 +843,7 @@
             document.getElementById('checkout-hits').textContent     = totalHits;
 
             renderCheckoutHeatmap();
+            renderCheckoutTrendChart();
 
             const historyEl = document.getElementById('checkout-history');
             const recent = [...allCheckout].sort(byDateDesc).slice(0, 10);
@@ -724,6 +864,7 @@
             document.querySelectorAll('#checkout-filter-bar .filter-btn').forEach(b => b.classList.remove('filter-btn--active'));
             btn.classList.add('filter-btn--active');
             renderCheckoutHeatmap();
+            renderCheckoutTrendChart();
         }
 
         function renderCheckoutHeatmap() {
@@ -741,6 +882,11 @@
             const labels = [...Array(20).keys()].map(i => String(i + 1)).concat(['Bull']);
             renderHeatmap(document.getElementById('checkout-heatmap'), cells, labels, false, v => Math.round(v * 100) + '%');
             renderDartboard(document.getElementById('checkout-dartboard'), computeHeatStats(cells, labels, false), 'ring');
+        }
+
+        function renderCheckoutTrendChart() {
+            const filtered = filterByRange(allCheckout, checkoutFilterRange);
+            renderTrendChart(document.getElementById('checkout-trend'), filtered, r => r.score, v => v.toFixed(0) + ' %', false);
         }
 
         // ── GEGEN DEN BOT ──
@@ -762,6 +908,8 @@
             const losses = allBot.filter(r => r.meta && r.meta.win === false).length;
             document.getElementById('bot-record').textContent = allBot.length > 0 ? `${wins}–${losses}` : '–';
 
+            renderBotTrendChart();
+
             const historyEl = document.getElementById('bot-history');
             const recent = [...allBot].sort(byDateDesc).slice(0, 10);
             if (recent.length === 0) {
@@ -774,6 +922,18 @@
                     return `<div class="stats-history-row"><span class="stats-history-date">${fmtDate(r.created_at)}</span><span class="stats-history-detail">${detail}</span>${result}</div>`;
                 }).join('');
             }
+        }
+
+        function setBotFilter(range, btn) {
+            botFilterRange = range;
+            document.querySelectorAll('#bot-filter-bar .filter-btn').forEach(b => b.classList.remove('filter-btn--active'));
+            btn.classList.add('filter-btn--active');
+            renderBotTrendChart();
+        }
+
+        function renderBotTrendChart() {
+            const filtered = filterByRange(allBot, botFilterRange);
+            renderTrendChart(document.getElementById('bot-trend'), filtered, r => (r.meta && r.meta.avg) || 0, v => v.toFixed(1), false);
         }
 
         // ── JDC CHALLENGE ──
@@ -847,6 +1007,18 @@
             renderDartboard(document.getElementById('jdc-dbl-dartboard'), computeHeatStats(cells, labels, false), 'ring');
         }
 
+        function setJdcTrendFilter(range, btn) {
+            jdcTrendFilterRange = range;
+            document.querySelectorAll('#jdc-trend-filter-bar .filter-btn').forEach(b => b.classList.remove('filter-btn--active'));
+            btn.classList.add('filter-btn--active');
+            renderJdcTrendChart();
+        }
+
+        function renderJdcTrendChart() {
+            const filtered = filterByRange(allJdc, jdcTrendFilterRange);
+            renderTrendChart(document.getElementById('jdc-trend'), filtered, r => r.score, v => v.toFixed(0), false);
+        }
+
         function renderJdcSection() {
             document.getElementById('jdc-total').textContent = allJdc.length;
 
@@ -865,6 +1037,7 @@
 
             renderJdcNumHeatmap();
             renderJdcDblHeatmap();
+            renderJdcTrendChart();
 
             const historyEl = document.getElementById('jdc-history');
             const recent = [...allJdc].sort(byDateDesc).slice(0, 10);
@@ -893,6 +1066,7 @@
             document.querySelectorAll('#aim-filter-bar .filter-btn').forEach(b => b.classList.remove('filter-btn--active'));
             btn.classList.add('filter-btn--active');
             renderAimHeatmap();
+            renderAimTrendChart();
         }
 
         function renderAimHeatmap() {
@@ -910,6 +1084,11 @@
             const labels = [...Array(20).keys()].map(i => String(i + 1)).concat(['Bull']);
             renderHeatmap(document.getElementById('aim-heatmap'), cells, labels, false, v => Math.round(v * 100) + '%');
             renderDartboard(document.getElementById('aim-dartboard'), computeHeatStats(cells, labels, false), 'wedge');
+        }
+
+        function renderAimTrendChart() {
+            const filtered = filterByRange(allAim, aimFilterRange);
+            renderTrendChart(document.getElementById('aim-trend'), filtered, r => r.score, v => v.toFixed(0) + ' %', false);
         }
 
         function renderAimSection() {
@@ -944,6 +1123,7 @@
             });
 
             renderAimHeatmap();
+            renderAimTrendChart();
 
             const historyEl = document.getElementById('aim-history');
             const recent = [...allAim].sort(byDateDesc).slice(0, 10);

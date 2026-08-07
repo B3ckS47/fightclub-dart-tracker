@@ -77,6 +77,8 @@
             <div class="training-target-number" id="target-number">10</div>
             <div class="training-target-sub" id="jdc-sub-info">Dart 1/3</div>
 
+            <button type="button" class="btn btn-ghost training-undo-btn" id="jdc-undo-btn" onclick="undoLast()" disabled>↩ Rückgängig</button>
+
             <div class="stats-grid" id="jdc-stats" style="margin-top:20px; grid-template-columns:1fr;">
                 <div class="stat-box">
                     <div class="stat-label">Punkte bisher</div>
@@ -159,6 +161,7 @@
         let players      = [];
         let activeIdx    = 0;
         let personalBest = null;
+        let undoStack    = [];
 
         async function loadMembers() {
             const [playersRes, usersRes] = await Promise.all([
@@ -275,6 +278,7 @@
                 players.push(mkPlayer(allMembers.find(p => p.id === oppId)));
             }
             activeIdx = 0;
+            undoStack = [];
 
             document.getElementById('jdc-setup-view').style.display       = 'none';
             document.getElementById('jdc-leaderboard-card').style.display = 'none';
@@ -283,10 +287,29 @@
             document.getElementById('jdc-stats').style.display   = jdcMode === 'solo' ? 'grid' : 'none';
             document.getElementById('jdc-players').style.display = jdcMode === 'vs' ? 'grid' : 'none';
 
+            updateUndoButton();
             updateDisplay();
         }
 
         function currentUnit(p) { return UNITS[p.unitIndex]; }
+
+        // ── UNDO ──
+        function pushUndo() {
+            undoStack.push(structuredClone({ players, activeIdx }));
+            updateUndoButton();
+        }
+        function undoLast() {
+            if (undoStack.length === 0) return;
+            const snap = undoStack.pop();
+            players    = snap.players;
+            activeIdx  = snap.activeIdx;
+            updateDisplay();
+            updateUndoButton();
+        }
+        function updateUndoButton() {
+            const btn = document.getElementById('jdc-undo-btn');
+            if (btn) btn.disabled = undoStack.length === 0;
+        }
 
         // ── GAMEPLAY ──
         // input: 'single'|'double'|'triple'|'miss' for triple units, true|false for doubles units
@@ -295,6 +318,7 @@
             const unit = currentUnit(p);
             if (!unit) return;
 
+            pushUndo();
             p.currentDarts.push(input);
 
             if (unit.kind === 'doubles') {
@@ -394,6 +418,7 @@
 
         // ── FINISH & SAVE ──
         async function finishGame() {
+            undoStack = [];
             document.getElementById('play-view').style.display   = 'none';
             document.getElementById('result-view').style.display = 'block';
 

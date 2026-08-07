@@ -91,6 +91,8 @@
             <div class="training-target-number" id="target-number">1</div>
             <div class="training-target-sub" id="clock-turn-info" style="display:none;"></div>
 
+            <button type="button" class="btn btn-ghost training-undo-btn" id="clock-undo-btn" onclick="undoLast()" disabled>↩ Rückgängig</button>
+
             <!-- Solo: full-width stat row (4 across on desktop) -->
             <div class="stats-grid" id="clock-stats" style="margin-top:20px;">
                 <div class="stat-box">
@@ -164,6 +166,7 @@
         let dartInVisit = 1;
         let winnerIdx   = null;
         let personalBest = null;   // best full-range (1–Bull) darts count
+        let undoStack   = [];      // snapshots taken before each recordThrow()
 
         // ── INIT ──
         (function buildRangeSelects() {
@@ -330,6 +333,7 @@
             activeIdx   = 0;
             dartInVisit = 1;
             winnerIdx   = null;
+            undoStack   = [];
 
             document.getElementById('clock-setup-view').style.display       = 'none';
             document.getElementById('clock-leaderboard-card').style.display = 'none';
@@ -341,7 +345,28 @@
             document.getElementById('clock-players').style.display = clockMode === 'vs' ? 'grid' : 'none';
             document.getElementById('clock-turn-info').style.display = clockMode === 'vs' ? 'block' : 'none';
 
+            updateUndoButton();
             updateDisplay();
+        }
+
+        // ── UNDO ──
+        function pushUndo() {
+            undoStack.push(structuredClone({ players, activeIdx, dartInVisit, winnerIdx }));
+            updateUndoButton();
+        }
+        function undoLast() {
+            if (undoStack.length === 0) return;
+            const snap  = undoStack.pop();
+            players     = snap.players;
+            activeIdx   = snap.activeIdx;
+            dartInVisit = snap.dartInVisit;
+            winnerIdx   = snap.winnerIdx;
+            updateDisplay();
+            updateUndoButton();
+        }
+        function updateUndoButton() {
+            const btn = document.getElementById('clock-undo-btn');
+            if (btn) btn.disabled = undoStack.length === 0;
         }
 
         // ── GAMEPLAY ──
@@ -349,6 +374,7 @@
             const p = players[activeIdx];
             if (p.finished) return;
 
+            pushUndo();
             p.darts++;
             p.numberDarts++;
             if (hit) {
@@ -378,13 +404,11 @@
 
             if (players[activeIdx].finished) {
                 if (players[other].finished) { finishGame(); return; }
-                // Winner is done — loser may play out their run ("auswerfen")
+                // Winner is done — loser may play out their run ("auswerfen").
+                // Banner/end-early-button visibility is derived in updateDisplay()
+                // from winnerIdx, so it stays correct even after an undo.
                 activeIdx   = other;
                 dartInVisit = 1;
-                const banner = document.getElementById('clock-banner');
-                banner.textContent   = `🏆 ${players[winnerIdx].name} hat gewonnen! ${players[other].name} wirft aus.`;
-                banner.style.display = 'block';
-                document.getElementById('clock-end-early-btn').style.display = 'block';
                 updateDisplay();
                 return;
             }
@@ -422,6 +446,17 @@
                 ? `${p.name} wirft aus`
                 : `${p.name} · Wurf ${dartInVisit}/3`;
 
+            const banner      = document.getElementById('clock-banner');
+            const endEarlyBtn = document.getElementById('clock-end-early-btn');
+            if (playoutPhase) {
+                banner.textContent   = `🏆 ${players[winnerIdx].name} hat gewonnen! ${players[1 - winnerIdx].name} wirft aus.`;
+                banner.style.display = 'block';
+                endEarlyBtn.style.display = 'block';
+            } else {
+                banner.style.display      = 'none';
+                endEarlyBtn.style.display = 'none';
+            }
+
             document.getElementById('clock-players').innerHTML = players.map((pl, idx) => {
                 const initials = (pl.name || '?').slice(0, 2).toUpperCase();
                 const avatar   = pl.avatarUrl
@@ -442,6 +477,7 @@
 
         // ── FINISH & SAVE ──
         async function finishGame() {
+            undoStack = [];
             document.getElementById('play-view').style.display   = 'none';
             document.getElementById('result-view').style.display = 'block';
 

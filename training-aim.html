@@ -104,6 +104,8 @@
             <div class="training-target-number training-target-number--text" id="target-number">SINGLE 20</div>
             <div class="training-target-sub" id="aim-sub-info">Dart 1/3</div>
 
+            <button type="button" class="btn btn-ghost training-undo-btn" id="aim-undo-btn" onclick="undoLast()" disabled>↩ Rückgängig</button>
+
             <div class="stats-grid" id="aim-stats" style="margin-top:20px;">
                 <div class="stat-box">
                     <div class="stat-label">Versuche</div>
@@ -280,6 +282,7 @@
         let currentRoundTargets = [];
         let totalRounds        = 10;
         let roundNum           = 1;
+        let undoStack          = [];
 
         function generateRoundTargets() {
             const pool = buildTargetPool(cleverMode);
@@ -312,6 +315,7 @@
             }
             activeIdx = 0;
             roundNum  = 1;
+            undoStack = [];
             generateRoundTargets();
 
             document.getElementById('aim-setup-view').style.display       = 'none';
@@ -321,11 +325,33 @@
             document.getElementById('aim-stats').style.display   = aimMode === 'solo' ? 'grid' : 'none';
             document.getElementById('aim-players').style.display = aimMode === 'vs' ? 'grid' : 'none';
 
+            updateUndoButton();
             updateAimDisplay();
+        }
+
+        // ── UNDO ──
+        function pushUndo() {
+            undoStack.push(structuredClone({ players, activeIdx, currentRoundTargets, roundNum }));
+            updateUndoButton();
+        }
+        function undoLast() {
+            if (undoStack.length === 0) return;
+            const snap           = undoStack.pop();
+            players              = snap.players;
+            activeIdx            = snap.activeIdx;
+            currentRoundTargets  = snap.currentRoundTargets;
+            roundNum             = snap.roundNum;
+            updateAimDisplay();
+            updateUndoButton();
+        }
+        function updateUndoButton() {
+            const btn = document.getElementById('aim-undo-btn');
+            if (btn) btn.disabled = undoStack.length === 0;
         }
 
         // ── GAMEPLAY ──
         function recordAimThrow(hit) {
+            pushUndo();
             const p      = players[activeIdx];
             const target = currentRoundTargets[p.dartInRound];
 
@@ -412,6 +438,7 @@
 
         // ── FINISH & SAVE ──
         async function finishAimGame() {
+            undoStack = [];
             document.getElementById('play-view').style.display   = 'none';
             document.getElementById('result-view').style.display = 'block';
 

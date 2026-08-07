@@ -77,6 +77,8 @@
             <div class="training-target-number training-target-number--text" id="target-number">DOPPEL 1</div>
             <div class="training-target-sub" id="bobs-turn-info" style="display:none;"></div>
 
+            <button type="button" class="btn btn-ghost training-undo-btn" id="bobs-undo-btn" onclick="undoLast()" disabled>↩ Rückgängig</button>
+
             <!-- Solo: centered score/double boxes -->
             <div class="stats-grid" id="bobs-stats">
                 <div class="stat-box">
@@ -138,6 +140,7 @@
         let players      = [];
         let activeIdx    = 0;
         let personalBest = null;
+        let undoStack    = [];
 
         async function loadMembers() {
             const [playersRes, usersRes] = await Promise.all([
@@ -246,6 +249,7 @@
                 players.push(mkPlayer(allMembers.find(p => p.id === oppId)));
             }
             activeIdx = 0;
+            undoStack = [];
 
             document.getElementById('bobs-setup-view').style.display       = 'none';
             document.getElementById('bobs-leaderboard-card').style.display = 'none';
@@ -255,7 +259,26 @@
             document.getElementById('bobs-players').style.display = bobsMode === 'vs' ? 'grid' : 'none';
             document.getElementById('bobs-turn-info').style.display = bobsMode === 'vs' ? 'block' : 'none';
 
+            updateUndoButton();
             updateDisplay();
+        }
+
+        // ── UNDO ──
+        function pushUndo() {
+            undoStack.push(structuredClone({ players, activeIdx }));
+            updateUndoButton();
+        }
+        function undoLast() {
+            if (undoStack.length === 0) return;
+            const snap = undoStack.pop();
+            players    = snap.players;
+            activeIdx  = snap.activeIdx;
+            updateDisplay();
+            updateUndoButton();
+        }
+        function updateUndoButton() {
+            const btn = document.getElementById('bobs-undo-btn');
+            if (btn) btn.disabled = undoStack.length === 0;
         }
 
         // ── GAMEPLAY ──
@@ -263,6 +286,7 @@
             const p = players[activeIdx];
             if (p.finished || p.busted) return;
 
+            pushUndo();
             const doubleValue = p.round * 2;
             p.perRound[p.round] = hits;
             p.score += hits > 0 ? hits * doubleValue : -doubleValue;
@@ -334,6 +358,7 @@
 
         // ── FINISH & SAVE ──
         async function finishGame() {
+            undoStack = [];
             document.getElementById('play-view').style.display   = 'none';
             document.getElementById('result-view').style.display = 'block';
 
