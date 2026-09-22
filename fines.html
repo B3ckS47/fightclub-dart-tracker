@@ -118,17 +118,37 @@
 
         const isAdmin = currentUser && currentUser.role === 'admin';
 
+        // Supabase/PostgREST caps a single select() at 1000 rows by default —
+        // fines_ledger has grown past that, so an unpaginated fetch here was
+        // silently dropping rows (often newer payments, inflating balances).
+        // Page through with .range() until a partial page confirms the end.
+        async function fetchAllRows(table, select) {
+            const pageSize = 1000;
+            let all = [], from = 0;
+            while (true) {
+                // .order('id') keeps pagination deterministic — without it,
+                // Postgres doesn't guarantee stable row order across two
+                // separate range() calls, which could skip or double-count
+                // rows if the table changes between pages.
+                const { data, error } = await supa.from(table).select(select).order('id').range(from, from + pageSize - 1);
+                if (error || !data) break;
+                all = all.concat(data);
+                if (data.length < pageSize) break;
+                from += pageSize;
+            }
+            return all;
+        }
+
         // ── OVERVIEW ──
         async function loadOverview() {
-            const [playersRes, usersRes, ledgerRes] = await Promise.all([
+            const [playersRes, usersRes, ledger] = await Promise.all([
                 supa.from('players').select('id, name, avatar_url').order('name'),
                 supa.from('app_users').select('id, player_id, role').in('role', ['member', 'admin']),
-                supa.from('fines_ledger').select('player_id, amount')
+                fetchAllRows('fines_ledger', 'player_id, amount')
             ]);
 
             const players  = playersRes.data  || [];
             const users    = usersRes.data     || [];
-            const ledger   = ledgerRes.data    || [];
 
             // Build balance map: player_id → total
             const balanceMap = {};
