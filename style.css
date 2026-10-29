@@ -884,6 +884,12 @@ body {
     letter-spacing: -1px;
 }
 
+.input-preview-equiv {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-left: 6px;
+}
+
 /* ── NUMBER PAD ── */
 .controls {
     display: grid;
@@ -1923,6 +1929,34 @@ body {
         background: var(--accent-dim) !important;
         border-color: var(--accent) !important;
         color: var(--accent) !important;
+    }
+
+    /* Mid-entry, the other quick-score keys (always "thrown" shortcuts)
+       would be misleading to tap, so they're disabled rather than hidden —
+       keeps the 5-col grid from reflowing. */
+    .key-quick:disabled {
+        opacity: 0.35;
+        cursor: not-allowed;
+        pointer-events: none;
+    }
+
+    /* Replaces the "60" key once ≤170 — deliberately color-distinct from
+       the neutral quick-score keys so it reads as a mode switch, not a
+       score shortcut. */
+    .key-mode-toggle {
+        font-size: 0.85rem !important;
+        padding: 12px 4px !important;
+        font-weight: 800;
+        background: var(--accent-dim) !important;
+        border: 1px solid var(--accent) !important;
+        color: var(--accent) !important;
+    }
+
+    .key-mode-toggle--active {
+        background: var(--accent) !important;
+        border-color: var(--accent) !important;
+        color: #fff !important;
+        box-shadow: 0 0 10px var(--accent-glow);
     }
 
     /* Row 4: C (col 1) · 0 (cols 2–4) · Undo (col 5) */

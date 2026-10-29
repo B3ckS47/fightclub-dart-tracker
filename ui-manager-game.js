@@ -436,6 +436,8 @@ function refreshDisplay() {
     }
     const reactionBar = document.getElementById('online-reaction-bar');
     if (reactionBar) reactionBar.style.display = gameState.opponentType === 'online' ? 'flex' : 'none';
+
+    if (typeof updateInputPreview === 'function') updateInputPreview();
 }
 
 function renderHist(pIdx, elId) {

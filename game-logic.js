@@ -793,22 +793,81 @@ async function startGame() {
     await showVsIntro();
 }
 
+// 'thrown' (default) = numpad digits are the points scored this visit.
+// 'remaining' = digits are what's LEFT after the visit instead — lets a
+// player who already counted down in their head (common once ≤170) type
+// that number directly instead of re-deriving the thrown score.
+let scoreInputMode = 'thrown';
+
 function pressKey(num) {
     if (gameState.ausbullenActive) return;
     if (gameState.opponentType === 'online' && !_applyingRemoteOnlineMove
         && gameState.currentIdx !== gameState.onlineMyTeamIdx) return;
     if (gameState.input.length < 3) {
         gameState.input += num;
-        document.getElementById('input-preview').innerText = gameState.input;
+        updateInputPreview();
     }
 }
 
-// Directly set score and submit — used by tablet quick-score buttons
+function toggleInputMode() {
+    scoreInputMode = scoreInputMode === 'remaining' ? 'thrown' : 'remaining';
+    updateInputPreview();
+}
+
+// Keeps the "Eingabe:" preview, the tablet-keypad mode toggle (replaces the
+// "60" quick-score key once in range), the disabled state of the other
+// quick-score keys, and the small live-computed equivalent value all in
+// sync — called after every digit press/clear and whenever the active
+// player/score changes. Tablet/desktop only (≥768px, same breakpoint the
+// checkout-helper box already uses) — on mobile there isn't room for this
+// without crowding out the mobile checkout-route box, so the feature simply
+// doesn't exist there.
+function updateInputPreview() {
+    const previewEl = document.getElementById('input-preview');
+    if (!previewEl) return;
+    previewEl.innerText = gameState.input || '0';
+
+    const equivEl      = document.getElementById('input-preview-equiv');
+    const tabletToggle = document.getElementById('input-mode-toggle-tablet');
+    const key60        = document.getElementById('key-quick-60');
+    const isTablet      = window.innerWidth >= 768;
+    const curScore      = gameState.ausbullenActive ? Infinity : gameState.scores[gameState.currentIdx];
+    const showToggle    = isTablet && curScore <= 170;
+
+    if (!showToggle) scoreInputMode = 'thrown'; // out of range (new leg) or mobile — don't stay stuck in remaining-mode
+
+    if (tabletToggle) {
+        tabletToggle.style.display = showToggle ? '' : 'none';
+        tabletToggle.textContent   = scoreInputMode === 'remaining' ? '→ Wurf' : '→ Rest';
+        tabletToggle.classList.toggle('key-mode-toggle--active', scoreInputMode === 'remaining');
+    }
+    if (key60) key60.style.display = showToggle ? 'none' : '';
+
+    // While actively entering a "Rest" value, the other quick-score keys
+    // (always "thrown" shortcuts) would be misleading to tap mid-entry.
+    document.querySelectorAll('.controls--tablet .key-quick').forEach(btn => {
+        btn.disabled = showToggle && scoreInputMode === 'remaining';
+    });
+
+    if (!equivEl) return;
+    const typed = parseInt(gameState.input) || 0;
+    if (!gameState.input || !showToggle) { equivEl.textContent = ''; return; }
+    if (scoreInputMode === 'remaining') {
+        const thrown = curScore - typed;
+        equivEl.textContent = thrown >= 0 ? `(Wurf: ${thrown})` : '';
+    } else {
+        const rest = curScore - typed;
+        equivEl.textContent = rest >= 0 ? `(Rest: ${rest})` : '';
+    }
+}
+
+// Directly set score and submit — used by tablet quick-score buttons.
+// Always means "thrown points", regardless of the remaining-mode toggle.
 function quickScore(val) {
     if (gameState.ausbullenActive) return;
     gameState.input = String(val);
-    document.getElementById('input-preview').innerText = gameState.input;
-    submitTurn();
+    updateInputPreview();
+    submitTurn(val);
 }
 
 // ── TRAINING MODE: BOT THROW GENERATION ──
@@ -892,11 +951,28 @@ function maybeTriggerBotTurn() {
     }, 1000 + Math.random() * 800); // ~1000–1800ms "thinking" delay
 }
 
-async function submitTurn() {
+async function submitTurn(rawPts) {
     if (gameState.ausbullenActive) return;
     if (gameState.opponentType === 'online' && !_applyingRemoteOnlineMove
         && gameState.currentIdx !== gameState.onlineMyTeamIdx) return;
-    const pts = parseInt(gameState.input) || 0;
+
+    const teamIdxForInput = gameState.currentIdx;
+    let pts;
+    if (typeof rawPts === 'number') {
+        pts = rawPts; // quickScore() — already a thrown-points value
+    } else {
+        const typed = parseInt(gameState.input) || 0;
+        if (scoreInputMode === 'remaining' && window.innerWidth >= 768 && gameState.scores[teamIdxForInput] <= 170) {
+            if (typed > gameState.scores[teamIdxForInput]) {
+                showToast('⚠️ Rest kann nicht höher als die aktuelle Punktzahl sein!');
+                clearInput();
+                return;
+            }
+            pts = gameState.scores[teamIdxForInput] - typed;
+        } else {
+            pts = typed;
+        }
+    }
     if (pts > 180) { showToast('⚠️ Maximum ist 180!'); clearInput(); return; }
 
     // Snapshot for undo — explicitly exclude logs to prevent exponential growth
@@ -1233,7 +1309,7 @@ function undoFromMatchModal() {
 
 function clearInput() {
     gameState.input = "";
-    document.getElementById('input-preview').innerText = "0";
+    updateInputPreview();
 }
 
 // ── PHYSICAL KEYBOARD SCORING (numpad digits + Enter/Backspace) ──

@@ -266,6 +266,7 @@
                 <div id="online-waiting-banner" class="online-waiting-banner" style="display:none;">⏳ Warte auf Gegner…</div>
                 <div class="input-preview-row">
                     Eingabe: <span id="input-preview" class="input-preview-value">0</span>
+                    <span id="input-preview-equiv" class="input-preview-equiv"></span>
                 </div>
                 <!-- Mobile numpad -->
                 <div class="controls controls--mobile">
@@ -289,7 +290,8 @@
                     <button onclick="pressKey('1')" class="key-btn">1</button>
                     <button onclick="pressKey('2')" class="key-btn">2</button>
                     <button onclick="pressKey('3')" class="key-btn">3</button>
-                    <button onclick="quickScore(60)"  class="key-btn key-quick">60</button>
+                    <button onclick="quickScore(60)" id="key-quick-60" class="key-btn key-quick">60</button>
+                    <button type="button" onclick="toggleInputMode()" id="input-mode-toggle-tablet" class="key-btn key-mode-toggle" style="display:none;">→ Rest</button>
                     <button onclick="quickScore(41)"  class="key-btn key-quick">41</button>
                     <button onclick="pressKey('4')" class="key-btn">4</button>
                     <button onclick="pressKey('5')" class="key-btn">5</button>
