@@ -22,6 +22,25 @@ let _allVotesRaw = [];
 let _allFinesRaw = [];
 let _scheduleFilter = '';
 
+// Supabase/PostgREST caps a single select() at 1000 rows by default —
+// fines_ledger has grown past that (same class of bug already fixed on
+// fines.html). Page through with .range() until a partial page confirms
+// the end, with a stable .order() so pagination can't skip rows.
+async function fetchAllRows(table, select, build) {
+    const pageSize = 1000;
+    let all = [], from = 0;
+    while (true) {
+        let q = supa.from(table).select(select);
+        if (build) q = build(q);
+        const { data, error } = await q.order('id').range(from, from + pageSize - 1);
+        if (error || !data) break;
+        all = all.concat(data);
+        if (data.length < pageSize) break;
+        from += pageSize;
+    }
+    return all;
+}
+
 function setScheduleFilter(type) {
     _scheduleFilter = type;
     const filtered  = _upcomingRaw.filter(a => !type || a.type === type);
@@ -51,12 +70,17 @@ function getApptStatus(appt) {
 
 // ── LOAD ALL APPOINTMENTS ──
 async function loadAppointments() {
-    const [apptRes, votesRes, playersRes, usersRes, finesRes] = await Promise.all([
+    const [apptRes, votesRes, playersRes, usersRes, fines] = await Promise.all([
         supa.from('appointments').select('*').order('date', { ascending: true }),
         supa.from('appointment_votes').select('*'),
         supa.from('players').select('id, name, avatar_url').order('name'),
         supa.from('app_users').select('id, player_id, role'),
-        supa.from('fines_ledger').select('amount, note, type').eq('type', 'fine').like('note', 'appt:%').not('reason', 'like', 'Bountyeinsatz%')
+        // The real per-session fines (not the system-generated "Durchschnitt"
+        // catch-up fines) have no note at all — matched against each
+        // appointment's time window below, same as applyAverageFine() does.
+        fetchAllRows('fines_ledger', 'amount, reason, type, created_at', q =>
+            q.eq('type', 'fine').not('reason', 'like', 'Bountyeinsatz%')
+        )
     ]);
 
     if (apptRes.error) {
@@ -88,7 +112,7 @@ async function loadAppointments() {
     _upcomingRaw = upcomingSection;
     _pastRaw     = past;
     _allVotesRaw = allVotes;
-    _allFinesRaw = finesRes.data || [];
+    _allFinesRaw = fines;
 
     renderAppointments(upcomingSection, allVotes, 'upcoming-list', false);
     renderAppointments(past,            allVotes, 'past-list',     true);
@@ -254,7 +278,17 @@ function renderAppointments(appointments, allVotes, containerId, isPast) {
         // Fines summary for past Training appointments
         let finesSummary = '';
         if (isPast && appt.type === 'Training') {
-            const apptFines    = _allFinesRaw.filter(f => f.note === `appt:${appt.id}`);
+            // Same window + exclusion rule as applyAverageFine()'s own
+            // finesDuring query — fines logged during the session, not the
+            // "Durchschnitt"-reason catch-up fines charged to absentees.
+            const apptStart  = new Date(appt.start_time || appt.date).getTime();
+            const apptEnd    = appt.end_time ? new Date(appt.end_time).getTime() : Infinity;
+            const avgReason  = `Durchschnitt ${appt.title}`;
+            const apptFines  = _allFinesRaw.filter(f => {
+                if (f.reason === avgReason) return false;
+                const t = new Date(f.created_at).getTime();
+                return t >= apptStart && t <= apptEnd;
+            });
             const totalFines   = apptFines.reduce((s, f) => s + parseFloat(f.amount), 0);
             // Only count members/admins (non-guests) — consistent with who gets the avg fine
             const memberAttendeeCount = attending.filter(v => !v.is_guest).length;
