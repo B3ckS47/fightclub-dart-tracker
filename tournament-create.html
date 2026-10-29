@@ -274,18 +274,12 @@
             const { data: appts } = await supa
                 .from('appointments')
                 .select('id, title, type, date')
-                .eq('type', 'Training');
+                .eq('type', 'Training')
+                .gte('date', new Date().toISOString())
+                .order('date', { ascending: true })
+                .limit(5);
 
-            // Show the 5 Training appointments closest to today (past or
-            // upcoming) rather than the furthest-future ones — with many
-            // appointments pre-scheduled months ahead, sorting/limiting by
-            // date alone buried the actually relevant recent ones.
-            const now = Date.now();
-            const closestAppts = (appts || [])
-                .map(a => ({ ...a, _dist: Math.abs(new Date(a.date).getTime() - now) }))
-                .sort((x, y) => x._dist - y._dist)
-                .slice(0, 5)
-                .sort((x, y) => new Date(x.date) - new Date(y.date));
+            const closestAppts = appts || [];
 
             const apptSel = document.getElementById('appt-select');
             closestAppts.forEach(a => {
