@@ -52,19 +52,22 @@ function applyFilter(fromDate) {
 // --- DB ACTIONS ---
 async function fetchPlayers() {
     // 1. Fetch Players, History and app_users simultaneously
-    const [pRes, hRes, uRes] = await Promise.all([
+    // game_history gets two rows per match and passed ~1000 rows quickly — a
+    // plain select() would silently cut the newest games off every statistic.
+    const [pRes, history, uRes] = await Promise.all([
         supa.from('players').select('*').order('name'),
-        supa.from('game_history').select('*'),
+        fetchAllRows(() => supa.from('game_history').select('*').order('created_at').order('id'))
+            .catch(e => { console.error('Fetch Error (game_history):', e); return null; }),
         supa.from('app_users').select('player_id').not('player_id', 'is', null)
     ]);
 
-    if (pRes.error || hRes.error) {
-        console.error("Fetch Error:", pRes.error || hRes.error);
+    if (pRes.error || history === null) {
+        if (pRes.error) console.error("Fetch Error:", pRes.error);
         return;
     }
 
     const rawPlayers  = pRes.data || [];
-    rawHistory        = hRes.data || [];
+    rawHistory        = history;
     const linkedIds   = new Set((uRes.data || []).map(u => u.player_id));
 
     // 2. Attach stats and member/guest flag to each player

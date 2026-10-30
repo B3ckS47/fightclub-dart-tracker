@@ -160,16 +160,13 @@
             const now30 = new Date();
             now30.setDate(now30.getDate() - 30);
 
-            const [histRes, trainRes, tournRes] = await Promise.all([
-                supa.from('game_history')
+            // game_history grows with every match (2 rows each) — paginated so
+            // the points/averages don't silently drop rows beyond 1000
+            const [allHistory, tournRes] = await Promise.all([
+                fetchAllRows(() => supa.from('game_history')
                     .select('player_id, is_win, avg_game, one_eighties, high_finishes, created_at')
-                    .in('player_id', memberPlayerIds),
-                // Training attendance
-                supa.from('appointment_votes')
-                    .select('user_id')
-                    .eq('vote', 'yes')
-                    .eq('is_guest', false)
-                    .in('user_id', userIds),
+                    .in('player_id', memberPlayerIds)
+                    .order('created_at').order('id')),
                 // Swiss loser bracket wins
                 supa.from('tournament_matches')
                     .select('winner_id, p1_id, p2_id')
@@ -187,11 +184,12 @@
             const pastTrainingIds = new Set((pastTrainings || []).map(a => a.id));
 
             // Training votes per user
-            const { data: trainingVotes } = await supa
+            const trainingVotes = await fetchAllRows(() => supa
                 .from('appointment_votes')
                 .select('user_id, appointment_id')
                 .eq('vote', 'yes')
-                .in('user_id', userIds);
+                .in('user_id', userIds)
+                .order('appointment_id').order('user_id'));
 
             // Loser-bracket wins per player (byes excluded) — same rules as punkte.html, keep in sync!
             const lbWinsByPart = {};
@@ -231,8 +229,6 @@
 
             const playerName = {};
             (playerRows || []).forEach(p => { playerName[p.id] = p.name; });
-
-            const allHistory = histRes.data || [];
 
             attendees = memberPlayerIds.map(pid => {
                 const pHistory = allHistory.filter(h => h.player_id === pid);
@@ -421,7 +417,10 @@
             }
         }
 
-        load();
+        load().catch(e => {
+            console.error('Spieltag laden fehlgeschlagen:', e);
+            document.getElementById('player-pool').innerHTML = '<p class="muted-text">Fehler beim Laden der Spielerdaten.</p>';
+        });
     </script>
     <script>
         if ('serviceWorker' in navigator) {

@@ -415,10 +415,18 @@
 
             // Fetch lifetime avg for each participant from game_history
             const playerIds = participants.map(p => p.player_id).filter(Boolean);
-            const { data: history } = await supa
-                .from('game_history')
-                .select('player_id, avg_game')
-                .in('player_id', playerIds);
+            let history;
+            try {
+                history = await fetchAllRows(() => supa
+                    .from('game_history')
+                    .select('player_id, avg_game')
+                    .in('player_id', playerIds)
+                    .order('created_at').order('id'));
+            } catch (e) {
+                console.error('Historie laden fehlgeschlagen:', e);
+                showError('Statistiken konnten nicht geladen werden.');
+                return;
+            }
 
             // Build avg map: player_id → lifetime avg (0 if no history)
             const avgMap = {};

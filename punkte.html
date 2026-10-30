@@ -78,10 +78,13 @@
             const userToPlayer = {};
             users.forEach(u => { userToPlayer[u.id] = u.player_id; });
 
-            const [histRes, playersRes, pastTrainRes, votesRes, loserRes] = await Promise.all([
-                supa.from('game_history')
+            // game_history and votes grow without limit — paginated so the points
+            // don't silently drop rows beyond 1000
+            const [allHistory, playersRes, pastTrainRes, votes, loserRes] = await Promise.all([
+                fetchAllRows(() => supa.from('game_history')
                     .select('player_id, is_win, one_eighties, high_finishes')
-                    .in('player_id', memberPlayerIds),
+                    .in('player_id', memberPlayerIds)
+                    .order('created_at').order('id')),
                 supa.from('players')
                     .select('id, name')
                     .in('id', memberPlayerIds),
@@ -89,10 +92,11 @@
                     .select('id')
                     .eq('type', 'Training')
                     .lt('date', new Date().toISOString()),
-                supa.from('appointment_votes')
+                fetchAllRows(() => supa.from('appointment_votes')
                     .select('user_id, appointment_id')
                     .eq('vote', 'yes')
-                    .in('user_id', userIds),
+                    .in('user_id', userIds)
+                    .order('appointment_id').order('user_id')),
                 supa.from('tournament_matches')
                     .select('winner_id, p1_id, p2_id')
                     .eq('bracket', 'losers')
@@ -105,7 +109,7 @@
             // Training attendance per player (past trainings only)
             const pastTrainingIds = new Set((pastTrainRes.data || []).map(a => a.id));
             const trainingCount   = {};
-            (votesRes.data || []).forEach(v => {
+            votes.forEach(v => {
                 if (!pastTrainingIds.has(v.appointment_id)) return;
                 const pid = userToPlayer[v.user_id];
                 if (pid) trainingCount[pid] = (trainingCount[pid] || 0) + 1;
@@ -128,8 +132,6 @@
                 if (!p.player_id) return; // doubles teams can't be attributed to one player
                 lbWinsByPlayer[p.player_id] = (lbWinsByPlayer[p.player_id] || 0) + lbWinsByPart[p.id];
             });
-
-            const allHistory = histRes.data || [];
 
             const players = memberPlayerIds.map(pid => {
                 const pHistory  = allHistory.filter(h => h.player_id === pid);
@@ -180,7 +182,10 @@
             el.style.display = el.style.display === 'none' ? 'block' : 'none';
         }
 
-        loadPoints();
+        loadPoints().catch(e => {
+            console.error('Punkte laden fehlgeschlagen:', e);
+            document.getElementById('points-list').innerHTML = '<p class="muted-text">Fehler beim Laden der Punkte.</p>';
+        });
     </script>
     <script>
         if ('serviceWorker' in navigator) {
