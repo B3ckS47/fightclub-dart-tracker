@@ -27,6 +27,39 @@
     }
 })();
 
+// ── UNDO TOAST ──
+// A toast with a clickable "Rückgängig" button — for destructive actions that
+// are cheap to reverse right after (the regular toast ignores pointer events).
+// onUndo runs at most once; the toast disappears after `ms` either way.
+(function() {
+    window.showUndoToast = function(message, onUndo, ms) {
+        const el = document.createElement('div');
+        el.className = 'fc-toast fc-toast--info fc-toast--action';
+        const text = document.createElement('span');
+        text.textContent = message;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'fc-toast-action';
+        btn.textContent = 'RÜCKGÄNGIG';
+        el.append(text, btn);
+        document.body.appendChild(el);
+        requestAnimationFrame(() => el.classList.add('fc-toast--visible'));
+
+        let done = false;
+        const dismiss = () => {
+            el.classList.remove('fc-toast--visible');
+            setTimeout(() => el.remove(), 350);
+        };
+        btn.addEventListener('click', () => {
+            if (done) return;
+            done = true;
+            dismiss();
+            onUndo();
+        });
+        setTimeout(() => { if (!done) { done = true; dismiss(); } }, ms || 7000);
+    };
+})();
+
 // ── CONFIRM / ALERT MODAL ──
 (function() {
     let _resolve = null;

@@ -41,6 +41,24 @@
         </div>
     </div>
 
+    <!-- Payment bottom sheet (admin) -->
+    <div id="payment-sheet-overlay" class="entry-sheet-overlay" onclick="closePaymentSheet()" style="display:none;"></div>
+    <div id="payment-sheet" class="entry-sheet" style="display:none;">
+        <div class="entry-sheet-handle"></div>
+        <div class="entry-sheet-content">
+            <h2 class="card-title" id="payment-sheet-title" style="margin-bottom:6px;">ZAHLUNG</h2>
+            <p class="muted-text" id="payment-sheet-open" style="margin-bottom:12px;"></p>
+            <div class="divider" style="margin-bottom:16px;"></div>
+            <div class="fines-add-form">
+                <input type="number" id="payment-amount" placeholder="Gezahlter Betrag (€)" min="0.01" step="0.01" inputmode="decimal" class="input-field" style="width:100%;">
+                <input type="text" id="payment-note" placeholder="Notiz (optional)" class="input-field">
+                <p id="payment-msg" class="settings-msg"></p>
+                <button onclick="submitPayment()" class="btn btn-primary btn-full">ZAHLUNG EINTRAGEN</button>
+                <button onclick="closePaymentSheet()" class="btn btn-full" style="margin-top:8px; background:var(--bg-element);">ABBRECHEN</button>
+            </div>
+        </div>
+    </div>
+
     <!-- ── NAV ── -->
     <nav id="nav-fines-detail">
         <div class="nav-inner nav-inner--default">
@@ -71,7 +89,7 @@
                 </div>
             </div>
 
-            <!-- Admin: add fine / payment -->
+            <!-- Admin: add fine / contribution, record a payment -->
             <div class="card" id="fines-add-card" style="display:none;">
                 <h2 class="card-title">EINTRAG HINZUFÜGEN</h2>
                 <div class="divider"></div>
@@ -79,7 +97,6 @@
                     <div class="fines-add-row">
                         <select id="fine-type" class="select-field" onchange="onTypeChange()">
                             <option value="fine">💸 Strafe</option>
-                            <option value="payment">✅ Zahlung</option>
                             <option value="contribution">📅 Beitrag</option>
                         </select>
                         <input type="number" id="fine-amount" placeholder="Betrag (€)" min="0.01" step="0.01" class="input-field fines-amount-input">
@@ -91,6 +108,12 @@
                     <button onclick="addEntry()" class="btn btn-primary btn-full">HINZUFÜGEN</button>
                 </div>
                 <p id="fines-add-msg" class="settings-msg"></p>
+
+                <!-- A payment is its own deliberate step (amount is usually a round
+                     cash sum, unrelated to the odd open balance), so it lives behind
+                     its own button + sheet instead of being a form option. -->
+                <div class="divider" style="margin:18px 0 16px;"></div>
+                <button type="button" onclick="openPaymentSheet()" class="btn btn-full fines-pay-open-btn">✅ ZAHLUNG ERFASSEN</button>
             </div>
 
             <!-- Ledger -->
@@ -413,24 +436,19 @@
         function onTypeChange() {
             const type      = document.getElementById('fine-type').value;
             const reasonSel = document.getElementById('fine-reason');
-            const noReason  = type !== 'fine'; // payment & contribution need no reason
+            const noReason  = type !== 'fine'; // a contribution needs no reason
             reasonSel.disabled = noReason;
             reasonSel.style.opacity = noReason ? '0.4' : '1';
             if (noReason) reasonSel.value = '';
             prefillDefaultAmount();
         }
 
-        // Each entry type has a sensible default amount: a payment usually
-        // settles the whole open balance (one tap instead of typing it), a
-        // contribution is the fixed monthly fee, a fine gets its amount from
+        // A contribution is the fixed monthly fee, a fine gets its amount from
         // the chosen reason. Switching type always resets the field so a value
         // meant for one type can't be submitted as another.
         function prefillDefaultAmount() {
             const type  = document.getElementById('fine-type').value;
-            const field = document.getElementById('fine-amount');
-            if (type === 'payment')           field.value = _balance > 0.005 ? _balance.toFixed(2) : '';
-            else if (type === 'contribution') field.value = '10.00';
-            else                              field.value = '';
+            document.getElementById('fine-amount').value = type === 'contribution' ? '10.00' : '';
         }
 
         // ── PREFILL AMOUNT FROM REASON ──
@@ -457,13 +475,11 @@
             if (!amount || amount <= 0) return showMsg('Bitte einen gültigen Betrag eingeben.', 'var(--red)');
             if (type === 'fine' && !reason) return showMsg('Bitte einen Grund auswählen.', 'var(--red)');
 
-            // Payments are stored as negative amounts; fines & contributions as positive
-            const storedAmount = type === 'payment' ? -Math.abs(amount) : Math.abs(amount);
             const storedReason = type === 'contribution' ? 'Monatsbeitrag' : reason;
 
             const { error } = await supa.from('fines_ledger').insert([{
                 player_id:  detailPlayerId,
-                amount:     storedAmount,
+                amount:     Math.abs(amount),
                 type,
                 reason:     storedReason,
                 note:       note || null,
@@ -477,9 +493,60 @@
             document.getElementById('fine-note').value   = '';
 
             await loadLedger();
-            prefillDefaultAmount(); // e.g. payment mode: now offers the *new* open balance
-            const credit = _balance < -0.005;
-            showMsg(`Eintrag gespeichert! Neuer Saldo: ${credit ? '–' : ''}${formatEur(_balance)}${credit ? ' (Guthaben)' : ''}`, 'var(--green)');
+            prefillDefaultAmount();
+            showMsg(`Eintrag gespeichert! Neuer Saldo: ${formatSaldoText(_balance)}`, 'var(--green)');
+        }
+
+        // "11,20 €" for a debt, "–9,00 € (Guthaben)" for a credit
+        function formatSaldoText(balance) {
+            const credit = balance < -0.005;
+            return `${credit ? '–' : ''}${formatEur(balance)}${credit ? ' (Guthaben)' : ''}`;
+        }
+
+        // ── PAYMENT (admin only) ──
+        // Own sheet instead of a form option: the amount is typed fresh (cash
+        // is usually a round sum, unrelated to the odd open balance) — the
+        // open balance is shown only as a hint, never prefilled.
+        function openPaymentSheet() {
+            document.getElementById('payment-sheet-title').textContent = 'ZAHLUNG · ' + (detailPlayerName || '').toUpperCase();
+            document.getElementById('payment-sheet-open').textContent  =
+                _balance < -0.005 ? `Aktuelles Guthaben: ${formatEur(_balance)}` : `Aktuell offen: ${formatEur(_balance)}`;
+            document.getElementById('payment-amount').value = '';
+            document.getElementById('payment-note').value   = '';
+            document.getElementById('payment-msg').textContent = '';
+            openSheet('payment-sheet', 'payment-sheet-overlay');
+            setTimeout(() => document.getElementById('payment-amount').focus(), 350);
+        }
+
+        function closePaymentSheet() { closeSheet('payment-sheet', 'payment-sheet-overlay'); }
+
+        async function submitPayment() {
+            const msgEl  = document.getElementById('payment-msg');
+            const amount = parseFloat(document.getElementById('payment-amount').value);
+            const note   = document.getElementById('payment-note').value.trim();
+            if (!amount || amount <= 0) {
+                msgEl.textContent = 'Bitte einen gültigen Betrag eingeben.';
+                msgEl.style.color = 'var(--red)';
+                return;
+            }
+
+            const { error } = await supa.from('fines_ledger').insert([{
+                player_id:  detailPlayerId,
+                amount:     -Math.abs(amount),   // payments are stored negative
+                type:       'payment',
+                reason:     '',
+                note:       note || null,
+                created_by: currentUser.username
+            }]);
+            if (error) {
+                msgEl.textContent = 'Fehler: ' + error.message;
+                msgEl.style.color = 'var(--red)';
+                return;
+            }
+
+            closePaymentSheet();
+            await loadLedger();
+            showToast(`Zahlung ${formatEur(amount)} eingetragen · Neuer Saldo: ${formatSaldoText(_balance)}`, 'success');
         }
 
         // ── EXPORT CSV ──
@@ -625,13 +692,22 @@
 
         async function deleteCurrentEntry() {
             if (!_currentEntryId) return;
-            const ok = await showConfirm('Eintrag löschen', 'Diesen Eintrag wirklich dauerhaft löschen?');
+            const ok = await showConfirm('Eintrag löschen', 'Diesen Eintrag wirklich löschen?');
             if (!ok) return;
+            const removed = _entries.find(e => e.id === _currentEntryId);
             const { error } = await supa.from('fines_ledger').delete().eq('id', _currentEntryId);
             if (error) { showToast('Fehler: ' + error.message, 'error'); return; }
             closeEntrySheet();
-            showToast('Eintrag gelöscht.', 'success');
             await loadLedger();
+
+            // Re-insert the identical row (same id and timestamp) so it lands
+            // back exactly where it was in the ledger.
+            showUndoToast('Eintrag gelöscht.', async () => {
+                const { error: restoreError } = await supa.from('fines_ledger').insert([removed]);
+                if (restoreError) { showToast('Wiederherstellen fehlgeschlagen: ' + restoreError.message, 'error'); return; }
+                showToast('Eintrag wiederhergestellt.', 'success');
+                await loadLedger();
+            });
         }
 
         // ── INIT ──

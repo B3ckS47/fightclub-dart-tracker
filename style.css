@@ -2452,6 +2452,7 @@ body {
     letter-spacing: 0.5px;
 }
 
+
 .fines-amount--zero { color: var(--green); }
 .fines-amount--debt { color: var(--red); }
 
@@ -2511,6 +2512,15 @@ body {
 }
 
 .fines-add-row .select-field { flex: 1; }
+
+/* Opens the payment sheet — deliberately outlined, not filled, so it doesn't
+   compete with the primary "Hinzufügen" action right above it. */
+.fines-pay-open-btn {
+    background: var(--green-dim);
+    border: 1px solid rgba(41, 216, 124, 0.4);
+    color: var(--green);
+}
+.fines-pay-open-btn:hover { border-color: var(--green); }
 .fines-amount-input          { width: 130px; flex-shrink: 0; }
 
 /* ── FINES LEDGER TABLE ── */
@@ -4490,6 +4500,26 @@ body {
 .fc-toast--error    { border-left-color: var(--red);   }
 .fc-toast--success  { border-left-color: var(--green); }
 .fc-toast--info     { border-left-color: var(--accent);}
+
+/* Toast with an action button (showUndoToast) */
+.fc-toast--action {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    pointer-events: auto;
+}
+.fc-toast-action {
+    font-family: var(--font-display);
+    font-size: 0.8rem;
+    font-weight: 800;
+    letter-spacing: 1.5px;
+    padding: 6px 12px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--accent);
+    background: var(--accent-dim);
+    color: var(--accent);
+    cursor: pointer;
+}
 
 /* ── GLOBAL CONFIRM MODAL (ui-utils.js) ── */
 .fc-confirm-overlay {
