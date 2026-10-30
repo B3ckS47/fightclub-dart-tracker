@@ -3950,10 +3950,11 @@ body {
 }
 .appt-type-chip:hover { color: var(--text-primary); }
 .appt-type-chip--active {
-    background: var(--tb);
-    border-color: var(--tc);
-    color: var(--tc);
+    background: var(--tb, var(--bg-hover));
+    border-color: var(--tc, var(--text-secondary));
+    color: var(--tc, var(--text-primary));
 }
+.appt-type-chips--two { grid-template-columns: repeat(2, 1fr); }
 
 /* ── APPOINTMENT CARD ── */
 .appt-card {
@@ -4017,19 +4018,20 @@ body {
     padding-left: 2px;
 }
 
-.appt-card-header {
+/* Info line at the top of an expanded card: type · running · end time · place */
+.appt-info {
     display: flex;
+    flex-wrap: wrap;
+    align-items: center;
     justify-content: space-between;
-    align-items: flex-start;
-    gap: 12px;
-    margin-bottom: 14px;
+    gap: 6px 12px;
+    margin-bottom: 12px;
+    font-size: 0.8rem;
+    color: var(--text-muted);
 }
-
-.appt-left {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-}
+.appt-info-left  { display: flex; align-items: center; gap: 8px; }
+.appt-info-right { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px 12px; margin-left: auto; text-align: right; }
+.appt-info .appt-active-badge { margin-bottom: 0; }
 
 .appt-type-badge {
     display: inline-block;
@@ -4040,33 +4042,6 @@ body {
     padding: 3px 10px;
     border-radius: 20px;
     width: fit-content;
-}
-
-.appt-title {
-    font-family: var(--font-display);
-    font-size: 1.2rem;
-    font-weight: 700;
-    letter-spacing: 1px;
-    color: var(--text-primary);
-}
-
-.appt-date-block {
-    text-align: right;
-    flex-shrink: 0;
-}
-
-.appt-date {
-    font-family: var(--font-display);
-    font-size: 0.9rem;
-    font-weight: 600;
-    color: var(--text-secondary);
-    letter-spacing: 0.5px;
-}
-
-.appt-time {
-    font-size: 0.8rem;
-    color: var(--text-muted);
-    margin-top: 2px;
 }
 
 /* ── VOTE DISPLAY ── */
@@ -4197,42 +4172,6 @@ body {
 
 .vote-divider { display: none; }
 
-/* ── GUEST VOTE ROW ── */
-.guest-vote-row {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    margin-top: 8px;
-}
-
-.select-guest {
-    flex: 1;
-    padding: 9px 12px;
-    font-size: 0.85rem;
-}
-
-.btn-vote--guest {
-    flex-shrink: 0;
-    padding: 9px 16px;
-    border-radius: var(--radius-md);
-    border: 1px solid var(--border-light);
-    background: var(--bg-element);
-    color: var(--text-secondary);
-    font-family: var(--font-display);
-    font-size: 0.85rem;
-    font-weight: 700;
-    letter-spacing: 1px;
-    cursor: pointer;
-    transition: all 0.2s;
-    white-space: nowrap;
-}
-
-.btn-vote--guest:hover {
-    background: var(--bg-hover);
-    color: var(--text-primary);
-    border-color: var(--accent);
-}
-
 /* Guest name pill extras */
 .vote-name--guest {
     display: flex;
@@ -4256,16 +4195,63 @@ body {
 
 .vote-guest-remove:hover { opacity: 1; }
 
-/* ── VOTE BUTTONS ── */
+/* ── VOTE BUTTONS ──
+   Yes/No meet in the middle, exactly below the yes/no counts box. Tinted and
+   raised so they read as buttons, not as another display. */
 .appt-actions {
     display: flex;
-    gap: 10px;
+    gap: 0;
     margin-bottom: 10px;
 }
 
 .btn-vote {
     flex: 1;
-    padding: 10px;
+    padding: 13px 10px;
+    border: 1px solid var(--border-light);
+    background: var(--bg-hover);
+    color: var(--text-secondary);
+    font-family: var(--font-display);
+    font-size: 0.9rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    cursor: pointer;
+    box-shadow: 0 2px 0 rgba(0, 0, 0, 0.35);
+    transition: all 0.2s;
+}
+
+.btn-vote--yes {
+    border-radius: var(--radius-md) 0 0 var(--radius-md);
+    border-color: rgba(41, 216, 124, 0.4);
+    background: rgba(41, 216, 124, 0.1);
+    color: var(--green);
+}
+.btn-vote--no {
+    border-radius: 0 var(--radius-md) var(--radius-md) 0;
+    margin-left: -1px;
+    border-color: rgba(255, 68, 85, 0.4);
+    background: rgba(255, 68, 85, 0.1);
+    color: var(--red);
+}
+.btn-vote--yes:hover { background: rgba(41, 216, 124, 0.2); }
+.btn-vote--no:hover  { background: rgba(255, 68, 85, 0.2); }
+.btn-vote:active { transform: translateY(1px); box-shadow: none; }
+
+.btn-vote--active {
+    background: rgba(41, 216, 124, 0.3);
+    border-color: var(--green);
+}
+
+.btn-vote--active-no {
+    background: rgba(255, 68, 85, 0.3);
+    border-color: var(--red);
+}
+
+/* Full-width secondary actions inside an expanded card (add guest, edit) */
+.appt-wide-btn {
+    display: block;
+    width: 100%;
+    margin-top: 10px;
+    padding: 13px 10px;
     border-radius: var(--radius-md);
     border: 1px solid var(--border);
     background: var(--bg-card);
@@ -4277,26 +4263,40 @@ body {
     cursor: pointer;
     transition: all 0.2s;
 }
+.appt-wide-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
 
-.btn-vote:hover { background: var(--bg-element); }
+/* Delete / end live at the bottom of the edit sheet */
+.appt-edit-actions { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
 
-.btn-vote--active {
-    background: rgba(41, 216, 124, 0.15);
-    border-color: var(--green);
-    color: var(--green);
-}
-
-.btn-vote--active-no {
-    background: rgba(255, 68, 85, 0.15);
-    border-color: var(--red);
-    color: var(--red);
-}
-
-/* ── ADMIN ACTIONS ── */
-.appt-admin-actions {
+/* Guest sheet: tap names to select, then add them all at once */
+.guest-pick-list {
     display: flex;
-    justify-content: flex-end;
-    margin-top: 6px;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 42vh;
+    overflow-y: auto;
+}
+.guest-pick {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    background: var(--bg-element);
+    color: var(--text-primary);
+    font-family: var(--font-body);
+    font-size: 0.95rem;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.guest-pick-name  { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.guest-pick-check { width: 20px; text-align: center; color: var(--green); font-weight: 800; }
+.guest-pick--on {
+    background: var(--green-dim);
+    border-color: var(--green);
 }
 
 /* ── PAST SECTION HEADER ── */
@@ -4317,12 +4317,6 @@ body {
     color: var(--text-muted);
 }
 
-/* ── APPOINTMENT PLACE ── */
-.appt-place {
-    font-size: 0.8rem;
-    color: var(--text-muted);
-}
-
 /* ── APPOINTMENT ROW (collapsed card) ──
    One line: type · title · day/time · yes/no counts · my vote · chevron.
    Tapping expands the body (votes, buttons); the avatar stack inside expands
@@ -4334,6 +4328,22 @@ body {
     min-height: 34px;
     cursor: pointer;
     user-select: none;
+}
+
+/* Two groups so a long title can push the right group to its own line */
+.appt-row-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.appt-row-meta {
+    flex-shrink: 0;
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
 }
 
 .appt-row-type {
@@ -4362,7 +4372,18 @@ body {
     text-overflow: ellipsis;
     white-space: nowrap;
 }
-.appt-card--open .appt-row-title { white-space: normal; overflow: visible; }
+/* Open card: show the full title, never squeezed or broken mid-word. The title
+   keeps its natural width; if the right group (day, counts, marker, chevron)
+   no longer fits beside it, the whole group wraps to a second line, right-
+   aligned. Hyphenation/overflow-wrap only matter for a title wider than the row. */
+.appt-card--open .appt-row { flex-wrap: wrap; }
+.appt-card--open .appt-row-main { flex: 1 0 auto; max-width: 100%; }
+.appt-card--open .appt-row-title {
+    white-space: normal;
+    overflow: visible;
+    hyphens: auto;
+    overflow-wrap: anywhere;
+}
 
 .appt-row-when {
     flex-shrink: 0;
@@ -4444,7 +4465,7 @@ body {
 .appt-more-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
 
 @media (max-width: 480px) {
-    .appt-row { gap: 8px; }
+    .appt-row, .appt-row-main, .appt-row-meta { gap: 8px; }
     /* Type shrinks to a colored dot so title, day and counts fit on one line */
     .appt-row-type {
         min-width: 0;

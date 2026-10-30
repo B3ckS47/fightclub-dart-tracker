@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="de">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -25,12 +25,12 @@
     <div id="appt-sheet" class="entry-sheet" style="display:none;">
         <div class="entry-sheet-handle"></div>
         <div class="entry-sheet-content">
-            <h2 class="card-title" style="margin-bottom:12px;">NEUER TERMIN</h2>
+            <h2 class="card-title" id="appt-sheet-title" style="margin-bottom:12px;">NEUER TERMIN</h2>
             <div class="divider" style="margin-bottom:16px;"></div>
             <div class="schedule-form">
                 <input type="text" id="appt-title" placeholder="Bezeichnung" class="input-field">
                 <div id="appt-type-chips" class="appt-type-chips"></div>
-                <input type="date" id="appt-date" class="input-field">
+                <input type="date" id="appt-date" class="input-field" onchange="updateRepeatHint()">
                 <div class="schedule-time-row">
                     <div class="schedule-time-group">
                         <label class="schedule-time-label">Startzeit</label>
@@ -42,9 +42,43 @@
                     </div>
                 </div>
                 <input type="text" id="appt-place" placeholder="Ort" class="input-field">
+                <!-- Series: only when creating, not when editing -->
+                <div id="appt-repeat-wrap" class="schedule-time-group">
+                    <label class="schedule-time-label">Wiederholen</label>
+                    <div id="appt-repeat-chips" class="appt-type-chips appt-type-chips--two"></div>
+                    <div id="appt-repeat-count-wrap" style="display:none;">
+                        <label class="schedule-time-label" for="appt-repeat-count" style="display:block; margin:8px 0 4px;">Anzahl Termine (mit dem ersten)</label>
+                        <input type="number" id="appt-repeat-count" class="input-field" value="12" min="2" max="52" inputmode="numeric" oninput="updateRepeatHint()" style="width:100%;">
+                        <p id="appt-repeat-hint" class="muted-text" style="margin-top:6px; font-size:0.8rem;"></p>
+                    </div>
+                </div>
                 <p id="schedule-msg" class="settings-msg"></p>
-                <button onclick="createAppointment()" class="btn btn-accent btn-full">TERMIN ANLEGEN</button>
+                <button onclick="saveAppointment()" id="appt-submit-btn" class="btn btn-accent btn-full">TERMIN ANLEGEN</button>
                 <button onclick="closeApptSheet()" class="btn btn-full" style="background:var(--bg-element); color:var(--text-secondary);">ABBRECHEN</button>
+                <!-- Edit mode only -->
+                <div id="appt-edit-actions" class="appt-edit-actions" style="display:none;">
+                    <div class="divider"></div>
+                    <button id="appt-end-btn" onclick="endAppointmentNow(_editApptId)" class="btn btn-accent btn-full" style="display:none;">⏹ TERMIN JETZT BEENDEN</button>
+                    <button onclick="deleteAppointment(_editApptId)" class="btn btn-danger-outline btn-full">TERMIN LÖSCHEN</button>
+                    <p id="appt-edit-note" class="muted-text" style="font-size:0.8rem; text-align:center;"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Guest bottom sheet: add one or more guests to an appointment -->
+    <div id="guest-sheet-overlay" class="entry-sheet-overlay" onclick="closeGuestSheet()" style="display:none;"></div>
+    <div id="guest-sheet" class="entry-sheet" style="display:none;">
+        <div class="entry-sheet-handle"></div>
+        <div class="entry-sheet-content">
+            <h2 class="card-title" style="margin-bottom:6px;">GÄSTE HINZUFÜGEN</h2>
+            <p class="muted-text" id="guest-sheet-sub" style="margin-bottom:12px;"></p>
+            <div class="divider" style="margin-bottom:12px;"></div>
+            <div class="schedule-form">
+                <input type="text" id="guest-search" class="input-field" placeholder="Gast suchen…" autocomplete="off" oninput="renderGuestList()">
+                <div id="guest-sheet-list" class="guest-pick-list"></div>
+                <button id="guest-submit-btn" onclick="submitGuests()" class="btn btn-accent btn-full" disabled>GAST AUSWÄHLEN</button>
+                <button onclick="closeGuestSheet()" class="btn btn-full" style="background:var(--bg-element); color:var(--text-secondary);">ABBRECHEN</button>
             </div>
         </div>
     </div>

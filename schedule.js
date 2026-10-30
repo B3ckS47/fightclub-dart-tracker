@@ -63,13 +63,53 @@ document.addEventListener('DOMContentLoaded', () => {
     if (currentUser && currentUser.role === 'admin') {
         document.getElementById('admin-create-section').style.display = 'block';
         renderTypeChips();
+        renderRepeatChips();
     }
     renderFilterChips();
     loadAppointments();
 });
 
-// ── NEW APPOINTMENT SHEET ──
-let _newApptType = 'Training';
+// ── NEW / EDIT APPOINTMENT SHEET ──
+let _newApptType  = 'Training';
+let _editApptId   = null;    // null = creating, otherwise the appointment being edited
+let _repeatWeekly = false;
+const REPEAT_MAX  = 52;
+
+const pad2          = n => String(n).padStart(2, '0');
+const localDateStr  = d => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+const localTimeStr  = iso => { const d = new Date(iso); return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`; };
+
+function renderRepeatChips() {
+    const chip = (weekly, label) => `
+        <button type="button" class="appt-type-chip${weekly === _repeatWeekly ? ' appt-type-chip--active' : ''}"
+            onclick="setRepeat(${weekly})">${label}</button>`;
+    document.getElementById('appt-repeat-chips').innerHTML = chip(false, 'EINMALIG') + chip(true, 'WÖCHENTLICH');
+    document.getElementById('appt-repeat-count-wrap').style.display = _repeatWeekly ? 'block' : 'none';
+    updateRepeatHint();
+}
+
+function setRepeat(weekly) {
+    _repeatWeekly = weekly;
+    renderRepeatChips();
+}
+
+// Dates of a weekly series, computed on the calendar (not +7*24h) so summer/winter time can't shift them
+function seriesDates(dateVal, count) {
+    const [y, m, d] = dateVal.split('-').map(Number);
+    return Array.from({ length: count }, (_, i) => localDateStr(new Date(y, m - 1, d + 7 * i)));
+}
+
+function updateRepeatHint() {
+    const hint = document.getElementById('appt-repeat-hint');
+    if (!_repeatWeekly) { hint.textContent = ''; return; }
+    const dateVal = document.getElementById('appt-date').value;
+    const count   = parseInt(document.getElementById('appt-repeat-count').value, 10);
+    if (!dateVal)                                  { hint.textContent = 'Bitte oben ein Datum für den ersten Termin wählen.'; return; }
+    if (!(count >= 2 && count <= REPEAT_MAX))      { hint.textContent = `Anzahl zwischen 2 und ${REPEAT_MAX}.`; return; }
+    const dates = seriesDates(dateVal, count);
+    const fmt   = ds => new Date(ds + 'T12:00').toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' });
+    hint.textContent = `${count} Termine: ${fmt(dates[0])} bis ${fmt(dates[count - 1])}`;
+}
 
 function renderTypeChips() {
     document.getElementById('appt-type-chips').innerHTML = Object.entries(TYPE_COLORS).map(([key, t]) => `
@@ -82,7 +122,41 @@ function selectApptType(type) {
     renderTypeChips();
 }
 
-function openApptSheet() {
+// id given = edit that appointment (prefilled, no series), otherwise a blank new one
+function openApptSheet(id) {
+    const appt = id ? [..._upcomingRaw, ..._pastRaw].find(a => a.id === id) : null;
+    _editApptId = appt ? appt.id : null;
+
+    const set = (field, value) => { document.getElementById(field).value = value; };
+    if (appt) {
+        _newApptType = appt.type;
+        set('appt-title',      appt.title);
+        // Date-only appointments are stored as UTC midnight, timed ones as a real instant
+        set('appt-date',       appt.start_time ? localDateStr(new Date(appt.start_time)) : appt.date.slice(0, 10));
+        set('appt-start-time', appt.start_time ? localTimeStr(appt.start_time) : '');
+        set('appt-end-time',   appt.end_time   ? localTimeStr(appt.end_time)   : '');
+        set('appt-place',      appt.place || '');
+    } else {
+        _newApptType = 'Training';
+        ['appt-title', 'appt-date', 'appt-start-time', 'appt-end-time', 'appt-place'].forEach(f => set(f, ''));
+    }
+    _repeatWeekly = false;
+    document.getElementById('appt-sheet-title').textContent = appt ? 'TERMIN BEARBEITEN' : 'NEUER TERMIN';
+    document.getElementById('appt-submit-btn').textContent  = appt ? 'SPEICHERN' : 'TERMIN ANLEGEN';
+    document.getElementById('appt-repeat-wrap').style.display = appt ? 'none' : '';
+    document.getElementById('schedule-msg').textContent = '';
+
+    // Delete / end early live in the edit sheet
+    document.getElementById('appt-edit-actions').style.display = appt ? 'block' : 'none';
+    if (appt) {
+        document.getElementById('appt-end-btn').style.display = getApptStatus(appt) === 'active' ? 'block' : 'none';
+        document.getElementById('appt-edit-note').textContent = appt.fines_processed_at
+            ? 'Dieser Termin ist beendet und abgerechnet. Änderungen wirken sich nicht mehr auf die Durchschnittsstrafe aus.'
+            : '';
+    }
+    renderTypeChips();
+    renderRepeatChips();
+
     openSheet('appt-sheet', 'appt-sheet-overlay');
     setTimeout(() => document.getElementById('appt-title').focus(), 350);
 }
@@ -275,17 +349,15 @@ function renderAppointments(appointments, allVotes, containerId, isPast) {
     const visible = appointments.slice(0, limit);
     const rest    = appointments.length - visible.length;
 
-    const guests = allPlayers.filter(p => !memberPlayerIds.has(p.id));
-
     container.innerHTML = visible.map(appt => {
         const isOpen = _apptOpen.has(appt.id) ? _apptOpen.get(appt.id) : defaultOpen.has(appt.id);
-        return appointmentCardHtml(appt, allVotes, guests, isPast, isOpen);
+        return appointmentCardHtml(appt, allVotes, isPast, isOpen);
     }).join('') + (rest > 0
         ? `<button class="appt-more-btn" onclick="showMoreAppointments('${kind}')">Weitere Termine anzeigen (${rest})</button>`
         : '');
 }
 
-function appointmentCardHtml(appt, allVotes, guests, isPast, isOpen) {
+function appointmentCardHtml(appt, allVotes, isPast, isOpen) {
     const votes     = allVotes.filter(v => v.appointment_id === appt.id);
     const attending = votes.filter(v => v.vote === 'yes');
     const declining = votes.filter(v => v.vote === 'no');
@@ -297,16 +369,9 @@ function appointmentCardHtml(appt, allVotes, guests, isPast, isOpen) {
     const isVoteLocked = isActive || isPast;
     const canVote      = !isVoteLocked && currentUser && (currentUser.role === 'admin' || currentUser.role === 'member');
 
-    // Full date + time range for the expanded view
-    const dateObj = new Date(appt.date);
-    const dateStr = dateObj.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' });
-
-    // Appointments created without a time have no meaningful clock time to show
-    let timeStr = '';
-    if (appt.start_time) {
-        timeStr = fmtClock(appt.start_time) + ' Uhr';
-        if (appt.end_time) timeStr += ' – ' + fmtClock(appt.end_time) + ' Uhr';
-    }
+    // Day and start time are already in the collapsed row — the expanded card
+    // only adds what the row doesn't show: the end time (and place, below)
+    const endStr = appt.end_time ? fmtClock(appt.end_time) : '';
 
     const activeBadge = isActive ? `<span class="appt-active-badge">● LÄUFT</span>` : '';
 
@@ -352,9 +417,6 @@ function appointmentCardHtml(appt, allVotes, guests, isPast, isOpen) {
         finesSummary += `<div class="appt-vote-locked">⏳ Durchschnittsstrafe für Abwesende folgt kurz nach ${at} Uhr</div>`;
     }
 
-    const guestVotedIds   = new Set(votes.filter(v => v.is_guest).map(v => v.user_id));
-    const availableGuests = guests.filter(g => !guestVotedIds.has(g.id));
-
     // One vote column (yes / no) with its avatar stack and expandable name list
     const voteColumn = (kind, list, icon) => {
         const key       = `${appt.id}-${kind}`;
@@ -388,31 +450,34 @@ function appointmentCardHtml(appt, allVotes, guests, isPast, isOpen) {
     return `
 <div class="appt-card ${isPast ? 'appt-card--past' : ''} ${isActive ? 'appt-card--active' : ''} ${isOpen ? 'appt-card--open' : ''} ${needsVote ? 'appt-card--unvoted' : ''}" id="appt-${appt.id}">
     <div class="appt-row" onclick="toggleAppt('${appt.id}')">
-        <span class="appt-row-type" style="--tb:${typeStyle.bg};--tc:${typeStyle.color};"><span class="appt-row-type-label">${typeStyle.label}</span></span>
-        <span class="appt-row-title">${escHtml(appt.title)}</span>
-        <span class="appt-row-when">
-            <span class="appt-row-day">${fmtShortDay(appt)}</span>
-            ${appt.start_time ? `<span class="appt-row-time">${fmtClock(appt.start_time)}</span>` : ''}
+        <span class="appt-row-main">
+            <span class="appt-row-type" style="--tb:${typeStyle.bg};--tc:${typeStyle.color};"><span class="appt-row-type-label">${typeStyle.label}</span></span>
+            <span class="appt-row-title">${escHtml(appt.title)}</span>
         </span>
-        <span class="appt-row-counts">
-            <span class="appt-row-count appt-row-count--yes">✅ ${attending.length}</span>
-            <span class="appt-row-count appt-row-count--no">❌ ${declining.length}</span>
+        <span class="appt-row-meta">
+            <span class="appt-row-when">
+                <span class="appt-row-day">${fmtShortDay(appt)}</span>
+                ${appt.start_time ? `<span class="appt-row-time">${fmtClock(appt.start_time)}</span>` : ''}
+            </span>
+            <span class="appt-row-counts">
+                <span class="appt-row-count appt-row-count--yes">✅ ${attending.length}</span>
+                <span class="appt-row-count appt-row-count--no">❌ ${declining.length}</span>
+            </span>
+            ${meMarker}
+            <span class="appt-chevron">▶</span>
         </span>
-        ${meMarker}
-        <span class="appt-chevron">▶</span>
     </div>
 
     <div class="appt-body">
-        <div class="appt-card-header">
-            <div class="appt-left">
+        <div class="appt-info">
+            <span class="appt-info-left">
                 <span class="appt-type-badge" style="background:${typeStyle.bg};color:${typeStyle.color};">${typeStyle.label}</span>
                 ${activeBadge}
-            </div>
-            <div class="appt-date-block">
-                <div class="appt-date">${dateStr}</div>
-                ${timeStr ? `<div class="appt-time">${timeStr}</div>` : ''}
-                ${appt.place ? `<div class="appt-place">📍 ${escHtml(appt.place)}</div>` : ''}
-            </div>
+            </span>
+            <span class="appt-info-right">
+                ${endStr ? `<span>bis ${endStr} Uhr</span>` : ''}
+                ${appt.place ? `<span>📍 ${escHtml(appt.place)}</span>` : ''}
+            </span>
         </div>
 
         <div class="appt-votes">
@@ -431,25 +496,14 @@ function appointmentCardHtml(appt, allVotes, guests, isPast, isOpen) {
                 ❌ Absage
             </button>
         </div>
-        ${availableGuests.length > 0 ? `
-        <div class="guest-vote-row">
-            <select id="guest-select-${appt.id}" class="select-field select-guest">
-                <option value="">👤 Gast auswählen…</option>
-                ${availableGuests.map(g => `<option value="${g.id}">${escHtml(g.name)}</option>`).join('')}
-            </select>
-            <button onclick="addGuestVote('${appt.id}')" class="btn-vote btn-vote--guest">
-                + Gast
-            </button>
-        </div>` : ''}` : isVoteLocked && !isPast ? `
+        <button class="appt-wide-btn" onclick="openGuestSheet('${appt.id}')">＋ GAST HINZUFÜGEN</button>` : isVoteLocked && !isPast ? `
         <div class="appt-vote-locked">🔒 Abstimmung geschlossen – Termin läuft</div>` : ''}
 
         ${finesSummary}
 
-        ${currentUser && currentUser.role === 'admin' ? `
-        <div class="appt-admin-actions">
-            ${isActive ? `<button onclick="endAppointmentNow('${appt.id}')" class="btn btn-accent btn-sm">⏹ Termin beenden</button>` : ''}
-            <button onclick="deleteAppointment('${appt.id}')" class="btn btn-danger-outline btn-sm">Löschen</button>
-        </div>` : ''}
+        ${currentUser && currentUser.role === 'admin'
+            ? `<button class="appt-wide-btn" onclick="openApptSheet('${appt.id}')">BEARBEITEN</button>`
+            : ''}
     </div>
 </div>`;
 }
@@ -478,24 +532,69 @@ async function castVote(appointmentId, vote) {
     setLocalVote(row);
 }
 
-// ── ADD GUEST VOTE ──
-async function addGuestVote(appointmentId) {
-    if (!currentUser) return;
-    const select  = document.getElementById(`guest-select-${appointmentId}`);
-    const guestId = select ? select.value : '';
-    if (!guestId) return;
-    const guest = allPlayers.find(p => p.id === guestId);
-    if (!guest) return;
-    const row = {
-        appointment_id: appointmentId,
-        user_id:        guest.id,
-        username:       guest.name,
-        vote:           'yes',
-        is_guest:       true
-    };
-    const { error } = await supa.from('appointment_votes').upsert(row, { onConflict: 'appointment_id,user_id' });
+// ── GUEST SHEET: add one or more guests to an appointment ──
+let _guestApptId = null;
+const _guestSel  = new Set();
+
+// Non-member players not yet entered as a guest for this appointment
+function availableGuestsFor(apptId) {
+    const taken = new Set(_allVotesRaw.filter(v => v.appointment_id === apptId && v.is_guest).map(v => v.user_id));
+    return allPlayers.filter(p => !memberPlayerIds.has(p.id) && !taken.has(p.id));
+}
+
+function openGuestSheet(apptId) {
+    const appt = [..._upcomingRaw, ..._pastRaw].find(a => a.id === apptId);
+    if (!appt) return;
+    _guestApptId = apptId;
+    _guestSel.clear();
+    document.getElementById('guest-search').value = '';
+    document.getElementById('guest-sheet-sub').textContent = `${appt.title} · ${fmtShortDay(appt)}`;
+    renderGuestList();
+    openSheet('guest-sheet', 'guest-sheet-overlay');
+}
+
+function closeGuestSheet() {
+    closeSheet('guest-sheet', 'guest-sheet-overlay');
+}
+
+function renderGuestList() {
+    const all     = availableGuestsFor(_guestApptId);
+    const query   = document.getElementById('guest-search').value.trim().toLowerCase();
+    const guests  = query ? all.filter(g => g.name.toLowerCase().includes(query)) : all;
+    document.getElementById('guest-sheet-list').innerHTML = guests.length === 0
+        ? `<p class="muted-text" style="text-align:center; padding:12px 0;">${all.length === 0 ? 'Alle bekannten Gäste sind bereits eingetragen.' : 'Kein Gast gefunden.'}</p>`
+        : guests.map(g => `
+            <button type="button" class="guest-pick${_guestSel.has(g.id) ? ' guest-pick--on' : ''}" onclick="toggleGuestPick('${g.id}')">
+                ${voteAvatarHtml({ is_guest: true, user_id: g.id, username: g.name })}
+                <span class="guest-pick-name">${escHtml(g.name)}</span>
+                <span class="guest-pick-check">${_guestSel.has(g.id) ? '✓' : ''}</span>
+            </button>`).join('');
+
+    const n   = _guestSel.size;
+    const btn = document.getElementById('guest-submit-btn');
+    btn.disabled    = n === 0;
+    btn.textContent = n === 0 ? 'GAST AUSWÄHLEN' : n === 1 ? '1 GAST HINZUFÜGEN' : `${n} GÄSTE HINZUFÜGEN`;
+}
+
+function toggleGuestPick(id) {
+    if (_guestSel.has(id)) _guestSel.delete(id); else _guestSel.add(id);
+    renderGuestList();
+}
+
+async function submitGuests() {
+    if (!currentUser || _guestSel.size === 0) return;
+    const rows = [..._guestSel].map(id => {
+        const g = allPlayers.find(p => p.id === id);
+        return { appointment_id: _guestApptId, user_id: id, username: g ? g.name : '?', vote: 'yes', is_guest: true };
+    });
+    const { error } = await supa.from('appointment_votes').upsert(rows, { onConflict: 'appointment_id,user_id' });
     if (error) { showToast('Fehler: ' + error.message, 'error'); return; }
-    setLocalVote(row);
+
+    _allVotesRaw = _allVotesRaw.filter(v => !(v.appointment_id === _guestApptId && rows.some(r => r.user_id === v.user_id)));
+    _allVotesRaw.push(...rows);
+    closeGuestSheet();
+    renderAll();
+    showToast(rows.length === 1 ? 'Gast hinzugefügt.' : `${rows.length} Gäste hinzugefügt.`, 'success');
 }
 
 // ── REMOVE GUEST VOTE ──
@@ -511,8 +610,8 @@ async function removeGuestVote(appointmentId, guestId) {
     renderAll();
 }
 
-// ── CREATE APPOINTMENT ──
-async function createAppointment() {
+// ── CREATE / UPDATE APPOINTMENT ──
+async function saveAppointment() {
     const title     = document.getElementById('appt-title').value.trim();
     const type      = _newApptType;
     const dateVal   = document.getElementById('appt-date').value;
@@ -531,31 +630,45 @@ async function createAppointment() {
     if (endTime && !startTime) return fail('Bitte Startzeit angeben, wenn eine Endzeit gesetzt ist.');
     if (endTime && endTime <= startTime) return fail('Die Endzeit muss nach der Startzeit liegen.');
 
-    const startISO = startTime ? new Date(`${dateVal}T${startTime}`).toISOString() : null;
-    const endISO   = endTime   ? new Date(`${dateVal}T${endTime}`).toISOString()   : null;
+    // The time columns of one appointment on a given day (YYYY-MM-DD)
+    const fieldsFor = ds => {
+        const startISO = startTime ? new Date(`${ds}T${startTime}`).toISOString() : null;
+        const endISO   = endTime   ? new Date(`${ds}T${endTime}`).toISOString()   : null;
+        return {
+            title,
+            type,
+            date:       startISO || new Date(ds).toISOString(),
+            start_time: startISO,
+            end_time:   endISO,
+            place:      place || null
+        };
+    };
 
-    const { error } = await supa.from('appointments').insert([{
-        title,
-        type,
-        date:       startISO || new Date(dateVal).toISOString(),
-        start_time: startISO,
-        end_time:   endISO,
-        place:      place || null,
+    if (_editApptId) {
+        const { error } = await supa.from('appointments').update(fieldsFor(dateVal)).eq('id', _editApptId);
+        if (error) return fail('Fehler: ' + error.message);
+        closeApptSheet();
+        showToast('Termin gespeichert.', 'success');
+        loadAppointments();
+        return;
+    }
+
+    let count = 1;
+    if (_repeatWeekly) {
+        count = parseInt(document.getElementById('appt-repeat-count').value, 10);
+        if (!(count >= 2 && count <= REPEAT_MAX)) return fail(`Anzahl der Termine: 2 bis ${REPEAT_MAX}.`);
+    }
+
+    const rows = seriesDates(dateVal, count).map(ds => ({
+        ...fieldsFor(ds),
         status:     'upcoming',
         created_by: currentUser.username
-    }]);
-
+    }));
+    const { error } = await supa.from('appointments').insert(rows);
     if (error) return fail('Fehler: ' + error.message);
 
-    document.getElementById('appt-title').value      = '';
-    document.getElementById('appt-date').value       = '';
-    document.getElementById('appt-start-time').value = '';
-    document.getElementById('appt-end-time').value   = '';
-    document.getElementById('appt-place').value      = '';
-    _newApptType = 'Training';
-    renderTypeChips();
     closeApptSheet();
-    showToast('Termin wurde hinzugefügt.', 'success');
+    showToast(count > 1 ? `${count} Termine angelegt.` : 'Termin wurde hinzugefügt.', 'success');
     loadAppointments();
 }
 
@@ -570,6 +683,7 @@ async function endAppointmentNow(id) {
 
     if (error) { showToast('Fehler: ' + error.message, 'error'); return; }
 
+    closeApptSheet();
     showToast('Termin beendet.', 'success');
     loadAppointments();
 }
@@ -579,8 +693,10 @@ async function deleteAppointment(id) {
     const ok = await showConfirm('Termin löschen', 'Diesen Termin wirklich löschen?');
     if (!ok) return;
     const { error } = await supa.from('appointments').delete().eq('id', id);
-    if (error) showToast('Fehler: ' + error.message, 'error');
-    else loadAppointments();
+    if (error) { showToast('Fehler: ' + error.message, 'error'); return; }
+    closeApptSheet();
+    showToast('Termin gelöscht.', 'success');
+    loadAppointments();
 }
 
 // ── TOGGLE PAST SECTION ──
