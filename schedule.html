@@ -13,35 +13,23 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <script src="config.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="ui-utils.js"></script>
     <script>document.documentElement.setAttribute("data-theme",localStorage.getItem("fc47_theme")||"dark");</script>
 </head>
 <body>
 
-    <nav id="nav-schedule">
-        <div class="nav-inner nav-inner--default">
-            <a href="index.html" class="nav-brand" style="text-decoration:none;color:inherit;">FLIGHTCLUB</a>
-            <div class="nav-links">
-                <a href="index.html" class="nav-btn">« Menü</a>
-            </div>
-        </div>
-    </nav>
-
-    <div class="app-wrapper">
-
-        <!-- ADMIN: Create Appointment -->
-        <div class="card" id="admin-create-section" style="display:none;">
-            <h2 class="card-title">NEUER TERMIN</h2>
-            <div class="divider"></div>
+    <!-- New appointment bottom sheet (admin) -->
+    <div id="appt-sheet-overlay" class="entry-sheet-overlay" onclick="closeApptSheet()" style="display:none;"></div>
+    <div id="appt-sheet" class="entry-sheet" style="display:none;">
+        <div class="entry-sheet-handle"></div>
+        <div class="entry-sheet-content">
+            <h2 class="card-title" style="margin-bottom:12px;">NEUER TERMIN</h2>
+            <div class="divider" style="margin-bottom:16px;"></div>
             <div class="schedule-form">
                 <input type="text" id="appt-title" placeholder="Bezeichnung" class="input-field">
-                <select id="appt-type" class="select-field">
-                    <option value="Training">Training</option>
-                    <option value="Tournament">Turnier</option>
-                    <option value="Event">Event</option>
-                    <option value="Gameday">Spieltag</option>
-                </select>
+                <div id="appt-type-chips" class="appt-type-chips"></div>
                 <input type="date" id="appt-date" class="input-field">
                 <div class="schedule-time-row">
                     <div class="schedule-time-group">
@@ -54,26 +42,34 @@
                     </div>
                 </div>
                 <input type="text" id="appt-place" placeholder="Ort" class="input-field">
-                <button onclick="createAppointment()" class="btn btn-accent">HINZUFÜGEN</button>
+                <p id="schedule-msg" class="settings-msg"></p>
+                <button onclick="createAppointment()" class="btn btn-accent btn-full">TERMIN ANLEGEN</button>
+                <button onclick="closeApptSheet()" class="btn btn-full" style="background:var(--bg-element); color:var(--text-secondary);">ABBRECHEN</button>
             </div>
-            <p id="schedule-msg" class="admin-msg"></p>
         </div>
+    </div>
 
-        <!-- FILTER -->
-        <div class="schedule-filter-wrap">
-            <select class="select-field" onchange="setScheduleFilter(this.value)">
-                <option value="">Alle Termine</option>
-                <option value="Training">Training</option>
-                <option value="Tournament">Turnier</option>
-                <option value="Gameday">Spieltag</option>
-                <option value="Event">Event</option>
-            </select>
+    <nav id="nav-schedule">
+        <div class="nav-inner nav-inner--default">
+            <a href="index.html" class="nav-brand" style="text-decoration:none;color:inherit;">FLIGHTCLUB</a>
+            <div class="nav-links">
+                <a href="index.html" class="nav-btn">« Menü</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="app-wrapper">
+
+        <!-- ADMIN: Create Appointment (opens the bottom sheet) -->
+        <div id="admin-create-section" class="schedule-new-wrap" style="display:none;">
+            <button onclick="openApptSheet()" class="btn btn-accent btn-full">＋ NEUER TERMIN</button>
         </div>
 
         <!-- UPCOMING -->
         <div class="card">
             <h2 class="card-title">TERMINE</h2>
             <div class="divider"></div>
+            <div id="schedule-filter" class="appt-type-chips appt-type-chips--filter"></div>
             <div id="upcoming-list">
                 <p class="muted-text">Lade Termine...</p>
             </div>
