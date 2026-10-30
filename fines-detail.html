@@ -172,6 +172,178 @@
             document.getElementById('fines-detail-layout').classList.toggle('no-add-card', !isAdmin);
         }
 
+        // ── LEDGER VIEW ──
+        // One training night can produce 80+ tiny fines ("26", "Schnapszahl"…),
+        // so the ledger is condensed instead of listed row by row:
+        //  • fines of one day fold into a single expandable row once there are
+        //    GROUP_MIN or more — payments and contributions always stay their
+        //    own highlighted rows, never folded away,
+        //  • by default only the "open" stretch is shown: everything since the
+        //    balance was last settled (≤ 0), but never less than the last
+        //    RECENT_MIN_DAYS,
+        //  • everything older sits behind one button, folded per month.
+        const GROUP_MIN       = 3;
+        const RECENT_MIN_DAYS = 28;
+        let _uid = 0;
+
+        function startOfDay(d) { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
+        function dayKey(iso)   { const d = new Date(iso); return d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate(); }
+        function monthKey(iso) { const d = new Date(iso); return d.getFullYear() + '-' + d.getMonth(); }
+        function fmtDate(iso)  { return new Date(iso).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' }); }
+
+        // First entry after the last moment the running balance was ≤ 0, i.e.
+        // the start of the current open stretch (null = account is settled now).
+        function openStretchStart(entriesDesc) {
+            const asc = [...entriesDesc].reverse();
+            let run = 0, lastSettled = -1;
+            asc.forEach((e, i) => { run += parseFloat(e.amount); if (run <= 0.005) lastSettled = i; });
+            return lastSettled + 1 < asc.length ? new Date(asc[lastSettled + 1].created_at) : null;
+        }
+
+        function toggleFold(id) {
+            const el   = document.getElementById(id);
+            const open = getComputedStyle(el).display === 'none';
+            el.style.display = open ? 'flex' : 'none';
+            const chev = document.getElementById(id + '-chev');
+            if (chev) chev.textContent = open ? '▾' : '▸';
+        }
+
+        // isChild = a row inside an expanded day group: the day and type are
+        // already stated by the group header, so it shows the time of day instead.
+        function renderEntryRow(e, apptTitleMap, isChild) {
+            const meta    = typeMeta(e.type);
+            const dateStr = fmtDate(e.created_at);
+            const firstCol = isChild
+                ? new Date(e.created_at).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
+                : dateStr;
+
+            // Resolve note: replace appt:{uuid} with appointment title, hide otherwise
+            let noteDisplay = '';
+            if (e.note && e.note.startsWith('appt:')) {
+                const apptId = e.note.replace('appt:', '');
+                noteDisplay  = apptTitleMap[apptId] ? `(${apptTitleMap[apptId]})` : '';
+            } else if (e.note) {
+                noteDisplay = e.note;
+            }
+
+            const reason = [e.reason, noteDisplay].filter(Boolean).join(' · ') || '–';
+            const clickAttr = isAdmin
+                ? `onclick="openEntrySheet('${e.id}','${escHtml(e.type)}','${escHtml(e.reason||'')}','${escHtml(noteDisplay)}',${e.amount},'${escHtml(e.created_by||'')}','${escHtml(dateStr)}')"`
+                : '';
+            const cls = ['fines-table-row',
+                isAdmin ? 'fines-table-row--tappable' : '',
+                e.type === 'payment' ? 'fines-table-row--payment' : '',
+                e.type === 'contribution' ? 'fines-table-row--contribution' : '',
+                isChild ? 'fines-table-row--child' : ''].filter(Boolean).join(' ');
+            return `
+<div class="${cls}" ${clickAttr}>
+    <span class="fines-col-date">${firstCol}</span>
+    <span class="fines-col-type ${meta.css}">${meta.label}</span>
+    <span class="fines-col-reason">${escHtml(reason)}</span>
+    <span class="fines-col-by">${escHtml(e.created_by)}</span>
+    <span class="fines-col-amount ${meta.debit ? 'fines-amount--debt' : 'fines-amount--zero'}">${meta.debit ? '+' : '–'}${formatEur(Math.abs(e.amount))}</span>
+</div>`;
+        }
+
+        // Several fines of one day → one summary row that expands to the single rows.
+        function renderFineGroup(fines, apptTitleMap) {
+            const id     = 'fold-' + (++_uid);
+            const total  = fines.reduce((s, f) => s + parseFloat(f.amount), 0);
+            const counts = {};
+            fines.forEach(f => { const r = f.reason || '–'; counts[r] = (counts[r] || 0) + 1; });
+            const chips  = Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([r, n]) => `${r} ×${n}`).join(' · ');
+            const by     = [...new Set(fines.map(f => f.created_by))];
+            const latest = fines.reduce((a, b) => new Date(a.created_at) > new Date(b.created_at) ? a : b);
+            const day    = new Date(latest.created_at).toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' });
+            return `
+<div class="fines-table-row fines-group-row" role="button" onclick="toggleFold('${id}')">
+    <span class="fines-col-date">${day}</span>
+    <span class="fines-col-type fines-type--fine"><span class="fines-chevron" id="${id}-chev">▸</span> ${fines.length}× Strafen</span>
+    <span class="fines-col-reason" title="${escHtml(chips)}">${escHtml(chips)}</span>
+    <span class="fines-col-by">${escHtml(by.length === 1 ? by[0] : 'versch.')}</span>
+    <span class="fines-col-amount fines-amount--debt">+${formatEur(total)}</span>
+</div>
+<div class="fines-group-children" id="${id}">${fines.map(f => renderEntryRow(f, apptTitleMap, true)).join('')}</div>`;
+        }
+
+        // Newest first: payments/contributions as own rows, fines folded per day.
+        function renderItems(list, apptTitleMap) {
+            const items = [];
+            const fineDays = new Map();
+            list.forEach(e => {
+                if (e.type === 'fine') {
+                    const k = dayKey(e.created_at);
+                    if (!fineDays.has(k)) fineDays.set(k, []);
+                    fineDays.get(k).push(e);
+                } else {
+                    items.push({ time: +new Date(e.created_at), html: renderEntryRow(e, apptTitleMap) });
+                }
+            });
+            fineDays.forEach(fines => {
+                if (fines.length >= GROUP_MIN) {
+                    const t = Math.max(...fines.map(f => +new Date(f.created_at)));
+                    items.push({ time: t, html: renderFineGroup(fines, apptTitleMap) });
+                } else {
+                    fines.forEach(f => items.push({ time: +new Date(f.created_at), html: renderEntryRow(f, apptTitleMap) }));
+                }
+            });
+            return items.sort((a, b) => b.time - a.time).map(i => i.html).join('');
+        }
+
+        function renderOlder(older, apptTitleMap) {
+            const months = new Map(); // insertion order = newest month first
+            older.forEach(e => {
+                const k = monthKey(e.created_at);
+                if (!months.has(k)) months.set(k, []);
+                months.get(k).push(e);
+            });
+            const outerId = 'fold-' + (++_uid);
+            const monthsHtml = [...months.values()].map(list => {
+                const id    = 'fold-' + (++_uid);
+                const label = new Date(list[0].created_at).toLocaleDateString('de-DE', { month: 'long', year: 'numeric' });
+                const sum   = type => list.filter(e => e.type === type).reduce((s, e) => s + parseFloat(e.amount), 0);
+                const nFine = list.filter(e => e.type === 'fine').length;
+                const parts = [];
+                if (nFine)                                    parts.push(`${nFine} Strafen +${formatEur(sum('fine'))}`);
+                if (list.some(e => e.type === 'contribution')) parts.push(`Beitrag +${formatEur(sum('contribution'))}`);
+                if (list.some(e => e.type === 'payment'))      parts.push(`Zahlungen –${formatEur(sum('payment'))}`);
+                return `
+<div class="fines-month-head" role="button" onclick="toggleFold('${id}')">
+    <span><span class="fines-chevron" id="${id}-chev">▸</span> ${escHtml(label)}</span>
+    <span class="fines-month-sum">${escHtml(parts.join(' · '))}</span>
+</div>
+<div class="fines-month-body" id="${id}">${renderItems(list, apptTitleMap)}</div>`;
+            }).join('');
+            return `
+<button type="button" class="btn btn-full fines-older-btn" onclick="toggleFold('${outerId}')">
+    <span class="fines-chevron" id="${outerId}-chev">▸</span> Ältere Einträge anzeigen (${older.length})
+</button>
+<div class="fines-older" id="${outerId}">${monthsHtml}</div>`;
+        }
+
+        function renderLedger(entries, apptTitleMap) {
+            const openStart = openStretchStart(entries);
+            const minRecent = startOfDay(new Date(Date.now() - RECENT_MIN_DAYS * 86400000));
+            const cutoff    = startOfDay(openStart && openStart < minRecent ? openStart : minRecent);
+            const recent    = entries.filter(e => new Date(e.created_at) >= cutoff);
+            const older     = entries.filter(e => new Date(e.created_at) <  cutoff);
+
+            return `
+<div class="fines-table">
+    <div class="fines-table-header">
+        <span>Datum</span>
+        <span>Typ</span>
+        <span>Grund</span>
+        <span>Von</span>
+        <span class="fines-col-amount">Betrag</span>
+    </div>
+    ${recent.length
+        ? renderItems(recent, apptTitleMap)
+        : `<p class="muted-text" style="padding:8px 4px;">Keine Einträge in den letzten ${RECENT_MIN_DAYS / 7} Wochen.</p>`}
+    ${older.length ? renderOlder(older, apptTitleMap) : ''}
+</div>`;
+        }
+
         async function loadLedger() {
             const listEl = document.getElementById('fines-ledger-list');
             try {
@@ -212,42 +384,7 @@
                 (appts || []).forEach(a => apptTitleMap[a.id] = a.title);
             }
 
-            listEl.innerHTML = `
-<div class="fines-table">
-    <div class="fines-table-header">
-        <span>Datum</span>
-        <span>Typ</span>
-        <span>Grund</span>
-        <span>Von</span>
-        <span class="fines-col-amount">Betrag</span>
-    </div>
-    ${entries.map(e => {
-        const meta    = typeMeta(e.type);
-        const dateStr = new Date(e.created_at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
-
-        // Resolve note: replace appt:{uuid} with appointment title, hide otherwise
-        let noteDisplay = '';
-        if (e.note && e.note.startsWith('appt:')) {
-            const apptId = e.note.replace('appt:', '');
-            noteDisplay  = apptTitleMap[apptId] ? `(${apptTitleMap[apptId]})` : '';
-        } else if (e.note) {
-            noteDisplay = e.note;
-        }
-
-        const reason = [e.reason, noteDisplay].filter(Boolean).join(' · ') || '–';
-        const clickAttr = isAdmin
-            ? `onclick="openEntrySheet('${e.id}','${escHtml(e.type)}','${escHtml(e.reason||'')}','${escHtml(noteDisplay)}',${e.amount},'${escHtml(e.created_by||'')}','${escHtml(dateStr)}')" style="cursor:pointer;"`
-            : '';
-        return `
-<div class="fines-table-row${isAdmin ? ' fines-table-row--tappable' : ''}" ${clickAttr}>
-    <span class="fines-col-date">${dateStr}</span>
-    <span class="fines-col-type ${meta.css}">${meta.label}</span>
-    <span class="fines-col-reason">${escHtml(reason)}</span>
-    <span class="fines-col-by">${escHtml(e.created_by)}</span>
-    <span class="fines-col-amount ${meta.debit ? 'fines-amount--debt' : 'fines-amount--zero'}">${meta.debit ? '+' : '–'}${formatEur(Math.abs(e.amount))}</span>
-</div>`;
-    }).join('')}
-</div>`;
+            listEl.innerHTML = renderLedger(entries, apptTitleMap);
         }
 
         // ── LOAD REASONS INTO DROPDOWN ──

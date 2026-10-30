@@ -2554,6 +2554,55 @@ body {
 .fines-type--payment      { color: var(--green); font-size: 0.78rem; }
 .fines-type--contribution { color: #e8a33d;      font-size: 0.78rem; }
 
+/* Payments and contributions are what a member scans the ledger for — they
+   stay their own tinted rows and are never folded into a day group. */
+.fines-table-row--payment      { background: var(--green-dim); border-color: rgba(41, 216, 124, 0.35); }
+.fines-table-row--contribution { background: rgba(232, 163, 61, 0.10); border-color: rgba(232, 163, 61, 0.35); }
+
+/* Several fines of one day folded into a single expandable row */
+.fines-group-row { cursor: pointer; }
+.fines-group-row:hover { border-color: var(--border-light); }
+.fines-group-row .fines-col-reason { white-space: normal; line-height: 1.3; }
+.fines-chevron { display: inline-block; width: 1em; color: var(--text-muted); }
+
+.fines-group-children,
+.fines-month-body,
+.fines-older {
+    display: none;
+    flex-direction: column;
+    gap: 6px;
+}
+.fines-group-children { padding-left: 14px; }
+
+/* Rows inside an expanded day group: time · reason · by · amount (the date
+   and type columns would only repeat what the group header already says). */
+.fines-table-row--child {
+    grid-template-columns: 48px 1fr 80px 80px;
+    padding: 8px 12px;
+    font-size: 0.8rem;
+    background: var(--bg-card);
+}
+.fines-table-row--child .fines-col-type { display: none; }
+
+.fines-older-btn { margin-top: 6px; }
+.fines-month-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    padding: 10px 12px;
+    margin-top: 6px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--bg-element);
+    font-family: var(--font-display);
+    font-weight: 700;
+    cursor: pointer;
+}
+.fines-month-head:hover { border-color: var(--border-light); }
+.fines-month-sum { font-family: var(--font-body, inherit); font-weight: 500; font-size: 0.78rem; color: var(--text-muted); }
+
 @media (max-width: 480px) {
     .fines-table-header,
     .fines-table-row {
@@ -2562,6 +2611,19 @@ body {
     /* Hide "Von" column on very small screens */
     .fines-table-header span:nth-child(4),
     .fines-col-by { display: none; }
+
+    /* The reason (and a day group's per-reason breakdown) was squeezed into a
+       ~60px column and cut off ("Dur…"). It gets its own full-width second
+       line under date / type / amount instead. */
+    .fines-table-row:not(.fines-table-row--child) .fines-col-reason {
+        grid-column: 1 / -1;
+        grid-row: 2;
+        white-space: normal;
+    }
+    .fines-table-row:not(.fines-table-row--child) .fines-col-amount { grid-column: 4; grid-row: 1; }
+    .fines-table-header span:nth-child(3) { display: none; }
+    .fines-table-header .fines-col-amount { grid-column: 4; }
+    .fines-table-row--child { grid-template-columns: 44px 1fr 70px; }
 }
 
 /* ── ATTENDANCE CARD ── */
