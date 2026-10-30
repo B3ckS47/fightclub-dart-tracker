@@ -139,8 +139,11 @@ async function deletePlayer(playerId, playerName) {
     showToast(`${playerName} wurde entfernt.`, 'success');
 }
 
-// Sends the Statistics of both Players to Supabase
+// Sends the Statistics of both Players to Supabase.
+// Returns the ids of the inserted rows so the caller can remove them again
+// if the final throw is undone from the result popup.
 async function saveMatchToSupabase() {
+    const insertedIds = [];
     // Check if players array actually has data
     if (!players || players.length === 0) {
         console.error("No players loaded. Refreshing...");
@@ -183,18 +186,20 @@ async function saveMatchToSupabase() {
             avg_pre_170: parseFloat(pre170Avg),
             one_eighties: pStats.oneEighties,
             twenty_sixes: pStats.twentySixes,
-            high_finishes: pStats.highFinishes,
-            highest_finish: pStats.highestFinish,
+            high_finishes: pStats.highFinishes || 0,   // finishes >= HIGH_FINISH_MIN (game-logic.js)
+            highest_finish: pStats.highFinish || 0,
             closing_darts: pStats.dartsToClose
         };
 
-        const { error } = await supa.from('game_history').insert([matchData]);
+        const { data, error } = await supa.from('game_history').insert([matchData]).select('id');
         if (error) {
             console.error(`Supabase Error for ${pName}:`, error.message);
         } else {
             console.log(`Stats saved for ${pName}`);
+            (data || []).forEach(r => insertedIds.push(r.id));
         }
     }
+    return insertedIds;
 }
 
 // Function to delete single Games

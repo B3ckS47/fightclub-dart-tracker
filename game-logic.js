@@ -504,11 +504,60 @@ function makePlayerStats() {
         isBelow170:    false,
         highScore:     0,        // highest single visit
         highFinish:    0,        // highest finishing visit
+        highFinishes:  0,        // number of finishes >= HIGH_FINISH_MIN (saved as game_history.high_finishes)
         dartsPerLeg:   [],       // darts thrown per leg won (cumulative, for undo)
         avgPerLeg:     [],       // avg per individual leg won [{ avg, darts }]
         legPoints:     0,        // points scored in current leg
         legDarts:      0         // darts thrown in current leg
     };
+}
+
+// A finish of at least this many points counts as a "High Finish" (club points + profile)
+const HIGH_FINISH_MIN = 100;
+
+// Index into gameState.stats of the player of `teamIdx` who is currently throwing
+function statsIdxOf(teamIdx) {
+    return gameState.gameType === 'singles'
+        ? teamIdx
+        : teamIdx === 0 ? gameState.teamPlayerIdx[0] : 2 + gameState.teamPlayerIdx[1];
+}
+
+// Closes the running leg's bookkeeping for both sides: records each side's average
+// for the leg, then resets the per-leg counters and the "below 170" marker so the
+// next leg starts clean (otherwise Ø bis 170 / Closing Darts drift from leg 2 on).
+// winnerStatsIdx is passed in because in doubles the rotation has not happened yet.
+function closeLegStats(winnerTeamIdx, winnerStatsIdx) {
+    const loserStatsIdx = statsIdxOf(winnerTeamIdx === 0 ? 1 : 0);
+    [[winnerStatsIdx, true], [loserStatsIdx, false]].forEach(([idx, won]) => {
+        const s = gameState.stats[idx];
+        const avg = s.legDarts > 0 ? parseFloat((s.legPoints / (s.legDarts / 3)).toFixed(2)) : 0;
+        s.avgPerLeg.push({ avg, darts: s.legDarts, won });
+    });
+    gameState.stats.forEach(s => { s.legPoints = 0; s.legDarts = 0; s.isBelow170 = false; });
+}
+
+// Rows written when a match ends (game_history / training_results). If the final throw
+// is undone from the result popup they are deleted again — otherwise finishing the
+// match a second time would save it twice and double-count every stat.
+let _savedMatchRows = [];  // [{ table, ids, done }]
+
+async function saveOfficialMatch() {
+    try {
+        const ids = await saveMatchToSupabase();
+        _savedMatchRows.push({ table: 'game_history', ids: ids || [], done: Promise.resolve() });
+    } catch (e) { console.error(e); }
+}
+
+async function deleteSavedMatchRows() {
+    const rows = _savedMatchRows;
+    _savedMatchRows = [];
+    for (const r of rows) {
+        await r.done;
+        if (r.ids.length > 0) {
+            const { error } = await supa.from(r.table).delete().in('id', r.ids);
+            if (error) console.error('Undo: could not remove saved match rows:', error.message);
+        }
+    }
 }
 
 // ── TRAINING MODE (vs. bot) ──
@@ -540,10 +589,15 @@ function saveBotTrainingResult(winnerTeamIdx) {
             botStrengthMode: gameState.botStrengthMode
         }
     };
-    (async () => {
-        try { await supa.from('training_results').insert([row]); }
-        catch (e) { console.error('Bot training save error:', e); }
+    const saved = { table: 'training_results', ids: [], done: null };
+    saved.done = (async () => {
+        try {
+            const { data, error } = await supa.from('training_results').insert([row]).select('id');
+            if (error) throw error;
+            saved.ids = (data || []).map(r => r.id);
+        } catch (e) { console.error('Bot training save error:', e); }
     })();
+    _savedMatchRows.push(saved);
 }
 
 // ── ONLINE MODE (two devices, one throw each) ──
@@ -780,6 +834,7 @@ async function startGame() {
     }
 
     gameState.logs          = [];
+    _savedMatchRows         = [];
     gameState.ausbullenActive = true; // block input until starter is chosen
 
     document.getElementById('nav-setup').style.display        = 'none';
@@ -953,6 +1008,9 @@ function maybeTriggerBotTurn() {
 
 async function submitTurn(rawPts) {
     if (gameState.ausbullenActive) return;
+    // A leg/match is already decided and its popup is (about to be) shown — a second
+    // Enter during the save would otherwise score the leg again or turn into a bust.
+    if (gameState.scores[0] === 0 || gameState.scores[1] === 0) return;
     if (gameState.opponentType === 'online' && !_applyingRemoteOnlineMove
         && gameState.currentIdx !== gameState.onlineMyTeamIdx) return;
 
@@ -990,46 +1048,34 @@ async function submitTurn(rawPts) {
         : teamIdx === 0 ? playerWithinTeam : 2 + playerWithinTeam;
     const pStats = gameState.stats[statsIdx];
 
+    // A bust costs the three darts but scores nothing — it must not raise the
+    // average, the high score or the 180/26 counters.
+    const isBust = newScore < 0 || (newScore === 1 && gameState.mode === 'double');
+    const scored = isBust ? 0 : pts;
+
     pStats.dartsThrown += 3;
-    pStats.totalPoints += pts;
+    pStats.totalPoints += scored;
     pStats.legDarts    += 3;
-    pStats.legPoints   += pts;
-    if (pts > pStats.highScore) pStats.highScore = pts;
-    if (pts === 180) pStats.oneEighties++;
-    if (pts === 26)  pStats.twentySixes++;
+    pStats.legPoints   += scored;
+    if (scored > pStats.highScore) pStats.highScore = scored;
+    if (scored === 180) pStats.oneEighties++;
+    if (scored === 26)  pStats.twentySixes++;
     if (!pStats.isBelow170) {
-        pStats.pointsPre170 += pts;
+        pStats.pointsPre170 += scored;
         pStats.dartsPre170  += 3;
-        if (gameState.scores[teamIdx] - pts <= 170) pStats.isBelow170 = true;
+        if (gameState.scores[teamIdx] - scored <= 170) pStats.isBelow170 = true;
     } else {
         pStats.dartsToClose += 3;
     }
 
     if (newScore === 0) {
-        // Track finish score and per-leg avg for the WINNER
+        // Track finish score for the WINNER
         if (pts > pStats.highFinish) pStats.highFinish = pts;
-        const legAvg = pStats.legDarts > 0
-            ? parseFloat((pStats.legPoints / (pStats.legDarts / 3)).toFixed(2))
-            : 0;
-        pStats.avgPerLeg.push({ avg: legAvg, darts: pStats.legDarts, won: true });
-        pStats.legPoints = 0;
-        pStats.legDarts  = 0;
+        if (pts >= HIGH_FINISH_MIN) pStats.highFinishes = (pStats.highFinishes || 0) + 1;
         pStats.dartsPerLeg.push(pStats.dartsThrown);
 
-        // Also snapshot the LOSER's avg for this leg
-        const loserTeamIdx  = teamIdx === 0 ? 1 : 0;
-        const loserStatsIdx = gameState.gameType === 'singles'
-            ? loserTeamIdx
-            : loserTeamIdx === 0
-                ? gameState.teamPlayerIdx[0]
-                : 2 + gameState.teamPlayerIdx[1];
-        const lStats = gameState.stats[loserStatsIdx];
-        const loserLegAvg = lStats.legDarts > 0
-            ? parseFloat((lStats.legPoints / (lStats.legDarts / 3)).toFixed(2))
-            : 0;
-        lStats.avgPerLeg.push({ avg: loserLegAvg, darts: lStats.legDarts, won: false });
-        lStats.legPoints = 0;
-        lStats.legDarts  = 0;
+        // Per-leg averages for both sides, then reset the per-leg counters
+        closeLegStats(teamIdx, statsIdx);
 
         gameState.legScore[teamIdx]++;
         gameState.scores[teamIdx] = 0;
@@ -1037,7 +1083,7 @@ async function submitTurn(rawPts) {
 
         if (gameState.legScore[teamIdx] >= gameState.targetLegs) {
             if (gameState.gameType === 'singles' && gameState.isOfficial) {
-                try { await saveMatchToSupabase(); } catch(e) { console.error(e); }
+                await saveOfficialMatch();
             }
             if (gameState.opponentType === 'bot') saveBotTrainingResult(teamIdx);
             showMatchModal(gameState.pNames[teamIdx]);
@@ -1048,7 +1094,7 @@ async function submitTurn(rawPts) {
         return;
     }
 
-    if (newScore < 0 || (newScore === 1 && gameState.mode === 'double')) {
+    if (isBust) {
         showToast('💥 BUST!');
         gameState.history[teamIdx].push("BUST");
     } else {
@@ -1277,6 +1323,7 @@ function showMatchModal(winnerName) {
 
 async function dismissMatchModal() {
     document.getElementById('match-modal-overlay').style.display = 'none';
+    _savedMatchRows = []; // the match stands — no more undo of what was saved
     const startVal = gameState.startScore;
     gameState.scores   = [startVal, startVal];
     gameState.legScore = [0, 0];
@@ -1300,10 +1347,13 @@ async function dismissMatchModal() {
     exitGame(true);
 }
 
-function undoFromMatchModal() {
+async function undoFromMatchModal() {
     if (gameState.opponentType === 'online') return; // no undo online
     if (gameState.logs.length === 0) return;
     document.getElementById('match-modal-overlay').style.display = 'none';
+    // The match was already saved when the final throw went in — take those rows
+    // out again, the match gets saved anew when it is finished the second time.
+    await deleteSavedMatchRows();
     undoMove();
 }
 
@@ -1370,33 +1420,38 @@ function showAusbullen() {
 
 async function selectAusbullenWinner(teamIdx) {
     document.getElementById('ausbullen-overlay').style.display = 'none';
-    gameState.ausbullenActive = false;
+    // ausbullenActive stays true (input blocked) until the fines are written below
 
     // Fine both players for ausbullen (official games only — ausbullen only fires in official anyway)
     const loserIdx = teamIdx === 0 ? 1 : 0;
+    const fineIds  = [];
     for (const idx of [teamIdx, loserIdx]) {
-        if (gameState.gameType === 'singles') {
-            insertFine(gameState.pNames[idx], FINE_REASONS.ausbullen);
-            showToast(`💸 ${gameState.pNames[idx]}: Sieger ausbullen — ${FINE_REASONS.ausbullen.amount.toFixed(2).replace('.',',')} €`);
-        } else {
-            // Doubles: fine each individual player in the team
-            for (const name of gameState.teamPlayers[idx]) {
-                insertFine(name, FINE_REASONS.ausbullen);
-                showToast(`💸 ${name}: Sieger ausbullen — ${FINE_REASONS.ausbullen.amount.toFixed(2).replace('.',',')} €`);
-            }
+        const names = gameState.gameType === 'singles'
+            ? [gameState.pNames[idx]]
+            : gameState.teamPlayers[idx]; // doubles: each individual player in the team
+        for (const name of names) {
+            const id = await insertFine(name, FINE_REASONS.ausbullen);
+            if (id) fineIds.push(id);
+            showToast(`💸 ${name}: Sieger ausbullen — ${FINE_REASONS.ausbullen.amount.toFixed(2).replace('.',',')} €`);
         }
     }
+    // Hang the fines on the last undo snapshot so "Rückgängig" removes them again
+    if (fineIds.length > 0 && gameState.logs.length > 0) {
+        const last = gameState.logs[gameState.logs.length - 1];
+        last.fineIdsThisTurn = (last.fineIdsThisTurn || []).concat(fineIds);
+    }
+
+    gameState.ausbullenActive = false;
 
     // Award the leg to the chosen team
-    const ausbullenStatsIdx = gameState.gameType === 'singles'
-        ? teamIdx
-        : teamIdx === 0 ? gameState.teamPlayerIdx[0] : 2 + gameState.teamPlayerIdx[1];
+    const ausbullenStatsIdx = statsIdxOf(teamIdx);
     gameState.stats[ausbullenStatsIdx].dartsPerLeg.push(gameState.stats[ausbullenStatsIdx].dartsThrown);
+    closeLegStats(teamIdx, ausbullenStatsIdx); // per-leg averages + fresh per-leg counters for the next leg
     gameState.legScore[teamIdx]++;
 
     if (gameState.legScore[teamIdx] >= gameState.targetLegs) {
         if (gameState.gameType === 'singles' && gameState.isOfficial) {
-            try { await saveMatchToSupabase(); } catch(e) { console.error(e); }
+            await saveOfficialMatch();
         }
         // Currently unreachable for bot opponents — Ausbullen only triggers
         // when gameState.isOfficial is true, and bot games never are. Kept
