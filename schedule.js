@@ -22,24 +22,6 @@ let _allVotesRaw = [];
 let _allFinesRaw = [];
 let _scheduleFilter = '';
 
-// Supabase/PostgREST caps a single select() at 1000 rows by default —
-// fines_ledger has grown past that (same class of bug already fixed on
-// fines.html). Page through with .range() until a partial page confirms
-// the end, with a stable .order() so pagination can't skip rows.
-async function fetchAllRows(table, select, build) {
-    const pageSize = 1000;
-    let all = [], from = 0;
-    while (true) {
-        let q = supa.from(table).select(select);
-        if (build) q = build(q);
-        const { data, error } = await q.order('id').range(from, from + pageSize - 1);
-        if (error || !data) break;
-        all = all.concat(data);
-        if (data.length < pageSize) break;
-        from += pageSize;
-    }
-    return all;
-}
 
 function setScheduleFilter(type) {
     _scheduleFilter = type;
@@ -78,9 +60,12 @@ async function loadAppointments() {
         // The real per-session fines (not the system-generated "Durchschnitt"
         // catch-up fines) have no note at all — matched against each
         // appointment's time window below, same as applyAverageFine() does.
-        fetchAllRows('fines_ledger', 'amount, reason, type, created_at', q =>
-            q.eq('type', 'fine').not('reason', 'like', 'Bountyeinsatz%')
-        )
+        // Only feeds the per-appointment fines summary — if it fails, show
+        // the page without summaries rather than failing the whole page.
+        fetchAllRows(() =>
+            supa.from('fines_ledger').select('amount, reason, type, created_at')
+                .eq('type', 'fine').not('reason', 'like', 'Bountyeinsatz%').order('id')
+        ).catch(e => { console.error('Strafen-Zusammenfassung laden fehlgeschlagen:', e); return []; })
     ]);
 
     if (apptRes.error) {

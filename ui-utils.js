@@ -80,6 +80,61 @@
     };
 })();
 
+// ── SHARED HELPERS ──
+// Previously copy-pasted per page (fines.html, fines-detail.html, punkte.html,
+// schedule.js) and drifting apart — one version here keeps them identical.
+(function () {
+    window.escHtml = function (str) {
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    };
+
+    // Always absolute value, no sign: callers decide whether to prefix +/–.
+    window.formatEur = function (amount) {
+        return Math.abs(amount).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+    };
+
+    // Supabase/PostgREST caps a single select() at 1000 rows by default and
+    // silently truncates beyond that. Pass a function that returns a FRESH
+    // query builder each call (builders are single-use) with its own stable
+    // .order() — without one, Postgres doesn't guarantee row order across
+    // separate range() calls and pages could skip or repeat rows.
+    // Throws on error: for sums/balances a silently partial result is worse
+    // than a visible failure.
+    window.fetchAllRows = async function (makeQuery) {
+        const pageSize = 1000;
+        let all = [], from = 0;
+        while (true) {
+            const { data, error } = await makeQuery().range(from, from + pageSize - 1);
+            if (error) throw error;
+            all = all.concat(data || []);
+            if (!data || data.length < pageSize) break;
+            from += pageSize;
+        }
+        return all;
+    };
+
+    // Bottom sheet (.entry-sheet) open/close with the slide-in animation.
+    window.openSheet = function (sheetId, overlayId) {
+        document.getElementById(overlayId).style.display = 'block';
+        const sheet = document.getElementById(sheetId);
+        sheet.style.display = 'block';
+        requestAnimationFrame(() => sheet.classList.add('entry-sheet--open'));
+    };
+
+    window.closeSheet = function (sheetId, overlayId) {
+        const sheet = document.getElementById(sheetId);
+        sheet.classList.remove('entry-sheet--open');
+        setTimeout(() => {
+            sheet.style.display = 'none';
+            document.getElementById(overlayId).style.display = 'none';
+        }, 300);
+    };
+})();
+
 // ── THEME MANAGER ──
 (function () {
     const THEME_KEY = 'fc47_theme';

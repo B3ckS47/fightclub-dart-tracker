@@ -118,34 +118,21 @@
 
         const isAdmin = currentUser && currentUser.role === 'admin';
 
-        // Supabase/PostgREST caps a single select() at 1000 rows by default —
-        // fines_ledger has grown past that, so an unpaginated fetch here was
-        // silently dropping rows (often newer payments, inflating balances).
-        // Page through with .range() until a partial page confirms the end.
-        async function fetchAllRows(table, select) {
-            const pageSize = 1000;
-            let all = [], from = 0;
-            while (true) {
-                // .order('id') keeps pagination deterministic — without it,
-                // Postgres doesn't guarantee stable row order across two
-                // separate range() calls, which could skip or double-count
-                // rows if the table changes between pages.
-                const { data, error } = await supa.from(table).select(select).order('id').range(from, from + pageSize - 1);
-                if (error || !data) break;
-                all = all.concat(data);
-                if (data.length < pageSize) break;
-                from += pageSize;
-            }
-            return all;
-        }
-
         // ── OVERVIEW ──
         async function loadOverview() {
-            const [playersRes, usersRes, ledger] = await Promise.all([
-                supa.from('players').select('id, name, avatar_url').order('name'),
-                supa.from('app_users').select('id, player_id, role').in('role', ['member', 'admin']),
-                fetchAllRows('fines_ledger', 'player_id, amount')
-            ]);
+            let playersRes, usersRes, ledger;
+            try {
+                [playersRes, usersRes, ledger] = await Promise.all([
+                    supa.from('players').select('id, name, avatar_url').order('name'),
+                    supa.from('app_users').select('id, player_id, role').in('role', ['member', 'admin']),
+                    fetchAllRows(() => supa.from('fines_ledger').select('player_id, amount').order('id'))
+                ]);
+            } catch (e) {
+                console.error('Strafen laden fehlgeschlagen:', e);
+                document.getElementById('fines-members-list').innerHTML =
+                    '<p class="muted-text">Fehler beim Laden. Bitte Seite neu laden.</p>';
+                return;
+            }
 
             const players  = playersRes.data  || [];
             const users    = usersRes.data     || [];
@@ -230,19 +217,31 @@
             document.getElementById('bulk-note').value    = '';
             document.getElementById('bulk-msg').textContent = '';
 
-            document.getElementById('bulk-fine-overlay').style.display = 'block';
-            const modal = document.getElementById('bulk-fine-modal');
-            modal.style.display = 'block';
-            requestAnimationFrame(() => modal.classList.add('entry-sheet--open'));
+            openSheet('bulk-fine-modal', 'bulk-fine-overlay');
         }
 
-        function closeBulkFineModal() {
-            const modal = document.getElementById('bulk-fine-modal');
-            modal.classList.remove('entry-sheet--open');
-            setTimeout(() => {
-                modal.style.display = 'none';
-                document.getElementById('bulk-fine-overlay').style.display = 'none';
-            }, 300);
+        function closeBulkFineModal() { closeSheet('bulk-fine-modal', 'bulk-fine-overlay'); }
+
+        // Shared by both bulk dialogs: resolve all member/admin players, ask
+        // for confirmation with the real head count, insert one row each.
+        async function insertForAllMembers({ msgEl, confirmTitle, confirmMsg, makeRow, closeModal, doneLabel }) {
+            const showMsg = (text, color) => { msgEl.textContent = text; msgEl.style.color = color; };
+
+            const { data: users } = await supa
+                .from('app_users').select('player_id, role')
+                .in('role', ['member', 'admin']);
+            const playerIds = (users || []).map(u => u.player_id).filter(Boolean);
+            if (playerIds.length === 0) return showMsg('Keine Mitglieder gefunden.', 'var(--red)');
+
+            const ok = await showConfirm(confirmTitle, confirmMsg(playerIds.length));
+            if (!ok) return;
+
+            const { error } = await supa.from('fines_ledger').insert(playerIds.map(makeRow));
+            if (error) return showMsg('Fehler: ' + error.message, 'var(--red)');
+
+            closeModal();
+            showToast(`${doneLabel} für ${playerIds.length} Mitglieder eingetragen.`, 'success');
+            loadOverview();
         }
 
         function prefillBulkAmount() {
@@ -257,43 +256,22 @@
             const note   = document.getElementById('bulk-note').value.trim();
             const msgEl  = document.getElementById('bulk-msg');
 
-            const showMsg = (text, color) => {
-                msgEl.textContent = text;
-                msgEl.style.color = color;
-            };
-
+            const showMsg = (text, color) => { msgEl.textContent = text; msgEl.style.color = color; };
             if (!reason)           return showMsg('Bitte einen Grund auswählen.', 'var(--red)');
             if (!amount || amount <= 0) return showMsg('Bitte einen gültigen Betrag eingeben.', 'var(--red)');
 
-            const { data: users } = await supa
-                .from('app_users').select('player_id, role')
-                .in('role', ['member', 'admin']);
-            const playerIds = (users || []).map(u => u.player_id).filter(Boolean);
-
-            if (playerIds.length === 0) return showMsg('Keine Mitglieder gefunden.', 'var(--red)');
-
             const amtFmt = amount.toLocaleString('de-DE', { minimumFractionDigits: 2 });
-            const ok = await showConfirm(
-                'Strafe für alle Mitglieder',
-                `${amtFmt} € (${reason}) wird für ${playerIds.length} Mitglieder eingetragen. Fortfahren?`
-            );
-            if (!ok) return;
-
-            const rows = playerIds.map(pid => ({
-                player_id:  pid,
-                amount:     Math.abs(amount),
-                type:       'fine',
-                reason,
-                note:       note || null,
-                created_by: currentUser.username
-            }));
-
-            const { error } = await supa.from('fines_ledger').insert(rows);
-            if (error) return showMsg('Fehler: ' + error.message, 'var(--red)');
-
-            closeBulkFineModal();
-            showToast(`Strafe für ${playerIds.length} Mitglieder eingetragen.`, 'success');
-            loadOverview();
+            await insertForAllMembers({
+                msgEl,
+                confirmTitle: 'Strafe für alle Mitglieder',
+                confirmMsg:   n => `${amtFmt} € (${reason}) wird für ${n} Mitglieder eingetragen. Fortfahren?`,
+                makeRow:      pid => ({
+                    player_id: pid, amount: Math.abs(amount), type: 'fine',
+                    reason, note: note || null, created_by: currentUser.username
+                }),
+                closeModal:   closeBulkFineModal,
+                doneLabel:    'Strafe'
+            });
         }
 
         // ── BULK CONTRIBUTION (admin only) ──
@@ -302,75 +280,34 @@
             document.getElementById('bulk-contrib-note').value    = '';
             document.getElementById('bulk-contrib-msg').textContent = '';
 
-            document.getElementById('bulk-contrib-overlay').style.display = 'block';
-            const modal = document.getElementById('bulk-contrib-modal');
-            modal.style.display = 'block';
-            requestAnimationFrame(() => modal.classList.add('entry-sheet--open'));
+            openSheet('bulk-contrib-modal', 'bulk-contrib-overlay');
         }
 
-        function closeBulkContribModal() {
-            const modal = document.getElementById('bulk-contrib-modal');
-            modal.classList.remove('entry-sheet--open');
-            setTimeout(() => {
-                modal.style.display = 'none';
-                document.getElementById('bulk-contrib-overlay').style.display = 'none';
-            }, 300);
-        }
+        function closeBulkContribModal() { closeSheet('bulk-contrib-modal', 'bulk-contrib-overlay'); }
 
         async function submitBulkContrib() {
             const amount = parseFloat(document.getElementById('bulk-contrib-amount').value);
             const note   = document.getElementById('bulk-contrib-note').value.trim();
             const msgEl  = document.getElementById('bulk-contrib-msg');
 
-            const showMsg = (text, color) => {
-                msgEl.textContent = text;
-                msgEl.style.color = color;
-            };
-
-            if (!amount || amount <= 0) return showMsg('Bitte einen gültigen Betrag eingeben.', 'var(--red)');
-
-            const { data: users } = await supa
-                .from('app_users').select('player_id, role')
-                .in('role', ['member', 'admin']);
-            const playerIds = (users || []).map(u => u.player_id).filter(Boolean);
-
-            if (playerIds.length === 0) return showMsg('Keine Mitglieder gefunden.', 'var(--red)');
+            if (!amount || amount <= 0) {
+                msgEl.textContent = 'Bitte einen gültigen Betrag eingeben.';
+                msgEl.style.color = 'var(--red)';
+                return;
+            }
 
             const amtFmt = amount.toLocaleString('de-DE', { minimumFractionDigits: 2 });
-            const ok = await showConfirm(
-                'Beitrag für alle Mitglieder',
-                `${amtFmt} € Beitrag wird für ${playerIds.length} Mitglieder eingetragen. Fortfahren?`
-            );
-            if (!ok) return;
-
-            const rows = playerIds.map(pid => ({
-                player_id:  pid,
-                amount:     Math.abs(amount),
-                type:       'contribution',
-                reason:     'Monatsbeitrag',
-                note:       note || null,
-                created_by: currentUser.username
-            }));
-
-            const { error } = await supa.from('fines_ledger').insert(rows);
-            if (error) return showMsg('Fehler: ' + error.message, 'var(--red)');
-
-            closeBulkContribModal();
-            showToast(`Beitrag für ${playerIds.length} Mitglieder eingetragen.`, 'success');
-            loadOverview();
-        }
-
-        // ── HELPERS ──
-        function formatEur(amount) {
-            return Math.abs(amount).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
-        }
-
-        function escHtml(str) {
-            return String(str)
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;');
+            await insertForAllMembers({
+                msgEl,
+                confirmTitle: 'Beitrag für alle Mitglieder',
+                confirmMsg:   n => `${amtFmt} € Beitrag wird für ${n} Mitglieder eingetragen. Fortfahren?`,
+                makeRow:      pid => ({
+                    player_id: pid, amount: Math.abs(amount), type: 'contribution',
+                    reason: 'Monatsbeitrag', note: note || null, created_by: currentUser.username
+                }),
+                closeModal:   closeBulkContribModal,
+                doneLabel:    'Beitrag'
+            });
         }
 
         // ── INIT ──

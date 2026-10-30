@@ -130,22 +130,9 @@
         const detailPlayerId = new URLSearchParams(window.location.search).get('id');
         if (!detailPlayerId) window.location.href = 'fines.html';
         let detailPlayerName = null;
-
-        // Supabase/PostgREST caps a single select() at 1000 rows by default.
-        // A single player's ledger is unlikely to hit that yet, but page
-        // through defensively so this never silently truncates either.
-        async function fetchAllRows(table, select, build) {
-            const pageSize = 1000;
-            let all = [], from = 0;
-            while (true) {
-                const { data, error } = await build(supa.from(table).select(select)).range(from, from + pageSize - 1);
-                if (error || !data) break;
-                all = all.concat(data);
-                if (data.length < pageSize) break;
-                from += pageSize;
-            }
-            return all;
-        }
+        // Newest-first ledger of the current player — loaded once per
+        // loadLedger() and reused by the CSV/PDF exports (no extra queries).
+        let _entries = [];
 
         // ── ENTRY TYPE METADATA ──
         const TYPE_META = {
@@ -185,19 +172,27 @@
         }
 
         async function loadLedger() {
-            const data = await fetchAllRows('fines_ledger', '*', q =>
-                q.eq('player_id', detailPlayerId).order('created_at', { ascending: false })
-            );
+            const listEl = document.getElementById('fines-ledger-list');
+            try {
+                _entries = await fetchAllRows(() =>
+                    supa.from('fines_ledger').select('*')
+                        .eq('player_id', detailPlayerId)
+                        .order('created_at', { ascending: false })
+                        .order('id')
+                );
+            } catch (e) {
+                console.error('Verlauf laden fehlgeschlagen:', e);
+                listEl.innerHTML = '<p class="muted-text">Fehler beim Laden. Bitte Seite neu laden.</p>';
+                return;
+            }
 
-            const entries = data || [];
+            const entries = _entries;
             const balance = entries.reduce((sum, e) => sum + parseFloat(e.amount), 0);
             const isZero  = balance <= 0;
 
             document.getElementById('detail-balance').textContent = formatEur(balance);
             document.getElementById('detail-balance').className   =
                 'fines-detail-balance ' + (isZero ? 'fines-amount--zero' : 'fines-amount--debt');
-
-            const listEl = document.getElementById('fines-ledger-list');
 
             if (entries.length === 0) { listEl.innerHTML = '<p class="muted-text">Noch keine Einträge.</p>'; return; }
 
@@ -338,11 +333,8 @@
 
         // ── EXPORT CSV ──
         async function exportCSV() {
-            const { data, error } = await supa
-                .from('fines_ledger').select('*')
-                .eq('player_id', detailPlayerId)
-                .order('created_at', { ascending: false });
-            if (error || !data) { showToast('Export fehlgeschlagen.', 'error'); return; }
+            const data = _entries;
+            if (data.length === 0) { showToast('Keine Einträge zum Exportieren.', 'info'); return; }
 
             const rows = [['Datum', 'Typ', 'Grund', 'Betrag (€)', 'Eingetragen von', 'Notiz']];
             data.forEach(e => {
@@ -368,11 +360,8 @@
         async function exportPDF() {
             if (!window.jspdf) { showToast('PDF-Bibliothek lädt noch, bitte kurz warten.', 'info'); return; }
 
-            const { data, error } = await supa
-                .from('fines_ledger').select('*')
-                .eq('player_id', detailPlayerId)
-                .order('created_at', { ascending: false });
-            if (error || !data) { showToast('Export fehlgeschlagen.', 'error'); return; }
+            const data = _entries;
+            if (data.length === 0) { showToast('Keine Einträge zum Exportieren.', 'info'); return; }
 
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -436,12 +425,12 @@
 
                 doc.setTextColor(180, 180, 200);
                 doc.text(d, 14, y);
-                doc.setTextColor(color);
+                doc.setTextColor(...color);
                 doc.text(meta.plain, 46, y);
                 doc.setTextColor(180, 180, 200);
                 doc.text(doc.splitTextToSize((e.reason || '–'), 68)[0], 76, y);
                 doc.text((e.created_by || '–').slice(0, 18), 148, y);
-                doc.setTextColor(color);
+                doc.setTextColor(...color);
                 doc.text(amt, 196, y, { align: 'right' });
 
                 doc.setDrawColor(35, 35, 48);
@@ -475,20 +464,11 @@
             }
             document.getElementById('entry-sheet-delete-wrap').style.display = isAdmin ? 'block' : 'none';
 
-            document.getElementById('entry-sheet-overlay').style.display = 'block';
-            const sheet = document.getElementById('entry-sheet');
-            sheet.style.display = 'block';
-            requestAnimationFrame(() => sheet.classList.add('entry-sheet--open'));
+            openSheet('entry-sheet', 'entry-sheet-overlay');
         }
 
         function closeEntrySheet() {
-            const sheet = document.getElementById('entry-sheet');
-            sheet.classList.remove('entry-sheet--open');
-            setTimeout(() => {
-                sheet.style.display = 'block';
-                document.getElementById('entry-sheet-overlay').style.display = 'none';
-                sheet.style.display = 'none';
-            }, 300);
+            closeSheet('entry-sheet', 'entry-sheet-overlay');
             _currentEntryId = null;
         }
 
@@ -503,33 +483,10 @@
             await loadLedger();
         }
 
-        // ── REMOVE LEGACY "MONATSBEITRAG" FINE REASON ──
-        // Monatsbeitrag is now its own record type ('contribution') and must no
-        // longer be selectable as a fine reason (would count into appointment
-        // average fines otherwise).
-        async function removeMonatsbeitragReason() {
-            await supa.from('fines_reasons').delete().eq('name', 'Monatsbeitrag');
-        }
-
-        // ── HELPERS ──
-        function formatEur(amount) {
-            return Math.abs(amount).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
-        }
-
-        function escHtml(str) {
-            return String(str)
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;');
-        }
-
         // ── INIT ──
         async function init() {
             await loadPlayerIdentity();
-            if (isAdmin) {
-                removeMonatsbeitragReason().then(() => loadReasons());
-            }
+            if (isAdmin) loadReasons();
             await loadLedger();
         }
         init();
