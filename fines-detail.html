@@ -89,23 +89,20 @@
                 </div>
             </div>
 
-            <!-- Admin: add fine / contribution, record a payment -->
+            <!-- Admin: add a fine, record a payment. (The monthly contribution is
+                 booked automatically on the 1st, so it needs no manual option.) -->
             <div class="card" id="fines-add-card" style="display:none;">
-                <h2 class="card-title">EINTRAG HINZUFÜGEN</h2>
+                <h2 class="card-title">STRAFE HINZUFÜGEN</h2>
                 <div class="divider"></div>
                 <div class="fines-add-form">
                     <div class="fines-add-row">
-                        <select id="fine-type" class="select-field" onchange="onTypeChange()">
-                            <option value="fine">💸 Strafe</option>
-                            <option value="contribution">📅 Beitrag</option>
+                        <select id="fine-reason" class="select-field" onchange="prefillAmount()">
+                            <option value="" data-amount="">Lade Gründe…</option>
                         </select>
                         <input type="number" id="fine-amount" placeholder="Betrag (€)" min="0.01" step="0.01" class="input-field fines-amount-input">
                     </div>
-                    <select id="fine-reason" class="select-field" onchange="prefillAmount()">
-                        <option value="" data-amount="">Lade Gründe…</option>
-                    </select>
                     <input type="text" id="fine-note" placeholder="Zusätzliche Notiz (optional)" class="input-field">
-                    <button onclick="addEntry()" class="btn btn-primary btn-full">HINZUFÜGEN</button>
+                    <button onclick="addEntry()" class="btn btn-primary btn-full">STRAFE HINZUFÜGEN</button>
                 </div>
                 <p id="fines-add-msg" class="settings-msg"></p>
 
@@ -432,25 +429,6 @@
                 '<option value="Sonstiges" data-amount="">Sonstiges</option>';
         }
 
-        // ── TOGGLE REASON FIELD BASED ON TYPE ──
-        function onTypeChange() {
-            const type      = document.getElementById('fine-type').value;
-            const reasonSel = document.getElementById('fine-reason');
-            const noReason  = type !== 'fine'; // a contribution needs no reason
-            reasonSel.disabled = noReason;
-            reasonSel.style.opacity = noReason ? '0.4' : '1';
-            if (noReason) reasonSel.value = '';
-            prefillDefaultAmount();
-        }
-
-        // A contribution is the fixed monthly fee, a fine gets its amount from
-        // the chosen reason. Switching type always resets the field so a value
-        // meant for one type can't be submitted as another.
-        function prefillDefaultAmount() {
-            const type  = document.getElementById('fine-type').value;
-            document.getElementById('fine-amount').value = type === 'contribution' ? '10.00' : '';
-        }
-
         // ── PREFILL AMOUNT FROM REASON ──
         function prefillAmount() {
             const select = document.getElementById('fine-reason');
@@ -458,9 +436,8 @@
             if (amount) document.getElementById('fine-amount').value = amount;
         }
 
-        // ── ADD ENTRY (admin only) ──
+        // ── ADD FINE (admin only) ──
         async function addEntry() {
-            const type   = document.getElementById('fine-type').value;
             const amount = parseFloat(document.getElementById('fine-amount').value);
             const reason = document.getElementById('fine-reason').value;
             const note   = document.getElementById('fine-note').value.trim();
@@ -473,15 +450,13 @@
             };
 
             if (!amount || amount <= 0) return showMsg('Bitte einen gültigen Betrag eingeben.', 'var(--red)');
-            if (type === 'fine' && !reason) return showMsg('Bitte einen Grund auswählen.', 'var(--red)');
-
-            const storedReason = type === 'contribution' ? 'Monatsbeitrag' : reason;
+            if (!reason) return showMsg('Bitte einen Grund auswählen.', 'var(--red)');
 
             const { error } = await supa.from('fines_ledger').insert([{
                 player_id:  detailPlayerId,
                 amount:     Math.abs(amount),
-                type,
-                reason:     storedReason,
+                type:       'fine',
+                reason,
                 note:       note || null,
                 created_by: currentUser.username
             }]);
@@ -490,11 +465,11 @@
 
             // Reset form
             document.getElementById('fine-reason').value = '';
+            document.getElementById('fine-amount').value = '';
             document.getElementById('fine-note').value   = '';
 
             await loadLedger();
-            prefillDefaultAmount();
-            showMsg(`Eintrag gespeichert! Neuer Saldo: ${formatSaldoText(_balance)}`, 'var(--green)');
+            showMsg(`Strafe gespeichert! Neuer Saldo: ${formatSaldoText(_balance)}`, 'var(--green)');
         }
 
         // "11,20 €" for a debt, "–9,00 € (Guthaben)" for a credit
