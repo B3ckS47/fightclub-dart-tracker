@@ -190,6 +190,17 @@
     };
 })();
 
+// ── GAME SOUND EFFECTS (180 / High Finish) — on unless switched off in the settings ──
+(function () {
+    const KEY = 'fc47_sound_fx';
+    window.getSoundFx = () => {
+        try { return localStorage.getItem(KEY) !== '0'; } catch (e) { return true; }
+    };
+    window.setSoundFx = (on) => {
+        try { localStorage.setItem(KEY, on ? '1' : '0'); } catch (e) { /* storage blocked — keeps default */ }
+    };
+})();
+
 // ── SESSION STORAGE HELPER ──
 // Transparently uses localStorage or sessionStorage based on user preference
 (function () {

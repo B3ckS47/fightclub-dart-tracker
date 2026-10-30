@@ -4771,6 +4771,101 @@ body {
 }
 .fc-confirm-btns .btn:hover { border-color: var(--border-light); color: var(--text-primary); }
 
+/* ── GAME EFFECTS: 180 / HIGH FINISH (game-effects.js) ──
+   Non-blocking: no pointer events, sits above the leg/match popups. */
+.fx-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9990;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    text-align: center;
+    animation: fxFadeIn 0.2s ease-out both;
+}
+.fx-overlay--out { animation: fxFadeOut 0.35s ease-in forwards; }
+
+.fx-title {
+    font-family: var(--font-display);
+    font-weight: 800;
+    letter-spacing: 3px;
+    line-height: 1;
+    animation: fxPop 0.55s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+.fx-sub {
+    font-family: var(--font-display);
+    font-size: 1.3rem;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: #fff;
+    text-shadow: 0 2px 12px rgba(0, 0, 0, 0.8);
+    animation: fxFadeIn 0.3s 0.25s ease-out both;
+}
+.fx-ring {
+    position: absolute;
+    width: 220px;
+    height: 220px;
+    border-radius: 50%;
+    border: 4px solid currentColor;
+    opacity: 0;
+    animation: fxRing 1s ease-out 0.05s both;
+}
+
+.fx-overlay--180 { color: #f5c542; }
+.fx-overlay--180 .fx-title { font-size: 6.5rem; text-shadow: 0 0 30px rgba(245, 197, 66, 0.9), 0 4px 18px rgba(0, 0, 0, 0.85); }
+
+.fx-overlay--finish { color: #29d87c; }
+.fx-overlay--finish .fx-title { font-size: 3.2rem; padding: 0 16px; text-shadow: 0 0 28px rgba(41, 216, 124, 0.9), 0 4px 18px rgba(0, 0, 0, 0.85); }
+.fx-overlay--finish .fx-ring { width: 300px; height: 300px; }
+
+.fx-confetti {
+    position: fixed;
+    inset: 0;
+    z-index: 9989;
+    pointer-events: none;
+    overflow: hidden;
+}
+.fx-confetti i {
+    position: absolute;
+    top: -16px;
+    width: 9px;
+    height: 15px;
+    border-radius: 2px;
+    opacity: 0;
+    animation-name: fxConfetti;
+    animation-timing-function: cubic-bezier(0.3, 0.1, 0.5, 1);
+    animation-fill-mode: forwards;
+}
+
+@keyframes fxFadeIn  { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fxFadeOut { to { opacity: 0; } }
+@keyframes fxPop {
+    0%   { transform: scale(0.2) rotate(-6deg); opacity: 0; }
+    60%  { opacity: 1; }
+    100% { transform: scale(1) rotate(0); opacity: 1; }
+}
+@keyframes fxRing {
+    0%   { transform: scale(0.3); opacity: 0.9; }
+    100% { transform: scale(2.6); opacity: 0; }
+}
+@keyframes fxConfetti {
+    0%   { transform: translate3d(0, 0, 0) rotate(0); opacity: 1; }
+    100% { transform: translate3d(var(--dx), 108vh, 0) rotate(var(--rot)); opacity: 1; }
+}
+
+@media (max-width: 480px) {
+    .fx-overlay--180 .fx-title { font-size: 5rem; }
+    .fx-overlay--finish .fx-title { font-size: 2.3rem; }
+}
+/* No movement: just a quick fade of the text, no ring or confetti */
+@media (prefers-reduced-motion: reduce) {
+    .fx-ring, .fx-confetti { display: none; }
+    .fx-title { animation: fxFadeIn 0.3s ease-out both; }
+}
+
 /* ── ENTRY DETAIL BOTTOM SHEET ── */
 .entry-sheet-overlay {
     position: fixed;

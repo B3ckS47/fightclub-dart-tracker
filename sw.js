@@ -1,4 +1,4 @@
-const CACHE_NAME = 'flightclub-v51';
+const CACHE_NAME = 'flightclub-v52';
 const BASE = '/fightclub-dart-tracker';
 const ASSETS = [
     BASE + '/index.html',
@@ -8,6 +8,7 @@ const ASSETS = [
     BASE + '/style.css',
     BASE + '/ui-utils.js',
     BASE + '/game-logic.js',
+    BASE + '/game-effects.js',
     BASE + '/ui-manager-game.js',
     BASE + '/ui-manager-dashboard.js',
     BASE + '/database.js',

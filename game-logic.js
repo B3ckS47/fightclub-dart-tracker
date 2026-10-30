@@ -515,6 +515,14 @@ function makePlayerStats() {
 // A finish of at least this many points counts as a "High Finish" (club points + profile)
 const HIGH_FINISH_MIN = 100;
 
+// 180 / High Finish celebration (game-effects.js). Never allowed to disturb scoring.
+function celebrate(kind, name, points) {
+    try {
+        if (window.gameFx) window.gameFx[kind](name, points);
+        showToast(kind === 'celebrate180' ? `🎯 ${name}: 180!` : `🏆 ${name}: High Finish ${points}!`);
+    } catch (e) { console.error('Effect error:', e); }
+}
+
 // Index into gameState.stats of the player of `teamIdx` who is currently throwing
 function statsIdxOf(teamIdx) {
     return gameState.gameType === 'singles'
@@ -1052,6 +1060,9 @@ async function submitTurn(rawPts) {
     // average, the high score or the 180/26 counters.
     const isBust = newScore < 0 || (newScore === 1 && gameState.mode === 'double');
     const scored = isBust ? 0 : pts;
+    const throwerName = gameState.gameType === 'singles'
+        ? gameState.pNames[teamIdx]
+        : gameState.teamPlayers[teamIdx][playerWithinTeam];
 
     pStats.dartsThrown += 3;
     pStats.totalPoints += scored;
@@ -1071,7 +1082,10 @@ async function submitTurn(rawPts) {
     if (newScore === 0) {
         // Track finish score for the WINNER
         if (pts > pStats.highFinish) pStats.highFinish = pts;
-        if (pts >= HIGH_FINISH_MIN) pStats.highFinishes = (pStats.highFinishes || 0) + 1;
+        if (pts >= HIGH_FINISH_MIN) {
+            pStats.highFinishes = (pStats.highFinishes || 0) + 1;
+            celebrate('celebrateHighFinish', throwerName, pts);
+        }
         pStats.dartsPerLeg.push(pStats.dartsThrown);
 
         // Per-leg averages for both sides, then reset the per-leg counters
@@ -1100,6 +1114,7 @@ async function submitTurn(rawPts) {
     } else {
         gameState.scores[teamIdx] = newScore;
         gameState.history[teamIdx].push(pts);
+        if (pts === 180) celebrate('celebrate180', throwerName);
 
         // ── AUTO FINES (official games only) ──
         if (gameState.isOfficial) {

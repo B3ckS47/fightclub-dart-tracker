@@ -15,6 +15,7 @@
     <link rel="apple-touch-icon" href="apple-touch-icon.png">
     <script src="config.js"></script>
     <script src="ui-utils.js"></script>
+    <script src="game-effects.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script>document.documentElement.setAttribute("data-theme",localStorage.getItem("fc47_theme")||"dark");</script>
 </head>
@@ -81,6 +82,22 @@
 
             <div class="divider" style="margin-top:20px;"></div>
 
+            <h3 class="section-label" style="margin-top:16px;">Spiel-Effekte</h3>
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:8px;">
+                <span id="fx-status-text" style="font-size:0.9rem; color:var(--text-secondary);">Lade...</span>
+                <div class="game-mode-toggle" id="fx-toggle" onclick="toggleSoundFx()" style="justify-content:flex-start; padding:8px 0; cursor:pointer;">
+                    <div class="game-mode-track" id="fx-track"></div>
+                    <span class="game-mode-label" id="fx-label">Aktiviert</span>
+                </div>
+            </div>
+            <p class="muted-text" style="font-size:0.78rem; margin-top:6px;">Ton bei einer 180 und bei einem High Finish (ab 100). Die Animation bleibt immer an.</p>
+            <div style="display:flex; gap:8px; margin-top:10px;">
+                <button class="btn btn-ghost btn-sm" onclick="gameFx.celebrate180('Vorschau')">▶ 180 ansehen</button>
+                <button class="btn btn-ghost btn-sm" onclick="gameFx.celebrateHighFinish('Vorschau', 134)">▶ High Finish ansehen</button>
+            </div>
+
+            <div class="divider" style="margin-top:20px;"></div>
+
             <h3 class="section-label" style="margin-top:16px;">Benachrichtigungen</h3>
             <p class="muted-text" style="margin:8px 0 12px; font-size:0.78rem;">
                 Erhalte eine Push-Benachrichtigung 24 Stunden vor einem Termin.<br>
@@ -142,6 +159,21 @@
         }
 
         updateStayUI();
+
+        // ── GAME EFFECTS SOUND TOGGLE ──
+        function updateSoundFxUI() {
+            const on = getSoundFx();
+            document.getElementById('fx-track').classList.toggle('game-mode-track--on', on);
+            document.getElementById('fx-label').textContent       = on ? 'Aktiviert' : 'Deaktiviert';
+            document.getElementById('fx-status-text').textContent = on ? '🔊 Ton an' : '🔇 Ton aus';
+        }
+
+        function toggleSoundFx() {
+            setSoundFx(!getSoundFx());
+            updateSoundFxUI();
+        }
+
+        updateSoundFxUI();
 
         // ── THEME TOGGLE ──
         function selectTheme(theme) {
