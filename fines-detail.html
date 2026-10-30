@@ -133,6 +133,7 @@
         // Newest-first ledger of the current player — loaded once per
         // loadLedger() and reused by the CSV/PDF exports (no extra queries).
         let _entries = [];
+        let _balance = 0; // sum of _entries — open amount (negative = credit)
 
         // ── ENTRY TYPE METADATA ──
         const TYPE_META = {
@@ -188,6 +189,7 @@
 
             const entries = _entries;
             const balance = entries.reduce((sum, e) => sum + parseFloat(e.amount), 0);
+            _balance = balance;
             const isZero  = balance <= 0;
 
             document.getElementById('detail-balance').textContent = formatEur(balance);
@@ -277,10 +279,21 @@
             const noReason  = type !== 'fine'; // payment & contribution need no reason
             reasonSel.disabled = noReason;
             reasonSel.style.opacity = noReason ? '0.4' : '1';
-            if (noReason) {
-                reasonSel.value = '';
-                document.getElementById('fine-amount').value = type === 'contribution' ? '10.00' : '';
-            }
+            if (noReason) reasonSel.value = '';
+            prefillDefaultAmount();
+        }
+
+        // Each entry type has a sensible default amount: a payment usually
+        // settles the whole open balance (one tap instead of typing it), a
+        // contribution is the fixed monthly fee, a fine gets its amount from
+        // the chosen reason. Switching type always resets the field so a value
+        // meant for one type can't be submitted as another.
+        function prefillDefaultAmount() {
+            const type  = document.getElementById('fine-type').value;
+            const field = document.getElementById('fine-amount');
+            if (type === 'payment')           field.value = _balance > 0.005 ? _balance.toFixed(2) : '';
+            else if (type === 'contribution') field.value = '10.00';
+            else                              field.value = '';
         }
 
         // ── PREFILL AMOUNT FROM REASON ──
@@ -323,12 +336,13 @@
             if (error) return showMsg('Fehler: ' + error.message, 'var(--red)');
 
             // Reset form
-            document.getElementById('fine-amount').value = '';
             document.getElementById('fine-reason').value = '';
             document.getElementById('fine-note').value   = '';
 
-            showMsg('Eintrag gespeichert!', 'var(--green)');
             await loadLedger();
+            prefillDefaultAmount(); // e.g. payment mode: now offers the *new* open balance
+            const credit = _balance < -0.005;
+            showMsg(`Eintrag gespeichert! Neuer Saldo: ${credit ? '–' : ''}${formatEur(_balance)}${credit ? ' (Guthaben)' : ''}`, 'var(--green)');
         }
 
         // ── EXPORT CSV ──

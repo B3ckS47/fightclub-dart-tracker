@@ -146,7 +146,11 @@
             // Member/admin players = players linked to an app_user with role member/admin
             const memberPlayerIds = new Set(users.map(u => u.player_id).filter(Boolean));
             const memberPlayers   = players.filter(p => memberPlayerIds.has(p.id));
-            const guestPlayers    = players.filter(p => !memberPlayerIds.has(p.id));
+            // Guests only matter while they actually owe (or are owed) something —
+            // otherwise every one-off guest ever added would clutter the list.
+            const guestPlayers    = players.filter(p =>
+                !memberPlayerIds.has(p.id) && Math.abs(balanceMap[p.id] || 0) >= 0.005
+            );
 
             // Render members — sorted by balance descending (highest debt first)
             const membersEl = document.getElementById('fines-members-list');
