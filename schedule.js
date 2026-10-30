@@ -157,8 +157,24 @@ async function loadAppointments() {
 
     renderAll();
     if (document.getElementById('past-section').style.display !== 'none') ensureFinesLoaded();
+}
 
-    await handleStatusTransitions(all, votes, allUsers);
+// The average fine for absentees is booked by the database (pg_cron job
+// 'durchschnittsstrafe', see sql/durchschnittsstrafe.sql) FINE_GRACE_MIN minutes
+// after an appointment ends. This window mirrors that function so the summary
+// on the card shows the same total — keep both in sync.
+const FINE_GRACE_MIN = 60;
+
+function fineWindow(appt) {
+    const start = new Date(appt.start_time || appt.date).getTime();
+    const end   = new Date(appt.end_time).getTime();
+    let nextStart = Infinity;
+    [..._upcomingRaw, ..._pastRaw].forEach(o => {
+        if (o.id === appt.id) return;
+        const s = new Date(o.start_time || o.date).getTime();
+        if (s > start && s < nextStart) nextStart = s;
+    });
+    return { start, end: Math.max(end, Math.min(end + FINE_GRACE_MIN * 60000, nextStart)) };
 }
 
 // Fines feeding the per-appointment summary in the archive.
@@ -168,10 +184,9 @@ async function ensureFinesLoaded() {
     _finesLoading = true;
     try {
         // The real per-session fines (not the system-generated "Durchschnitt"
-        // catch-up fines) are matched against each appointment's time window,
-        // same as applyAverageFine() does.
+        // catch-up fines) are matched against each appointment's time window.
         _allFinesRaw = await fetchAllRows(() =>
-            supa.from('fines_ledger').select('amount, reason, type, created_at')
+            supa.from('fines_ledger').select('amount, note, created_at')
                 .eq('type', 'fine').not('reason', 'like', 'Bountyeinsatz%').order('id'));
     } catch (e) {
         console.error('Strafen-Zusammenfassung laden fehlgeschlagen:', e);
@@ -179,99 +194,6 @@ async function ensureFinesLoaded() {
     }
     _finesLoading = false;
     renderAll();
-}
-
-// ── STATUS TRANSITIONS & AVERAGE FINE ──
-async function handleStatusTransitions(all, allVotes, allUsers) {
-    for (const appt of all) {
-        const computed = getApptStatus(appt);
-
-        if (computed === 'active' && appt.status !== 'active') {
-            await supa.from('appointments')
-                .update({ status: 'active' })
-                .eq('id', appt.id);
-        }
-
-        if (computed === 'past' && appt.status !== 'past') {
-            // Fine first, status second: if the fine step fails, the next page
-            // load retries instead of marking the appointment done for good.
-            try {
-                await applyAverageFine(appt, allVotes, allUsers);
-            } catch (e) {
-                console.error('Durchschnittsstrafe fehlgeschlagen:', e);
-                continue;
-            }
-            await supa.from('appointments')
-                .update({ status: 'past' })
-                .eq('id', appt.id);
-        }
-    }
-}
-
-// ── AVERAGE FINE ──
-async function applyAverageFine(appt, allVotes, allUsers) {
-    if (!appt.end_time) return;
-
-    // All members and admins with a linked player
-    const eligibleUsers = allUsers.filter(u =>
-        (u.role === 'member' || u.role === 'admin') && u.player_id
-    );
-    if (eligibleUsers.length === 0) return;
-
-    // Who was present? (members/admins only, no guests)
-    const apptVotes   = allVotes.filter(v => v.appointment_id === appt.id);
-    const attendeeIds = new Set(apptVotes.filter(v => v.vote === 'yes').map(v => v.user_id));
-    const presentUsers  = eligibleUsers.filter(u =>  attendeeIds.has(u.id));
-    const absentUsers   = eligibleUsers.filter(u => !attendeeIds.has(u.id));
-
-    if (presentUsers.length === 0 || absentUsers.length === 0) return;
-
-    // All fines created during the appointment window (excl. avg-fines and bounty)
-    const { data: finesDuring, error: finesErr } = await supa
-        .from('fines_ledger')
-        .select('amount')
-        .eq('type', 'fine')
-        .gte('created_at', appt.start_time || appt.date)
-        .lte('created_at', appt.end_time)
-        .neq('reason', `Durchschnitt ${appt.title}`)
-        .not('reason', 'like', 'Bountyeinsatz%');
-    if (finesErr) throw finesErr;
-
-    if (!finesDuring || finesDuring.length === 0) return;
-
-    const totalFines = finesDuring.reduce((s, r) => s + parseFloat(r.amount), 0);
-
-    // Per-head fine = total ÷ number of present members/admins
-    const avgFine = Math.round((totalFines / presentUsers.length) * 100) / 100;
-    if (avgFine <= 0) return;
-
-    const reasonName = `Durchschnitt ${appt.title}`;
-
-    // Duplicate protection
-    const { data: existing, error: existingErr } = await supa
-        .from('fines_ledger')
-        .select('player_id')
-        .eq('reason', reasonName)
-        .eq('note', `appt:${appt.id}`);
-    if (existingErr) throw existingErr;
-
-    const alreadyFined = new Set((existing || []).map(r => r.player_id));
-
-    const rowsToInsert = absentUsers
-        .filter(u => !alreadyFined.has(u.player_id))
-        .map(u => ({
-            player_id:  u.player_id,
-            amount:     avgFine,
-            type:       'fine',
-            reason:     reasonName,
-            note:       `appt:${appt.id}`,
-            created_by: 'system'
-        }));
-
-    if (rowsToInsert.length === 0) return;
-
-    const { error } = await supa.from('fines_ledger').insert(rowsToInsert);
-    if (error) throw error;
 }
 
 // ── VOTE AVATAR ──
@@ -400,17 +322,14 @@ function appointmentCardHtml(appt, allVotes, guests, isPast, isOpen) {
 
     // Fines summary for past Training appointments
     let finesSummary = '';
-    if (isPast && appt.type === 'Training' && _allFinesRaw) {
-        // Same window + exclusion rule as applyAverageFine()'s own
-        // finesDuring query — fines logged during the session, not the
-        // "Durchschnitt"-reason catch-up fines charged to absentees.
-        const apptStart  = new Date(appt.start_time || appt.date).getTime();
-        const apptEnd    = appt.end_time ? new Date(appt.end_time).getTime() : Infinity;
-        const avgReason  = `Durchschnitt ${appt.title}`;
-        const apptFines  = _allFinesRaw.filter(f => {
-            if (f.reason === avgReason) return false;
+    if (isPast && appt.type === 'Training' && appt.end_time && _allFinesRaw) {
+        // Fines logged during the session (same window the database job uses),
+        // not the "Durchschnitt" catch-up fines charged to absentees (note 'appt:…').
+        const win       = fineWindow(appt);
+        const apptFines = _allFinesRaw.filter(f => {
+            if ((f.note || '').startsWith('appt:')) return false;
             const t = new Date(f.created_at).getTime();
-            return t >= apptStart && t <= apptEnd;
+            return t >= win.start && t <= win.end;
         });
         const totalFines   = apptFines.reduce((s, f) => s + parseFloat(f.amount), 0);
         // Only count members/admins (non-guests) — consistent with who gets the avg fine
@@ -424,6 +343,13 @@ function appointmentCardHtml(appt, allVotes, guests, isPast, isOpen) {
                 <span class="appt-fines-item">Ø pro Kopf <strong>${avgFine.toFixed(2)} €</strong></span>
             </div>`;
         }
+    }
+
+    // Until the database job has run, tell when the average fine will be booked
+    // (fines_processed_at exists once sql/durchschnittsstrafe.sql was applied)
+    if (isPast && appt.type === 'Training' && appt.end_time && 'fines_processed_at' in appt && !appt.fines_processed_at) {
+        const at = fmtClock(new Date(new Date(appt.end_time).getTime() + FINE_GRACE_MIN * 60000).toISOString());
+        finesSummary += `<div class="appt-vote-locked">⏳ Durchschnittsstrafe für Abwesende folgt kurz nach ${at} Uhr</div>`;
     }
 
     const guestVotedIds   = new Set(votes.filter(v => v.is_guest).map(v => v.user_id));
@@ -635,33 +561,14 @@ async function createAppointment() {
 
 // ── END APPOINTMENT EARLY (admin only) ──
 async function endAppointmentNow(id) {
-    const ok = await showConfirm('Termin beenden', 'Diesen Termin jetzt frühzeitig beenden? Die Durchschnittsstrafe wird sofort berechnet.');
+    const ok = await showConfirm('Termin beenden', `Diesen Termin jetzt frühzeitig beenden? Die Durchschnittsstrafe für Abwesende wird ${FINE_GRACE_MIN} Minuten nach dem Ende berechnet.`);
     if (!ok) return;
 
-    const now = new Date().toISOString();
     const { error } = await supa.from('appointments')
-        .update({ end_time: now, status: 'past' })
+        .update({ end_time: new Date().toISOString() })
         .eq('id', id);
 
     if (error) { showToast('Fehler: ' + error.message, 'error'); return; }
-
-    // Reload data and trigger avg fine calculation
-    const [apptRes, votesRes, usersRes] = await Promise.all([
-        supa.from('appointments').select('*').eq('id', id).single(),
-        supa.from('appointment_votes').select('*').eq('appointment_id', id),
-        supa.from('app_users').select('id, player_id, role')
-    ]);
-
-    if (apptRes.data) {
-        try {
-            await applyAverageFine(apptRes.data, votesRes.data || [], usersRes.data || []);
-        } catch (e) {
-            console.error('Durchschnittsstrafe fehlgeschlagen:', e);
-            showToast('Termin beendet, aber die Durchschnittsstrafe konnte nicht berechnet werden.', 'error');
-            loadAppointments();
-            return;
-        }
-    }
 
     showToast('Termin beendet.', 'success');
     loadAppointments();
