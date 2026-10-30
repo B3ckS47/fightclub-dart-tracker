@@ -58,54 +58,143 @@ async function startGameFromTournament() {
     // VS intro doubles as starter selection — tap a picture to begin
     await showVsIntro();
 }
-async function saveTournamentResult(winnerName) {
-    if (!_tournMatchId || !_tournP1Id || !_tournP2Id) return;
-    try {
-        const p1Name   = _urlParams.get('p1');
-        const winnerId = winnerName === p1Name ? _tournP1Id : _tournP2Id;
-        const loserId  = winnerName === p1Name ? _tournP2Id : _tournP1Id;
+// ── TOURNAMENT RESULT ──
+// ctx identifies the match being finished: { matchId, tournId, p1Id, p2Id, p1Name }.
+// For a live game it comes from the URL; for a result that was recovered after the
+// app was closed at the result popup it comes from localStorage (see below).
+function tournamentCtxFromUrl() {
+    return { matchId: _tournMatchId, tournId: _tournId, p1Id: _tournP1Id, p2Id: _tournP2Id, p1Name: _urlParams.get('p1') };
+}
 
-        // Mark match done
-        await supa.from('tournament_matches').update({
-            winner_id: winnerId,
-            loser_id:  loserId,
-            status:    'done'
-        }).eq('id', _tournMatchId);
+// Resolves true when the result is recorded (or already was), false if saving failed.
+async function saveTournamentResult(winnerName, ctx = tournamentCtxFromUrl()) {
+    if (!ctx.matchId || !ctx.p1Id || !ctx.p2Id) return true;
+    try {
+        const winnerId = winnerName === ctx.p1Name ? ctx.p1Id : ctx.p2Id;
+        const loserId  = winnerName === ctx.p1Name ? ctx.p2Id : ctx.p1Id;
+
+        // Claim the result: only the first writer gets the row back. A double tap or a
+        // second device stops here instead of advancing the tournament twice.
+        const { data: claimed, error: claimError } = await supa.from('tournament_matches')
+            .update({ winner_id: winnerId, loser_id: loserId, status: 'done' })
+            .eq('id', ctx.matchId)
+            .neq('status', 'done')
+            .select('id');
+        if (claimError) throw claimError;
+        if (!claimed || claimed.length === 0) return true; // already recorded by someone else
 
         // Fetch tournament mode + this match details
         const [{ data: tourn }, { data: thisMatch }] = await Promise.all([
-            supa.from('tournaments').select('mode, name').eq('id', _tournId).single(),
+            supa.from('tournaments').select('mode, name').eq('id', ctx.tournId).single(),
             supa.from('tournament_matches')
-                .select('bracket, round, match_number')
-                .eq('id', _tournMatchId).single()
+                .select('bracket, round, match_number, next_match_id')
+                .eq('id', ctx.matchId).single()
         ]);
-        if (!tourn || !thisMatch) return;
+        if (!tourn || !thisMatch) return true;
 
         if (tourn.mode === 'ko') {
-            await advanceKO(winnerId, thisMatch);
+            await advanceKO(winnerId, loserId, thisMatch, ctx);
         } else if (tourn.mode === 'swiss') {
-            await advanceSwiss(winnerId, loserId, thisMatch);
+            await advanceSwiss(winnerId, loserId, thisMatch, ctx);
         } else if (tourn.mode === 'bounty') {
-            await advanceBounty(winnerId, loserId, tourn);
+            await advanceBounty(winnerId, loserId, tourn, ctx);
         }
-    } catch(e) { console.error('[Tournament] Error:', e); }
+        return true;
+    } catch(e) {
+        console.error('[Tournament] Error:', e);
+        return false;
+    }
 }
 
-async function advanceKO(winnerId, thisMatch) {
-    const { data: nextMatches } = await supa
-        .from('tournament_matches')
-        .select('id, p1_id, p2_id')
-        .eq('tournament_id', _tournId)
-        .eq('round', thisMatch.round + 1)
-        .eq('bracket', 'winners');
-    if (!nextMatches || nextMatches.length === 0) return;
-    const nextMatch = nextMatches[Math.floor((thisMatch.match_number - 1) / 2)];
-    if (!nextMatch) return;
-    const field = nextMatch.p1_id ? 'p2_id' : 'p1_id';
-    await supa.from('tournament_matches').update({ [field]: winnerId }).eq('id', nextMatch.id);
+// ── PENDING RESULT: survives closing the app at the result popup ──
+// The match stats are saved the moment the last dart goes in, but the tournament
+// result only when the popup is confirmed. Without a note of it, closing the app in
+// between left the match open in the bracket (and it got played — and counted — again).
+const PENDING_TOURN_KEY = 'fc47_pending_tourn_result';
+
+function rememberPendingTournamentResult(winnerName) {
+    if (!_tournMatchId) return;
+    try { localStorage.setItem(PENDING_TOURN_KEY, JSON.stringify({ ctx: tournamentCtxFromUrl(), winnerName })); }
+    catch (e) { /* storage blocked — falls back to the old behaviour */ }
 }
 
-async function advanceSwiss(winnerId, loserId, thisMatch) {
+function forgetPendingTournamentResult() {
+    try { localStorage.removeItem(PENDING_TOURN_KEY); } catch (e) { /* ignore */ }
+}
+
+async function recoverPendingTournamentResult() {
+    let pending = null;
+    try { pending = JSON.parse(localStorage.getItem(PENDING_TOURN_KEY) || 'null'); } catch (e) { /* ignore */ }
+    if (!pending || !pending.ctx || !pending.winnerName) return;
+
+    if (!(await saveTournamentResult(pending.winnerName, pending.ctx))) return; // try again next time
+    forgetPendingTournamentResult();
+    showToast('Turnier-Ergebnis nachgetragen.');
+    // This page was opened for that very match again — it is done, back to the bracket
+    if (pending.ctx.matchId === _tournMatchId) {
+        setTimeout(() => { window.location.href = `tournament-view.html?id=${pending.ctx.tournId}`; }, 1500);
+    }
+}
+
+// ── ROUND GENERATION: only once ──
+// Two matches finishing at the same moment both see "round complete" and both would
+// create the next round. roundExists() catches the sequential case; the unique slot
+// from sql/tournament-matches-unique.sql makes the second insert fail for the
+// truly simultaneous one — insertRoundOnce() treats that as "someone else was faster".
+async function roundExists(tournId, round, bracket) {
+    const { count } = await supa.from('tournament_matches')
+        .select('id', { count: 'exact', head: true })
+        .eq('tournament_id', tournId).eq('round', round).eq('bracket', bracket);
+    return (count || 0) > 0;
+}
+
+async function insertRoundOnce(rows) {
+    const { error } = await supa.from('tournament_matches').insert(rows);
+    if (error) {
+        if (error.code !== '23505') console.error('[Tournament] Round insert error:', error.message);
+        return false;
+    }
+    return true;
+}
+
+async function advanceKO(winnerId, loserId, thisMatch, ctx) {
+    const { tournId } = ctx;
+
+    // The bracket stores the link to the next match; older brackets without it fall
+    // back to the position in the next round (explicitly ordered — row order is not
+    // guaranteed otherwise).
+    let nextMatchId = thisMatch.next_match_id || null;
+    if (!nextMatchId) {
+        const { data: nextMatches } = await supa
+            .from('tournament_matches')
+            .select('id')
+            .eq('tournament_id', tournId)
+            .eq('round', thisMatch.round + 1)
+            .order('match_number');
+        const next = (nextMatches || [])[Math.floor((thisMatch.match_number - 1) / 2)];
+        nextMatchId = next ? next.id : null;
+    }
+
+    // No next match = this was the final: the tournament is over
+    if (!nextMatchId) {
+        await supa.from('tournaments').update({
+            status:       'finished',
+            winner_id:    winnerId,
+            runner_up_id: loserId,
+            finished_at:  new Date().toISOString()
+        }).eq('id', tournId);
+        return;
+    }
+
+    // Fixed slot by position (odd match → p1, even → p2 — the same rule the bracket
+    // creation uses for byes), so two feeder matches finishing together can't
+    // overwrite each other's slot.
+    const field = thisMatch.match_number % 2 === 1 ? 'p1_id' : 'p2_id';
+    await supa.from('tournament_matches').update({ [field]: winnerId }).eq('id', nextMatchId);
+}
+
+async function advanceSwiss(winnerId, loserId, thisMatch, ctx) {
+    const { tournId, matchId } = ctx;
     try {
         // Final match — close tournament directly
         if (thisMatch.bracket === 'final') {
@@ -114,7 +203,7 @@ async function advanceSwiss(winnerId, loserId, thisMatch) {
                 winner_id:    winnerId,
                 runner_up_id: loserId,
                 finished_at:  new Date().toISOString()
-            }).eq('id', _tournId);
+            }).eq('id', tournId);
             return;
         }
 
@@ -122,7 +211,7 @@ async function advanceSwiss(winnerId, loserId, thisMatch) {
         const { data: allParts } = await supa
             .from('tournament_participants')
             .select('id, name, wins, losses, bye_count, seed')
-            .eq('tournament_id', _tournId);
+            .eq('tournament_id', tournId);
         if (!allParts) return;
 
         const winnerPart = allParts.find(p => p.id === winnerId);
@@ -143,29 +232,33 @@ async function advanceSwiss(winnerId, loserId, thisMatch) {
         const [{ data: parts }, { data: allMatches }] = await Promise.all([
             supa.from('tournament_participants')
                 .select('id, name, wins, losses, bye_count, seed')
-                .eq('tournament_id', _tournId),
+                .eq('tournament_id', tournId),
             supa.from('tournament_matches')
                 .select('id, round, bracket, p1_id, p2_id, status, winner_id, loser_id')
-                .eq('tournament_id', _tournId)
+                .eq('tournament_id', tournId)
         ]);
         if (!parts || !allMatches) return;
 
         // 4. Check if all matches in current round are done
         const round = thisMatch.round;
         const thisRound = allMatches.filter(m => m.round === round);
-        const allDone = thisRound.every(m => m.status === 'done' || m.id === _tournMatchId);
+        const allDone = thisRound.every(m => m.status === 'done' || m.id === matchId);
         if (!allDone) return;
 
-        // 5. Build pools from updated records
-        const winnersPool = parts.filter(p => (p.losses || 0) === 0);
-        const losersPool  = parts.filter(p => (p.losses || 0) === 1);
+        // 5. Build pools from the match results — not from the wins/losses counters on
+        // the participants: those are written a moment AFTER a match is marked done, so a
+        // match finishing at the same time could still show stale counters here.
+        const lossesOf    = id => allMatches.filter(m => m.status === 'done' && m.loser_id === id).length;
+        const winnersPool = parts.filter(p => lossesOf(p.id) === 0);
+        const losersPool  = parts.filter(p => lossesOf(p.id) === 1);
         const finalMs     = allMatches.filter(m => m.bracket === 'final');
         const nextRound   = round + 1;
 
         // 6. Final condition: 1 player in each pool
         if (winnersPool.length === 1 && losersPool.length === 1 && finalMs.length === 0) {
-            await supa.from('tournament_matches').insert([{
-                tournament_id: _tournId,
+            if (await roundExists(tournId, nextRound, 'final')) return;
+            await insertRoundOnce([{
+                tournament_id: tournId,
                 round:         nextRound,
                 match_number:  1,
                 bracket:       'final',
@@ -178,12 +271,13 @@ async function advanceSwiss(winnerId, loserId, thisMatch) {
 
         // 7. Generate next round matches for each pool
         async function generatePoolMatches(pool, bracketLabel) {
-            if (pool.length === 0) return;
-            if (pool.length === 1) return; // champion, wait for other pool
+            if (pool.length <= 1) return; // empty, or a champion waiting for the other pool
+            if (await roundExists(tournId, nextRound, bracketLabel)) return;
 
             const sorted = [...pool].sort((a, b) => (a.seed || 0) - (b.seed || 0));
             const hasBye = sorted.length % 2 !== 0;
             let byePlayer = null;
+            const rows = [];
 
             if (hasBye) {
                 // Player with lowest bye_count gets the bye (random if tied)
@@ -191,29 +285,23 @@ async function advanceSwiss(winnerId, loserId, thisMatch) {
                 const eligible = sorted.filter(p => (p.bye_count || 0) === minByes);
                 byePlayer = eligible[Math.floor(Math.random() * eligible.length)];
 
-                await Promise.all([
-                    supa.from('tournament_participants')
-                        .update({ bye_count: (byePlayer.bye_count || 0) + 1, wins: (byePlayer.wins || 0) + 1 })
-                        .eq('id', byePlayer.id),
-                    supa.from('tournament_matches').insert([{
-                        tournament_id: _tournId,
-                        round:         nextRound,
-                        match_number:  Math.ceil(sorted.length / 2),
-                        bracket:       bracketLabel,
-                        p1_id:         byePlayer.id,
-                        p2_id:         null,
-                        winner_id:     byePlayer.id,
-                        loser_id:      null,
-                        status:        'done'
-                    }])
-                ]);
+                rows.push({
+                    tournament_id: tournId,
+                    round:         nextRound,
+                    match_number:  Math.ceil(sorted.length / 2),
+                    bracket:       bracketLabel,
+                    p1_id:         byePlayer.id,
+                    p2_id:         null,
+                    winner_id:     byePlayer.id,
+                    loser_id:      null,
+                    status:        'done'
+                });
             }
 
             const toMatch = sorted.filter(p => !byePlayer || p.id !== byePlayer.id);
-            const rows = [];
             for (let i = 0; i < toMatch.length / 2; i++) {
                 rows.push({
-                    tournament_id: _tournId,
+                    tournament_id: tournId,
                     round:         nextRound,
                     match_number:  i + 1,
                     bracket:       bracketLabel,
@@ -222,7 +310,17 @@ async function advanceSwiss(winnerId, loserId, thisMatch) {
                     status:        'pending'
                 });
             }
-            if (rows.length > 0) await supa.from('tournament_matches').insert(rows);
+
+            // One statement for the whole round (bye included): either all of it is
+            // created or, if a concurrent run was faster, none of it.
+            if (!(await insertRoundOnce(rows))) return;
+
+            // Only the run that created the round credits the bye
+            if (byePlayer) {
+                await supa.from('tournament_participants')
+                    .update({ bye_count: (byePlayer.bye_count || 0) + 1, wins: (byePlayer.wins || 0) + 1 })
+                    .eq('id', byePlayer.id);
+            }
         }
 
         await generatePoolMatches(winnersPool, 'winners');
@@ -233,7 +331,8 @@ async function advanceSwiss(winnerId, loserId, thisMatch) {
 
 
 // ── BOUNTY HUNTER MODE ──
-async function advanceBounty(winnerId, loserId, tourn) {
+async function advanceBounty(winnerId, loserId, tourn, ctx) {
+    const { tournId, matchId } = ctx;
     try {
         const tournName = tourn.name || 'Bounty Turnier';
 
@@ -241,7 +340,7 @@ async function advanceBounty(winnerId, loserId, tourn) {
         const { data: parts } = await supa
             .from('tournament_participants')
             .select('id, name, lives, bounty, player_id')
-            .eq('tournament_id', _tournId);
+            .eq('tournament_id', tournId);
         if (!parts) return;
 
         const winner = parts.find(p => p.id === winnerId);
@@ -290,7 +389,7 @@ async function advanceBounty(winnerId, loserId, tourn) {
                 status:      'finished',
                 winner_id:   winner.id,
                 finished_at: new Date().toISOString()
-            }).eq('id', _tournId);
+            }).eq('id', tournId);
             return;
 
         } else {
@@ -325,7 +424,7 @@ async function advanceBounty(winnerId, loserId, tourn) {
         const { data: updatedParts } = await supa
             .from('tournament_participants')
             .select('id, lives, bounty, player_id, name')
-            .eq('tournament_id', _tournId);
+            .eq('tournament_id', tournId);
         if (!updatedParts) return;
 
         const alive = updatedParts.filter(p => (p.lives || 0) > 0);
@@ -336,7 +435,7 @@ async function advanceBounty(winnerId, loserId, tourn) {
                 status:      'finished',
                 winner_id:   alive[0].id,
                 finished_at: new Date().toISOString()
-            }).eq('id', _tournId);
+            }).eq('id', tournId);
             return;
         }
 
@@ -344,19 +443,20 @@ async function advanceBounty(winnerId, loserId, tourn) {
         const { data: allMatches } = await supa
             .from('tournament_matches')
             .select('id, round, status')
-            .eq('tournament_id', _tournId)
+            .eq('tournament_id', tournId)
             .order('round', { ascending: false });
         if (!allMatches) return;
 
         const currentRound  = allMatches[0].round;
         const thisRoundDone = allMatches
             .filter(m => m.round === currentRound)
-            .every(m => m.status === 'done' || m.id === _tournMatchId);
+            .every(m => m.status === 'done' || m.id === matchId);
 
         if (!thisRoundDone) return;
 
         // 5. Generate next round with alive players — shuffled randomly
         const nextRound = currentRound + 1;
+        if (await roundExists(tournId, nextRound, 'winners')) return;
         const aliveIds  = alive.map(p => p.id);
         const shuffled  = aliveIds.sort(() => Math.random() - 0.5);
         const pairs     = Math.floor(shuffled.length / 2);
@@ -365,7 +465,7 @@ async function advanceBounty(winnerId, loserId, tourn) {
 
         for (let i = 0; i < pairs; i++) {
             rows.push({
-                tournament_id: _tournId,
+                tournament_id: tournId,
                 round:         nextRound,
                 match_number:  i + 1,
                 bracket:       'winners',
@@ -376,7 +476,7 @@ async function advanceBounty(winnerId, loserId, tourn) {
         }
         if (hasBye) {
             rows.push({
-                tournament_id: _tournId,
+                tournament_id: tournId,
                 round:         nextRound,
                 match_number:  pairs + 1,
                 bracket:       'winners',
@@ -387,7 +487,7 @@ async function advanceBounty(winnerId, loserId, tourn) {
             });
         }
 
-        if (rows.length > 0) await supa.from('tournament_matches').insert(rows);
+        if (rows.length > 0) await insertRoundOnce(rows);
 
     } catch(e) { console.error('[Bounty] Error:', e); }
 }
@@ -642,6 +742,7 @@ let gameState = {
 
 window.addEventListener('DOMContentLoaded', () => {
     // fetchPlayers is called by ui-manager-game.js
+    recoverPendingTournamentResult().catch(e => console.error('[Tournament] Recovery error:', e));
 });
 
 // ── VS INTRO ANIMATION ──
@@ -1216,6 +1317,7 @@ let matchWinnerName = '';
 let matchLoserName  = '';
 function showMatchModal(winnerName) {
     matchWinnerName = winnerName;
+    rememberPendingTournamentResult(winnerName);
     const winnerTeamIdx = gameState.pNames[0] === winnerName ? 0 : 1;
     matchLoserName  = winnerTeamIdx === 0 ? gameState.pNames[1] : gameState.pNames[0];
     document.getElementById('match-modal-avatar').innerHTML = notifyAvatarHtml(winnerTeamIdx);
@@ -1345,7 +1447,7 @@ async function dismissMatchModal() {
     await clearLiveState();
     // Save tournament result if this was a tournament match
     if (_tournMatchId) {
-        await saveTournamentResult(matchWinnerName);
+        if (await saveTournamentResult(matchWinnerName)) forgetPendingTournamentResult();
     }
     if (gameState.opponentType === 'online' && gameState.onlineGameId) {
         try {
@@ -1369,6 +1471,7 @@ async function undoFromMatchModal() {
     // The match was already saved when the final throw went in — take those rows
     // out again, the match gets saved anew when it is finished the second time.
     await deleteSavedMatchRows();
+    forgetPendingTournamentResult(); // the match is not finished any more
     undoMove();
 }
 
