@@ -17,6 +17,30 @@
     <script>document.documentElement.setAttribute("data-theme",localStorage.getItem("fc47_theme")||"dark");</script>
 </head>
 <body>
+    <!-- Joker partner bottom sheet (doubles with an odd number of players) -->
+    <div id="joker-sheet-overlay" class="entry-sheet-overlay" onclick="closeJokerSheet()" style="display:none;"></div>
+    <div id="joker-sheet" class="entry-sheet" style="display:none;">
+        <div class="entry-sheet-handle"></div>
+        <div class="entry-sheet-content">
+            <h2 class="card-title" style="margin-bottom:6px;">🎲 JOKER-PARTNER</h2>
+            <p class="muted-text" id="joker-sheet-sub" style="margin-bottom:12px;"></p>
+            <div class="divider" style="margin-bottom:12px;"></div>
+            <div class="joker-partner-box">
+                <div class="joker-partner-name" id="joker-partner-name">–</div>
+                <div class="joker-partner-hint" id="joker-partner-hint"></div>
+            </div>
+            <div id="joker-manual-list" class="guest-pick-list" style="display:none; margin-bottom:12px;"></div>
+            <div class="schedule-form">
+                <div class="joker-btn-row">
+                    <button id="joker-reroll-btn" class="btn btn-ghost btn-full" onclick="rerollJoker()">🎲 NEU WÜRFELN</button>
+                    <button id="joker-manual-btn" class="btn btn-ghost btn-full" onclick="toggleJokerManual()">✋ MANUELL</button>
+                </div>
+                <button id="joker-start-btn" class="btn btn-accent btn-full" onclick="startJokerMatch()">SPIEL STARTEN</button>
+                <button class="btn btn-full" onclick="closeJokerSheet()" style="background:var(--bg-element); color:var(--text-secondary);">ABBRECHEN</button>
+            </div>
+        </div>
+    </div>
+
     <nav id="nav-tournament-view">
         <div class="nav-inner nav-inner--default">
             <span class="nav-brand">FLIGHTCLUB</span>
@@ -291,25 +315,24 @@
                 `RUNDE ${currentRound} · ${pending.length} ${pending.length === 1 ? 'MATCH' : 'MATCHES'}`;
 
             document.getElementById('bounty-matches-list').innerHTML = pending.map(m => {
-                const url  = buildGameUrl(m);
                 const p1   = participants.find(p => p.id === m.p1_id);
                 const p2   = participants.find(p => p.id === m.p2_id);
                 const b1   = p1 ? `💰 ${parseFloat(p1.bounty||0).toFixed(2).replace('.',',')} €` : '';
                 const b2   = p2 ? `💰 ${parseFloat(p2.bounty||0).toFixed(2).replace('.',',')} €` : '';
                 return `
-                <a href="${url}" class="tourn-match-card">
+                <a ${matchLinkAttrs(m)} class="tourn-match-card">
                     <div class="tourn-match-players">
                         <div class="bounty-match-player">
-                            <span class="tourn-match-player">${partName(m.p1_id)}</span>
+                            <span class="tourn-match-player">${matchTeamName(m, m.p1_id)}</span>
                             <span class="bounty-match-tag">${b1}</span>
                         </div>
                         <span class="tourn-match-vs">VS</span>
                         <div class="bounty-match-player bounty-match-player--right">
-                            <span class="tourn-match-player">${partName(m.p2_id)}</span>
+                            <span class="tourn-match-player">${matchTeamName(m, m.p2_id)}</span>
                             <span class="bounty-match-tag">${b2}</span>
                         </div>
                     </div>
-                    <div class="tourn-match-action">🎯 Spiel starten »</div>
+                    <div class="tourn-match-action">${startLabel(m)}</div>
                 </a>`;
             }).join('');
         }
@@ -377,7 +400,6 @@
 
             const el = document.getElementById('all-matches-list');
             el.innerHTML = current.map(m => {
-                const url       = buildGameUrl(m);
                 const isLoser   = m.bracket === 'losers';
                 const isFinal   = m.bracket === 'final';
                 const poolBadge = isLoser ? '<span class="match-pool-badge match-pool-badge--loser">LOSER POOL</span>'
@@ -387,14 +409,14 @@
                                 : isFinal ? 'tourn-match-card tourn-match-card--final'
                                 :           'tourn-match-card';
                 return `
-                    <a href="${url}" class="${cardClass}">
+                    <a ${matchLinkAttrs(m)} class="${cardClass}">
                         <div class="tourn-match-meta">${poolBadge}<span class="tourn-match-round">Runde ${m.round}</span></div>
                         <div class="tourn-match-players">
-                            <span class="tourn-match-player">${partName(m.p1_id)}</span>
+                            <span class="tourn-match-player">${matchTeamName(m, m.p1_id)}</span>
                             <span class="tourn-match-vs">VS</span>
-                            <span class="tourn-match-player">${partName(m.p2_id)}</span>
+                            <span class="tourn-match-player">${matchTeamName(m, m.p2_id)}</span>
                         </div>
-                        <div class="tourn-match-action">🎯 Spiel starten »</div>
+                        <div class="tourn-match-action">${startLabel(m)}</div>
                     </a>
                 `;
             }).join('');
@@ -414,15 +436,14 @@
                 `RUNDE ${currentRound} · ${currentMatches.length} ${currentMatches.length === 1 ? 'MATCH' : 'MATCHES'}`;
 
             document.getElementById('current-round-matches').innerHTML = currentMatches.map(m => {
-                const url = buildGameUrl(m);
                 return `
-                    <a href="${url}" class="tourn-match-card">
+                    <a ${matchLinkAttrs(m)} class="tourn-match-card">
                         <div class="tourn-match-players">
-                            <span class="tourn-match-player">${partName(m.p1_id)}</span>
+                            <span class="tourn-match-player">${matchTeamName(m, m.p1_id)}</span>
                             <span class="tourn-match-vs">VS</span>
-                            <span class="tourn-match-player">${partName(m.p2_id)}</span>
+                            <span class="tourn-match-player">${matchTeamName(m, m.p2_id)}</span>
                         </div>
-                        <div class="tourn-match-action">🎯 Spiel starten »</div>
+                        <div class="tourn-match-action">${startLabel(m)}</div>
                     </a>
                 `;
             }).join('');
@@ -470,10 +491,190 @@
             });
         }
 
-        function buildGameUrl(match) {
+        // ── JOKER TEAM (doubles with an odd number of players) ──
+        // A team named "Max & 🎲" has one fixed player (Max) and gets a random partner for
+        // EVERY match, drawn when the match is started: from the players of the other
+        // teams, never from the opponent's team, and preferably someone who is free.
+        const JOKER_SUFFIX = ' & 🎲';
+        const isJokerName  = n => typeof n === 'string' && n.endsWith(JOKER_SUFFIX);
+        const teamMembers  = n => n.split(' & ').map(s => s.trim()).filter(Boolean);
+
+        // 'p1' | 'p2' | null — which side of the match is the joker team
+        function jokerSideOf(match) {
+            if (!tournament || tournament.game_type !== 'doubles') return null;
+            if (isJokerName((participants.find(p => p.id === match.p1_id) || {}).name)) return 'p1';
+            if (isJokerName((participants.find(p => p.id === match.p2_id) || {}).name)) return 'p2';
+            return null;
+        }
+
+        // Team name as shown in the lists — after the draw: "Max & Anna 🎲"
+        function matchTeamName(match, id) {
+            const name = partName(id);
+            if (isJokerName(name) && match.joker_partner) {
+                return `${name.slice(0, -JOKER_SUFFIX.length)} & ${match.joker_partner} 🎲`;
+            }
+            return name;
+        }
+
+        // The name the game is played under: the joker replaced by the drawn partner
+        function gameTeamName(match, id, partner) {
+            const name = partName(id);
+            return isJokerName(name) && partner ? `${name.slice(0, -JOKER_SUFFIX.length)} & ${partner}` : name;
+        }
+
+        // Match cards: a joker match opens the draw sheet before the game starts
+        function matchLinkAttrs(m) {
+            return jokerSideOf(m)
+                ? `href="#" onclick="openJokerSheet('${m.id}'); return false;"`
+                : `href="${buildGameUrl(m)}"`;
+        }
+        const startLabel = m => jokerSideOf(m) ? '🎲 Partner losen &amp; starten »' : '🎯 Spiel starten »';
+
+        // Players that are in a live game right now (best effort, last 15 minutes)
+        async function livePlayers() {
+            const names = new Set();
+            try {
+                const since = new Date(Date.now() - 15 * 60000).toISOString();
+                const { data } = await supa.from('live_game').select('state').not('state', 'is', null).gte('updated_at', since);
+                (data || []).forEach(r => { const tp = r.state && r.state.teamPlayers; if (tp) tp.flat().forEach(n => names.add(n)); });
+            } catch (e) { /* no live info — everybody counts as free */ }
+            return names;
+        }
+
+        // Candidates in draw order: free players first (no live game, no open match of their
+        // team), then those with an open match, then those currently playing; within a group
+        // whoever helped out least so far; ties random.
+        function rankJokerCandidates(match, side, busy) {
+            const jokerPart   = participants.find(p => p.id === match[side + '_id']);
+            const oppPart     = participants.find(p => p.id === match[(side === 'p1' ? 'p2' : 'p1') + '_id']);
+            const jokerPlayer = jokerPart.name.slice(0, -JOKER_SUFFIX.length);
+            const forbidden   = new Set([jokerPlayer, ...(oppPart ? teamMembers(oppPart.name) : [])]);
+
+            const helps = {};
+            matches.forEach(m => { if (m.joker_partner) helps[m.joker_partner] = (helps[m.joker_partner] || 0) + 1; });
+            const hasOpenMatch = new Set();
+            matches.forEach(m => { if (m.status === 'pending' && m.p1_id && m.p2_id) { hasOpenMatch.add(m.p1_id); hasOpenMatch.add(m.p2_id); } });
+
+            const pool = [];
+            participants.forEach(p => {
+                if (isJokerName(p.name)) return;
+                teamMembers(p.name).forEach(n => {
+                    if (forbidden.has(n)) return;
+                    pool.push({ name: n, tier: busy.has(n) ? 3 : hasOpenMatch.has(p.id) ? 2 : 1, helps: helps[n] || 0, r: Math.random() });
+                });
+            });
+            pool.sort((a, b) => a.tier - b.tier || a.helps - b.helps || a.r - b.r);
+            // A partner drawn earlier for this very match (game started before) stays first
+            const kept = match.joker_partner ? pool.findIndex(c => c.name === match.joker_partner) : -1;
+            if (kept > 0) pool.unshift(pool.splice(kept, 1)[0]);
+            return { pool, jokerPlayer, oppName: oppPart ? oppPart.name : '?' };
+        }
+
+        let _jk = null; // { matchId, pool, idx, rolling }
+
+        async function openJokerSheet(matchId) {
+            const match = matches.find(m => m.id === matchId);
+            const side  = match && jokerSideOf(match);
+            if (!match || !side) return;
+
+            const { pool, jokerPlayer, oppName } = rankJokerCandidates(match, side, await livePlayers());
+            _jk = { matchId, pool, idx: 0, rolling: false, manual: false };
+
+            document.getElementById('joker-sheet-sub').textContent = `${jokerPlayer} spielt gegen ${oppName}`;
+            document.getElementById('joker-manual-list').style.display = 'none';
+            if (pool.length === 0) {
+                document.getElementById('joker-partner-name').textContent = '–';
+                document.getElementById('joker-partner-hint').textContent = 'Kein Partner verfügbar — alle anderen Spieler sind im gegnerischen Team.';
+                document.getElementById('joker-start-btn').disabled  = true;
+                document.getElementById('joker-reroll-btn').disabled = true;
+                document.getElementById('joker-manual-btn').disabled = true;
+            } else {
+                document.getElementById('joker-start-btn').disabled  = false;
+                document.getElementById('joker-reroll-btn').disabled = pool.length < 2;
+                document.getElementById('joker-manual-btn').disabled = pool.length < 2;
+                showJokerPartner();
+            }
+            openSheet('joker-sheet', 'joker-sheet-overlay');
+        }
+
+        function showJokerPartner() {
+            const c = _jk.pool[_jk.idx];
+            const match = matches.find(m => m.id === _jk.matchId);
+            const parts = [];
+            parts.push(c.tier === 1 ? 'Hat gerade nichts zu tun' : c.tier === 2 ? 'Hat noch ein eigenes Spiel offen' : 'Spielt gerade ein anderes Spiel');
+            if (c.helps > 0) parts.push(`hat schon ${c.helps}× ausgeholfen`);
+            if (_jk.manual) parts.unshift('Von Hand gewählt');
+            else if (match && match.joker_partner === c.name) parts.unshift('Für dieses Spiel schon gelost');
+            document.getElementById('joker-partner-name').textContent = c.name;
+            document.getElementById('joker-partner-hint').textContent = parts.join(' · ');
+        }
+
+        // Short roulette, then the next candidate of the ranking
+        async function rerollJoker() {
+            if (!_jk || _jk.rolling || _jk.pool.length < 2) return;
+            _jk.rolling = true;
+            const nameEl = document.getElementById('joker-partner-name');
+            document.getElementById('joker-start-btn').disabled  = true;
+            document.getElementById('joker-reroll-btn').disabled = true;
+            document.getElementById('joker-manual-list').style.display = 'none';
+            for (let i = 0; i < 9; i++) {
+                nameEl.textContent = _jk.pool[Math.floor(Math.random() * _jk.pool.length)].name;
+                await new Promise(r => setTimeout(r, 60 + i * 18));
+            }
+            _jk.idx = (_jk.idx + 1) % _jk.pool.length;
+            _jk.manual = false;
+            showJokerPartner();
+            _jk.rolling = false;
+            document.getElementById('joker-start-btn').disabled  = false;
+            document.getElementById('joker-reroll-btn').disabled = false;
+        }
+
+        // Pick the partner by hand: everybody who is allowed (same list as the draw),
+        // free players first.
+        function toggleJokerManual() {
+            if (!_jk || _jk.rolling) return;
+            const list = document.getElementById('joker-manual-list');
+            if (list.style.display !== 'none') { list.style.display = 'none'; return; }
+            const tierText = t => t === 1 ? 'frei' : t === 2 ? 'eigenes Spiel offen' : 'spielt gerade';
+            list.innerHTML = _jk.pool.map((c, i) => `
+                <button type="button" class="guest-pick${i === _jk.idx ? ' guest-pick--on' : ''}" onclick="pickJokerPartner(${i})">
+                    <span class="guest-pick-name">${escHtml(c.name)}</span>
+                    <span class="joker-pick-tier">${tierText(c.tier)}</span>
+                    <span class="guest-pick-check">${i === _jk.idx ? '✓' : ''}</span>
+                </button>`).join('');
+            list.style.display = 'flex';
+            list.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
+
+        function pickJokerPartner(i) {
+            if (!_jk) return;
+            _jk.idx    = i;
+            _jk.manual = true;
+            document.getElementById('joker-manual-list').style.display = 'none';
+            showJokerPartner();
+        }
+
+        function closeJokerSheet() {
+            closeSheet('joker-sheet', 'joker-sheet-overlay');
+            _jk = null;
+        }
+
+        async function startJokerMatch() {
+            if (!_jk || _jk.rolling) return;
+            const match = matches.find(m => m.id === _jk.matchId);
+            if (!match) return;
+            const partner = _jk.pool[_jk.idx].name;
+            // Remember who helped (feeds the fair rotation and the match list); the game
+            // starts either way — before sql/tournament-joker.sql the column does not exist.
+            const { error } = await supa.from('tournament_matches').update({ joker_partner: partner }).eq('id', match.id);
+            if (error) console.warn('Joker-Partner nicht gespeichert:', error.message);
+            window.location.href = buildGameUrl(match, partner);
+        }
+
+        function buildGameUrl(match, partner) {
             const t   = tournament;
-            const p1  = partName(match.p1_id);
-            const p2  = partName(match.p2_id);
+            const p1  = gameTeamName(match, match.p1_id, partner);
+            const p2  = gameTeamName(match, match.p2_id, partner);
             const url = new URL('game.html', window.location.href);
             url.searchParams.set('tournament_match_id', match.id);
             url.searchParams.set('tournament_id', tournId);

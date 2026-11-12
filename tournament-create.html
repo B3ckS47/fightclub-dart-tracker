@@ -164,7 +164,7 @@
 
             <!-- Manual builder -->
             <div id="team-manual-section" style="margin-top:14px;">
-                <p class="tourn-hint" style="margin-bottom:14px;">Jeweils zwei Spieler zu einem Team zusammenstellen.</p>
+                <p class="tourn-hint" style="margin-bottom:14px;">Jeweils zwei Spieler zu einem Team zusammenstellen. Bleibt ein Spieler übrig, wird er zum <strong>Joker</strong>: Er bekommt bei jedem Spiel einen zufälligen Partner.</p>
                 <div class="settings-form">
                     <div class="tourn-form-row">
                         <div class="settings-field">
@@ -181,18 +181,22 @@
                         </div>
                     </div>
                     <button class="btn btn-primary btn-full" onclick="addTeam()">TEAM HINZUFÜGEN</button>
+                    <div id="team-joker-wrap" style="display:none; margin-top:10px;">
+                        <p class="tourn-hint" style="margin-bottom:8px;"><strong id="team-joker-name"></strong> hat keinen Partner übrig.</p>
+                        <button class="btn btn-accent btn-full" onclick="addJokerTeam()">🎲 ALS JOKER-TEAM AUFNEHMEN</button>
+                    </div>
                 </div>
             </div>
 
             <!-- Random section -->
             <div id="team-random-section" style="display:none; margin-top:14px;">
-                <p class="tourn-hint" style="margin-bottom:14px;">Das System weist alle Spieler im Pool zufällig zu Teams zu.</p>
+                <p class="tourn-hint" style="margin-bottom:14px;">Das System weist alle Spieler im Pool zufällig zu Teams zu. Bei ungerader Anzahl wird ein Spieler zum Joker.</p>
                 <button class="btn btn-accent btn-full" onclick="randomizeTeams()">🎲 TEAMS AUSLOSEN</button>
             </div>
 
             <!-- Clever section -->
             <div id="team-clever-section" style="display:none; margin-top:14px;">
-                <p class="tourn-hint" style="margin-bottom:14px;">Das System paart den stärksten mit dem schwächsten Spieler, den zweitstärksten mit dem zweitschw&auml;chsten usw. – basierend auf dem Lifetime Average.</p>
+                <p class="tourn-hint" style="margin-bottom:14px;">Das System paart den stärksten mit dem schwächsten Spieler, den zweitstärksten mit dem zweitschw&auml;chsten usw. – basierend auf dem Lifetime Average. Bei ungerader Anzahl wird der Spieler in der Mitte zum Joker.</p>
                 <div id="team-clever-preview" style="margin-bottom:12px;"></div>
                 <button class="btn btn-accent btn-full" onclick="cleverizeTeams()">🧠 TEAMS AUSBALANCIEREN</button>
             </div>
@@ -223,6 +227,12 @@
         let allPlayers  = [];
         let participants = []; // { name, player_id, is_guest }  — individual players
         let teams        = []; // { name: "A & B", p1, p2 }      — doubles teams only
+                               // Joker team (odd number of players): { name: "A & 🎲", p1, p2: null, joker: true }
+                               // — A gets a random partner for every match, drawn in tournament-view.html
+
+        function makeJokerTeam(player) {
+            return { name: `${player.name} & 🎲`, p1: player, p2: null, joker: true };
+        }
 
         function setOfficial(v) {
             isOfficial = v;
@@ -349,7 +359,7 @@
             participants.splice(idx, 1);
             // Remove any team containing this player
             if (gameType === 'doubles') {
-                teams = teams.filter(t => t.p1.player_id !== removed.player_id && t.p2.player_id !== removed.player_id);
+                teams = teams.filter(t => t.p1.player_id !== removed.player_id && (!t.p2 || t.p2.player_id !== removed.player_id));
                 renderTeams();
                 refreshTeamSelects();
             }
@@ -397,21 +407,22 @@
 
         function randomizeTeams() {
             if (participants.length < 2) { showError('Mindestens 2 Spieler im Pool benötigt.'); return; }
-            if (participants.length % 2 !== 0) { showError('Für zufällige Teams wird eine gerade Anzahl Spieler benötigt.'); return; }
             const shuffled = shuffle([...participants]);
+            // Odd number: the one left over becomes a joker team (random partner per match)
+            const leftover = shuffled.length % 2 !== 0 ? shuffled.pop() : null;
             teams = [];
             for (let i = 0; i < shuffled.length; i += 2) {
                 const p1 = shuffled[i];
                 const p2 = shuffled[i + 1];
                 teams.push({ name: `${p1.name} & ${p2.name}`, p1, p2 });
             }
+            if (leftover) teams.push(makeJokerTeam(leftover));
             renderTeams();
             refreshTeamSelects();
         }
 
         async function cleverizeTeams() {
             if (participants.length < 2) { showError('Mindestens 2 Spieler im Pool benötigt.'); return; }
-            if (participants.length % 2 !== 0) { showError('Für ausgeglichene Teams wird eine gerade Anzahl Spieler benötigt.'); return; }
 
             // Fetch lifetime avg for each participant from game_history
             const playerIds = participants.map(p => p.player_id).filter(Boolean);
@@ -445,6 +456,10 @@
                 return bAvg - aAvg;
             });
 
+            // Odd number: the middle player sits out of the pairing and becomes the joker
+            // team — taking the best or worst out would unbalance the remaining pairs.
+            const leftover = sorted.length % 2 !== 0 ? sorted.splice(Math.floor(sorted.length / 2), 1)[0] : null;
+
             // Min-max pairing: best with worst, 2nd best with 2nd worst, ...
             teams = [];
             const n = sorted.length;
@@ -461,13 +476,14 @@
                 });
             }
 
+            if (leftover) teams.push(makeJokerTeam(leftover));
             renderTeams();
             refreshTeamSelects();
 
             // Show avg preview in clever section
             const preview = document.getElementById('team-clever-preview');
             if (preview) {
-                preview.innerHTML = teams.map(t => `
+                preview.innerHTML = teams.filter(t => !t.joker).map(t => `
                     <div class="clever-team-row">
                         <span class="clever-team-name">${t.p1.name} <span class="clever-avg">${t._p1Avg}</span></span>
                         <span class="clever-team-amp">&</span>
@@ -484,7 +500,7 @@
             const assigned = new Set();
             teams.forEach(t => {
                 if (t.p1.player_id) assigned.add(t.p1.player_id);
-                if (t.p2.player_id) assigned.add(t.p2.player_id);
+                if (t.p2 && t.p2.player_id) assigned.add(t.p2.player_id);
             });
             return participants.filter(p => !assigned.has(p.player_id));
         }
@@ -495,6 +511,21 @@
                 free.map(p => `<option value="${p.player_id}">${p.name}</option>`).join('');
             document.getElementById('team-p1').innerHTML = opts;
             document.getElementById('team-p2').innerHTML = opts;
+
+            // Exactly one player without partner → offer a joker team
+            const wrap = document.getElementById('team-joker-wrap');
+            if (wrap) {
+                wrap.style.display = free.length === 1 ? 'block' : 'none';
+                if (free.length === 1) document.getElementById('team-joker-name').textContent = free[0].name;
+            }
+        }
+
+        function addJokerTeam() {
+            const free = unassignedPlayers();
+            if (free.length !== 1) return;
+            teams.push(makeJokerTeam(free[0]));
+            renderTeams();
+            refreshTeamSelects();
         }
 
         function addTeam() {
@@ -529,8 +560,8 @@
             el.innerHTML = teams.map((t, i) => `
                 <div class="participant-row">
                     <span class="participant-name doubles-team-name">
-                        <span class="doubles-team-icon">🎯</span>
-                        ${t.name}
+                        <span class="doubles-team-icon">${t.joker ? '🎲' : '🎯'}</span>
+                        ${t.name}${t.joker ? ' <span class="tourn-tag">Joker</span>' : ''}
                     </span>
                     <button class="participant-remove" onclick="removeTeam(${i})">✕</button>
                 </div>
@@ -695,6 +726,13 @@
             let finalEntries; // { name, player_id (null for doubles teams) }
 
             if (isDoubles) {
+                // One player without a partner: offer the joker team instead of an error
+                const left = unassignedPlayers();
+                if (left.length === 1 && teams.length >= 1) {
+                    const ok = await showConfirm('Joker-Team', `${left[0].name} hat keinen Partner. Bei jedem Spiel bekommt ${left[0].name} einen zufälligen Partner aus den anwesenden Spielern (nie aus dem gegnerischen Team). Als Joker-Team aufnehmen?`, '🎲');
+                    if (!ok) return;
+                    addJokerTeam();
+                }
                 if (teams.length < 2) {
                     showError('Mindestens 2 Doppelteams benötigt.');
                     return;

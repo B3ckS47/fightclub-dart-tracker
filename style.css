@@ -4868,6 +4868,30 @@ body {
     .fx-title { animation: fxFadeIn 0.3s ease-out both; }
 }
 
+/* ── JOKER PARTNER SHEET (tournament-view.html) ── */
+.joker-partner-box {
+    text-align: center;
+    padding: 20px 12px;
+    margin-bottom: 14px;
+    border: 1px dashed var(--border-light);
+    border-radius: var(--radius-md);
+    background: var(--bg-element);
+}
+.joker-partner-name {
+    font-family: var(--font-display);
+    font-size: 2.2rem;
+    font-weight: 800;
+    letter-spacing: 1px;
+    color: var(--text-primary);
+}
+.joker-btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.joker-pick-tier { font-size: 0.75rem; font-weight: 500; color: var(--text-muted); white-space: nowrap; }
+.joker-partner-hint {
+    margin-top: 6px;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
 /* ── ENTRY DETAIL BOTTOM SHEET ── */
 .entry-sheet-overlay {
     position: fixed;
