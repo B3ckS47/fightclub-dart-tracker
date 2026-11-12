@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlightClub · Turnierübersicht</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0d0d0f">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <script src="config.js"></script>
+    <script src="ui-utils.js"></script>
+    <script src="tournament-logic.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>document.documentElement.setAttribute("data-theme",localStorage.getItem("fc47_theme")||"dark");</script>
+</head>
+<body>
+    <nav id="nav-tournament-summary">
+        <div class="nav-inner nav-inner--default">
+            <a href="index.html" class="nav-brand" style="text-decoration:none;color:inherit;">FLIGHTCLUB</a>
+            <div class="nav-links">
+                <a href="tournaments.html" class="nav-btn">« Turniere</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="app-wrapper">
+
+        <!-- Header: name, tags, date -->
+        <div class="card tcard-hero" id="sum-hero-card">
+            <div id="sum-hero"></div>
+        </div>
+
+        <!-- Podium -->
+        <div class="card" id="sum-podium-card" style="display:none;">
+            <h2 class="card-title">PODIUM</h2>
+            <div class="divider"></div>
+            <div id="sum-podium"></div>
+        </div>
+
+        <!-- Highlights -->
+        <div class="card" id="sum-highlights-card" style="display:none;">
+            <h2 class="card-title">HIGHLIGHTS</h2>
+            <div class="divider"></div>
+            <div id="sum-highlights"></div>
+        </div>
+
+        <!-- Final standings (only when no final was played) -->
+        <div class="card" id="sum-standings-card" style="display:none;">
+            <h2 class="card-title">ENDSTAND</h2>
+            <div class="divider"></div>
+            <div id="sum-standings"></div>
+        </div>
+
+        <!-- Match history -->
+        <div class="card">
+            <h2 class="card-title">SPIELVERLAUF</h2>
+            <div class="divider"></div>
+            <div id="sum-matches"><p class="muted-text">Lade…</p></div>
+            <p class="muted-text" id="sum-matches-note" style="display:none; font-size:0.78rem; margin-top:12px;"></p>
+        </div>
+
+        <!-- Actions -->
+        <div id="sum-actions" style="margin-top:4px;">
+            <a id="sum-bracket-link" href="#" class="btn btn-ghost btn-full">📋 TURNIERPLAN ANSEHEN</a>
+            <button id="sum-delete-btn" class="btn btn-danger-outline btn-full" style="display:none; margin-top:10px;" onclick="removeTournament()">🗑️ TURNIER LÖSCHEN</button>
+        </div>
+
+    </div>
+
+    <script>
+        const supa = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
+        const raw  = sessionStorage.getItem('fc47_user');
+        if (!raw) window.location.href = 'index.html';
+        const user = JSON.parse(raw);
+        if (user.role === 'ipad') window.location.href = 'tournaments.html';
+
+        const sumTournId = new URLSearchParams(window.location.search).get('id');
+        if (!sumTournId) window.location.href = 'tournaments.html';
+
+        const JOKER_SUFFIX = ' & 🎲';
+
+        let T = null, parts = [], ms = [], gameRows = [];
+
+        const fmtAvg = n => Number(n).toFixed(2).replace('.', ',');
+        // (a null id must not match teams, whose player_id is null too)
+        const part   = id => !id ? null : (parts.find(p => p.id === id) || parts.find(p => p.player_id === id) || null);
+        const pName  = id => { const p = part(id); return p ? p.name : '?'; };
+
+        // Team name as played in this match: a joker team shows the drawn partner
+        function teamLabel(m, id) {
+            const name = pName(id);
+            return name.endsWith(JOKER_SUFFIX) && m.joker_partner
+                ? `${name.slice(0, -JOKER_SUFFIX.length)} & ${m.joker_partner} 🎲` : name;
+        }
+
+        // ── LOAD ──
+        async function load() {
+            const { data: t } = await supa.from('tournaments').select('*').eq('id', sumTournId).single();
+            if (!t) { window.location.href = 'tournaments.html'; return; }
+            T = t;
+
+            const [{ data: p }, matches] = await Promise.all([
+                supa.from('tournament_participants').select('*').eq('tournament_id', sumTournId).order('seed'),
+                fetchAllRows(() => supa.from('tournament_matches').select('*').eq('tournament_id', sumTournId).order('round').order('match_number').order('id'))
+            ]);
+            parts = p || [];
+            ms    = matches || [];
+
+            await loadGameRows();
+            render();
+        }
+
+        // The saved games of this tournament: exactly by tournament_match_id (new tournaments), and for
+        // older ones by time window + player names (only official singles games are saved at all).
+        async function loadGameRows() {
+            gameRows = [];
+            if (T.game_type !== 'singles' || T.is_official === false) return;
+            // Each query on its own: the page works without averages, and before the
+            // tournament_match_id column exists the time-window match still works
+            const ids   = ms.map(m => m.id);
+            const names = parts.map(p => p.name);
+            let exact = [], loose = [];
+            try {
+                if (ids.length) exact = await fetchAllRows(() => supa.from('game_history').select('*').in('tournament_match_id', ids).order('created_at').order('id'));
+            } catch (e) { console.warn('Exakte Zuordnung nicht möglich:', e.message || e); }
+            try {
+                const from = new Date(T.created_at).getTime();
+                const to   = (T.finished_at ? new Date(T.finished_at).getTime() : Date.now()) + 10 * 60000;
+                if (names.length) loose = await fetchAllRows(() => supa.from('game_history').select('*')
+                    .gte('created_at', new Date(from).toISOString()).lte('created_at', new Date(to).toISOString())
+                    .in('player_name', names).order('created_at').order('id'));
+            } catch (e) { console.error('Spielstatistik laden fehlgeschlagen:', e); }
+            const seen = new Set();
+            gameRows = [...exact, ...loose.filter(r => !r.tournament_match_id)]
+                .filter(r => !seen.has(r.id) && seen.add(r.id));
+        }
+
+        // ── PLAY ORDER ──
+        const BRACKET_RANK = { winners: 0, losers: 1, final: 2 };
+        const instantMode  = () => tournIsInstant(T);
+        function playKey(m) {
+            if (instantMode() && m.finished_at) return Date.parse(m.finished_at);
+            return m.round * 100000 + (BRACKET_RANK[m.bracket] || 0) * 1000 + m.match_number;
+        }
+        const playedMatches = () => ms.filter(m => m.status === 'done' && m.p1_id && m.p2_id && m.winner_id)
+            .sort((a, b) => playKey(a) - playKey(b));
+
+        // ── LINK GAMES TO MATCHES ──
+        // Returns Map(matchId → { w: winner's game row, l: loser's game row, exact: bool }).
+        function linkGames() {
+            const link = new Map();
+            const played = playedMatches();
+            const used = new Set();
+
+            // 1) exact: tournament_match_id
+            played.forEach(m => {
+                const rs = gameRows.filter(r => r.tournament_match_id === m.id);
+                if (rs.length === 0) return;
+                const wName = pName(m.winner_id);
+                const w = rs.find(r => r.player_name === wName) || rs.find(r => r.is_win);
+                const l = rs.find(r => r !== w);
+                if (w) { link.set(m.id, { w, l, exact: true }); rs.forEach(r => used.add(r.id)); }
+            });
+
+            // 2) older tournaments: per pair (winner, loser) the i-th game in time = the i-th
+            //    match in play order — only if the numbers add up, otherwise a wrong
+            //    average would be worse than none
+            const loose = gameRows.filter(r => !r.tournament_match_id && !used.has(r.id));
+            const open  = played.filter(m => !link.has(m.id));
+            const groups = {};
+            open.forEach(m => (groups[pName(m.winner_id) + '|' + pName(m.loser_id)] ||= []).push(m));
+            Object.entries(groups).forEach(([key, list]) => {
+                const [wName, lName] = key.split('|');
+                const wRows = loose.filter(r => r.player_name === wName && r.opponent_name === lName && r.is_win)
+                    .sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at));
+                if (wRows.length !== list.length) return;
+                list.forEach((m, i) => {
+                    const w = wRows[i];
+                    const l = loose.find(r => r.player_name === lName && r.opponent_name === wName && !used.has(r.id)
+                        && Math.abs(Date.parse(r.created_at) - Date.parse(w.created_at)) < 60000);
+                    link.set(m.id, { w, l, exact: false });
+                    used.add(w.id); if (l) used.add(l.id);
+                });
+            });
+            return link;
+        }
+
+        // ── PODIUM ──
+        function derivePodium() {
+            const played = playedMatches();
+            const fin    = played.find(m => m.bracket === 'final');
+            // Without a played final only the stored result counts — and not when an admin closed
+            // the tournament early (then there is no winner, just a standing)
+            const stored = !fin && T.status === 'finished' && !T.closed_by && T.winner_id && T.winner_id !== T.runner_up_id;
+            const first  = fin ? part(fin.winner_id) : (stored || T.mode === 'bounty' ? part(T.winner_id) : null);
+            const second = fin ? part(fin.loser_id)  : (stored ? part(T.runner_up_id) : null);
+            let thirds = [];
+            if (T.mode === 'swiss') {
+                const id = T.third_id || swissThirdId(ms);
+                if (id) thirds = [part(id)];
+            } else if (T.mode === 'ko' && fin) {
+                thirds = played.filter(m => m.round === fin.round - 1 && m.loser_id).map(m => part(m.loser_id));
+            }
+            const taken = new Set([first && first.id, second && second.id]);
+            thirds = thirds.filter(p => p && !taken.has(p.id));
+            return { first, second, thirds, hasFinal: !!fin };
+        }
+
+        // ── RENDER ──
+        function render() {
+            const early = T.status === 'finished' && T.closed_by && !ms.some(m => m.bracket === 'final' && m.status === 'done');
+
+            // Header tile: same look as in the list, plus date / players / matches
+            const players = parts.filter(p => !p.is_bye).length;
+            const playedN = playedMatches().length;
+            const when    = new Date(T.finished_at || T.created_at).toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' });
+            const stat    = (label, value) => `<div><div class="tcard-stat-label">${label}</div><div class="tcard-stat-value">${value}</div></div>`;
+            document.getElementById('sum-hero-card').setAttribute('style', tournTintStyle(T));
+            document.getElementById('sum-hero').innerHTML =
+                tournHeadHtml(T, tournPillHtml(T.status === 'active' ? 'active' : early ? 'early' : 'done')) +
+                `<div class="tcard-stats">
+                    ${stat('Datum', when)}
+                    ${stat(T.game_type === 'doubles' ? 'Teams' : 'Spieler', players)}
+                    ${stat('Partien', playedN)}
+                </div>` +
+                (early ? `<div class="tcard-hero-note">Geschlossen von ${escHtml(T.closed_by)}</div>` : '');
+
+            const link = linkGames();
+            renderPodium(early);
+            renderHighlights(link);
+            renderMatches(link);
+
+            document.getElementById('sum-bracket-link').href = `tournament-view.html?id=${sumTournId}`;
+            document.getElementById('sum-delete-btn').style.display = user.role === 'admin' ? 'block' : 'none';
+        }
+
+        function renderPodium(early) {
+            const card = document.getElementById('sum-podium-card');
+            const stCard = document.getElementById('sum-standings-card');
+            const pod = derivePodium();
+            if (!pod.first) {
+                card.style.display = 'none';
+                renderStandings(stCard);
+                return;
+            }
+            stCard.style.display = 'none';
+            card.style.display = 'block';
+            const block = (cls, medal, names) => names.length === 0 ? '' : `
+                <div class="sum-pod ${cls}">
+                    <div class="sum-pod-medal">${medal}</div>
+                    ${names.map(n => `<div class="sum-pod-name">${escHtml(n)}</div>`).join('')}
+                </div>`;
+            document.getElementById('sum-podium').innerHTML = `
+                <div class="sum-podium">
+                    ${block('sum-pod--2', '🥈', pod.second ? [pod.second.name] : [])}
+                    ${block('sum-pod--1', '🥇', [pod.first.name])}
+                    ${block('sum-pod--3', '🥉', pod.thirds.map(p => p.name))}
+                </div>`;
+        }
+
+        // No final (closed early / bounty): show how everybody stands
+        function renderStandings(card) {
+            if (parts.length === 0) { card.style.display = 'none'; return; }
+            let rows;
+            if (T.mode === 'bounty') {
+                rows = [...parts].sort((a, b) => (b.lives || 0) - (a.lives || 0) || (b.bounty || 0) - (a.bounty || 0))
+                    .map(p => `<span class="swiss-standing-name">${escHtml(p.name)}</span>
+                               <span class="swiss-standing-record">${(p.lives || 0) > 0 ? '💙'.repeat(p.lives) : '💀'}</span>
+                               <span></span>
+                               <span class="swiss-standing-status">💰 ${fmtAvg(p.bounty || 0)} €</span>`);
+            } else {
+                rows = [...parts].sort((a, b) => (b.wins || 0) - (a.wins || 0) || (a.losses || 0) - (b.losses || 0))
+                    .map(p => `<span class="swiss-standing-name">${escHtml(p.name)}</span>
+                               <span class="swiss-standing-record">${p.wins || 0}W – ${p.losses || 0}L</span>
+                               <span></span><span></span>`);
+            }
+            card.style.display = 'block';
+            document.getElementById('sum-standings').innerHTML = rows.map(r => `<div class="swiss-standing-row">${r}</div>`).join('');
+        }
+
+        function renderHighlights(link) {
+            const card = document.getElementById('sum-highlights-card');
+            const entries = [];   // { row, opp }
+            link.forEach(({ w, l }) => { if (w) entries.push(w); if (l) entries.push(l); });
+
+            const tiles = [];
+            const bestAvg = entries.reduce((a, r) => (r.avg_game > (a ? a.avg_game : 0) ? r : a), null);
+            if (bestAvg) tiles.push(['🎯', 'Höchster Average', fmtAvg(bestAvg.avg_game), `${bestAvg.player_name} · gegen ${bestAvg.opponent_name}`]);
+            const bestFin = entries.reduce((a, r) => (r.highest_finish > (a ? a.highest_finish : 0) ? r : a), null);
+            if (bestFin) tiles.push(['🏁', 'Höchstes Finish', String(bestFin.highest_finish), `${bestFin.player_name} · gegen ${bestFin.opponent_name}`]);
+            const eighties = {};
+            entries.forEach(r => { if (r.one_eighties > 0) eighties[r.player_name] = (eighties[r.player_name] || 0) + r.one_eighties; });
+            const maxEighty = Math.max(0, ...Object.values(eighties));
+            if (maxEighty > 0) {
+                const who = Object.keys(eighties).filter(n => eighties[n] === maxEighty).join(', ');
+                tiles.push(['💥', 'Meiste 180er', String(maxEighty), who]);
+            }
+
+            if (tiles.length === 0) {
+                const why = T.game_type === 'doubles' ? 'Doppel-Spiele werden nicht in der Einzelstatistik gespeichert.'
+                    : T.is_official === false ? 'Spaßturniere werden nicht in der Statistik gespeichert.'
+                    : entries.length === 0 ? 'Zu den Partien dieses Turniers wurde keine Statistik gefunden.' : '';
+                card.style.display = why ? 'block' : 'none';
+                document.getElementById('sum-highlights').innerHTML = why ? `<p class="muted-text">${why}</p>` : '';
+                return;
+            }
+            card.style.display = 'block';
+            document.getElementById('sum-highlights').innerHTML = `<div class="sum-tiles">` + tiles.map(([icon, label, value, sub]) => `
+                <div class="sum-tile">
+                    <div class="sum-tile-icon">${icon}</div>
+                    <div class="sum-tile-value">${escHtml(value)}</div>
+                    <div class="sum-tile-label">${label}</div>
+                    <div class="sum-tile-sub">${escHtml(sub)}</div>
+                </div>`).join('') + `</div>`;
+        }
+
+        function renderMatches(link) {
+            const el   = document.getElementById('sum-matches');
+            const list = playedMatches();
+            const byes = ms.filter(m => m.status === 'done' && m.p1_id && !m.p2_id);
+            if (list.length === 0 && byes.length === 0) { el.innerHTML = '<p class="muted-text">Es wurden keine Partien gespielt.</p>'; return; }
+
+            const tag = m => m.bracket === 'final' ? '🏆 FINALE' : m.bracket === 'losers' ? 'LOSER POOL' : (T.mode === 'swiss' ? 'WINNER POOL' : '');
+            const row = (m, no) => {
+                const g   = link.get(m.id);
+                const win = m.winner_id;
+                const loser = m.loser_id || (m.p1_id === win ? m.p2_id : m.p1_id);
+                const score = g && g.w ? `${g.w.legs_won} : ${g.w.legs_lost}` : '–';
+                const avgs  = g && g.w ? `<div class="sum-match-avg"><span>Ø ${fmtAvg(g.w.avg_game)}</span><span></span><span>${g.l ? 'Ø ' + fmtAvg(g.l.avg_game) : ''}</span></div>` : '';
+                return `
+                <div class="sum-match${m.bracket === 'final' ? ' sum-match--final' : ''}">
+                    <div class="sum-match-top"><span class="sum-match-tag">${tag(m)}</span><span class="sum-match-no">${no}</span></div>
+                    <div class="sum-match-main">
+                        <span class="sum-side sum-side--win">${escHtml(teamLabel(m, win))} ✓</span>
+                        <span class="sum-score">${score}</span>
+                        <span class="sum-side sum-side--lose">${escHtml(teamLabel(m, loser))}</span>
+                    </div>
+                    ${avgs}
+                </div>`;
+            };
+
+            const byeRow = m => `<div class="sum-match sum-match--bye">🆓 Freilos: ${escHtml(pName(m.p1_id))}</div>`;
+            let html = '';
+            if (instantMode()) {
+                // no rounds: byes only exist in the first round, listed on top
+                html = byes.map(byeRow).join('') + list.map((m, i) => row(m, `#${i + 1}`)).join('');
+            } else {
+                // every round with its matches and byes
+                const rounds = [...new Set([...list.map(m => m.round), ...byes.map(m => m.round)])].sort((a, b) => a - b);
+                html = rounds.map(r =>
+                    `<div class="sum-round-head">RUNDE ${r}</div>` +
+                    list.filter(m => m.round === r).map(m => row(m, '')).join('') +
+                    byes.filter(m => m.round === r).map(byeRow).join('')
+                ).join('');
+            }
+            el.innerHTML = html;
+
+            const note = document.getElementById('sum-matches-note');
+            const guessed = [...link.values()].some(x => !x.exact);
+            note.style.display = guessed ? 'block' : 'none';
+            note.textContent = guessed ? 'Die Averages älterer Turniere sind den Partien nach Zeitraum und Spielern zugeordnet.' : '';
+        }
+
+        async function removeTournament() {
+            if (await deleteTournamentFlow(T)) window.location.href = 'tournaments.html';
+        }
+
+        load();
+    </script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/fightclub-dart-tracker/sw.js').catch(() => {});
+        }
+    </script>
+</body>
+</html>

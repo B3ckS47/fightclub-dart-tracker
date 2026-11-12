@@ -44,7 +44,7 @@
 
     <nav id="nav-tournament-view">
         <div class="nav-inner nav-inner--default">
-            <span class="nav-brand">FLIGHTCLUB</span>
+            <a href="index.html" class="nav-brand" style="text-decoration:none;color:inherit;">FLIGHTCLUB</a>
             <div class="nav-links">
                 <a href="tournaments.html" class="nav-btn">« Turniere</a>
             </div>
@@ -54,15 +54,14 @@
     <div class="app-wrapper">
 
         <!-- 1) Header: Turniername, Tags, Close-Button -->
-        <div class="card" id="tourn-header-card">
-            <div class="tourn-header-row">
-                <h2 class="card-title" id="tourn-title">–</h2>
-                <span id="tourn-status-badge" class="tourn-status"></span>
-            </div>
-            <div class="tourn-tags" id="tourn-setup-tags" style="margin-top:8px;"></div>
+        <div class="card tcard-hero" id="tourn-header-card">
+            <div id="tourn-hero"></div>
             <div id="close-btn-wrap" style="display:none; margin-top:14px;">
                 <button class="btn btn-danger btn-full" onclick="closeTournament()">TURNIER SCHLIESSEN</button>
             </div>
+            <!-- Finished: overview with podium, highlights and match history -->
+            <a id="summary-link" href="#" class="btn btn-ghost btn-full" style="display:none; margin-top:14px;">📊 TURNIERÜBERSICHT</a>
+            <button id="delete-btn" class="btn btn-danger-outline btn-full" style="display:none; margin-top:10px;" onclick="removeTournament()">🗑️ TURNIER LÖSCHEN</button>
         </div>
 
         <!-- 2) Alle Spiele: Winner + Loser zusammen, farblich unterschieden -->
@@ -140,10 +139,6 @@
         let participants = [];
         let matches = [];
 
-        const MODE_LABEL  = { ko: 'K.O.', swiss: 'Swiss', bounty: 'Bounty Hunter' };
-        const TYPE_LABEL  = { singles: 'Einzel', doubles: 'Doppel' };
-        const OUT_LABEL   = { single: 'Single Out', double: 'Double Out' };
-        const LEGS_LABEL  = l => `First to ${l} ${l === 1 ? 'Leg' : 'Legs'}`;
 
         function partName(id) {
             if (!id) return 'BYE';
@@ -216,7 +211,7 @@
         }
 
         // Swiss with instant pairing: no rounds, no bracket tree
-        const isInstant = () => tournament && tournament.mode === 'swiss' && tournament.pairing === 'instant';
+        const isInstant = () => tournIsInstant(tournament);
 
         // Whoever has the page open pairs what can be paired: normally the result handler on
         // the game page already did it; this catches the rare case that two results
@@ -276,24 +271,21 @@
 
         function render() {
             const t = tournament;
-            document.getElementById('tourn-title').textContent = t.name;
-
-            const badge = document.getElementById('tourn-status-badge');
-            badge.textContent = t.status === 'active' ? '● AKTIV' : '✓ ABGESCHLOSSEN';
-            badge.className   = `tourn-status ${t.status === 'active' ? 'tourn-status--active' : 'tourn-status--done'}`;
+            // Header: mode icon, name, settings, status (same look as the list tile)
+            const heroCard = document.getElementById('tourn-header-card');
+            heroCard.setAttribute('style', tournTintStyle(t));
+            document.getElementById('tourn-hero').innerHTML =
+                tournHeadHtml(t, tournPillHtml(t.status === 'active' ? 'active' : 'done'));
 
             // Show close button for admin on active tournaments
             if (user.role === 'admin' && t.status === 'active') {
                 document.getElementById('close-btn-wrap').style.display = 'block';
             }
-
-            document.getElementById('tourn-setup-tags').innerHTML = `
-                <span class="tourn-tag">${MODE_LABEL[t.mode]}${isInstant() ? ' ⚡ Sofort' : ''}</span>
-                <span class="tourn-tag">${TYPE_LABEL[t.game_type]}</span>
-                <span class="tourn-tag">${t.start_score}</span>
-                <span class="tourn-tag">${OUT_LABEL[t.checkout]}</span>
-                <span class="tourn-tag">${LEGS_LABEL(t.legs)}</span>
-            `;
+            // Overview for finished tournaments, delete for admins (running or finished)
+            const summaryLink = document.getElementById('summary-link');
+            summaryLink.href = `tournament-summary.html?id=${tournId}`;
+            summaryLink.style.display = t.status === 'finished' && user.role !== 'ipad' ? 'block' : 'none';
+            document.getElementById('delete-btn').style.display = user.role === 'admin' ? 'block' : 'none';
 
             document.getElementById('bracket-title').textContent =
                 t.mode === 'swiss' ? 'WINNER-POOL · 0 NIEDERLAGEN' : 'TURNIERPLAN';
@@ -348,6 +340,10 @@
                     <span class="swiss-standing-status">${status}</span>
                 </div>`;
             }).join('');
+        }
+
+        async function removeTournament() {
+            if (await deleteTournamentFlow(tournament)) window.location.href = 'tournaments.html';
         }
 
         async function closeTournament() {

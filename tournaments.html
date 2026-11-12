@@ -13,6 +13,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <script src="config.js"></script>
     <script src="ui-utils.js"></script>
+    <script src="tournament-logic.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script>document.documentElement.setAttribute("data-theme",localStorage.getItem("fc47_theme")||"dark");</script>
 </head>
@@ -58,20 +59,6 @@
         if (!raw) window.location.href = 'index.html';
         const user = JSON.parse(raw);
 
-        const MODE_LABEL  = { ko: 'K.O.', swiss: 'Swiss', bounty: 'Bounty Hunter' };
-        const TYPE_LABEL  = { singles: 'Einzel', doubles: 'Doppel' };
-        const SCORE_LABEL = { 301: '301', 501: '501' };
-        const LEGS_LABEL  = l => `First to ${l} ${l === 1 ? 'Leg' : 'Legs'}`;
-        const OUT_LABEL   = { single: 'Single Out', double: 'Double Out' };
-
-        function setupCard(t) {
-            return `<span class="tourn-tag">${MODE_LABEL[t.mode]}</span>
-                    <span class="tourn-tag">${TYPE_LABEL[t.game_type]}</span>
-                    <span class="tourn-tag">${t.start_score}</span>
-                    <span class="tourn-tag">${OUT_LABEL[t.checkout]}</span>
-                    <span class="tourn-tag">${LEGS_LABEL(t.legs)}</span>`;
-        }
-
         async function checkAndCloseTournaments(activeTournaments) {
             if (activeTournaments.length === 0) return;
 
@@ -84,6 +71,8 @@
             for (const t of activeTournaments) {
                 const matches = (allMatches || []).filter(m => m.tournament_id === t.id);
                 const open    = matches.filter(m => m.status === 'pending' && m.p1_id && m.p2_id);
+                t._played  = matches.filter(m => m.status === 'done' && m.p1_id && m.p2_id).length;   // byes excluded
+                t._running = open.length;
                 if (open.length > 0) continue;
 
                 const done = matches.filter(m => m.status === 'done');
@@ -127,22 +116,38 @@
             const dateStr     = t.finished_at
                 ? new Date(t.finished_at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
                 : '';
-            const footer = t.closed_by
-                ? `<div class="tourn-closed-by">Geschlossen von ${t.closed_by}${dateStr ? ` · ${dateStr}` : ''}</div>`
-                : `<div class="tourn-podium">
-                    <span class="tourn-podium-item">🥇 ${winner ? winner.name : '–'}</span>
-                    <span class="tourn-podium-item">🥈 ${runner  ? runner.name  : '–'}</span>
-                    ${dateStr ? `<span class="tourn-podium-date">${dateStr}</span>` : ''}
-                   </div>`;
+            const third       = tParts.find(p => p.id === t.third_id);   // stored for Swiss tournaments finished since the overview page exists
+            const pod = (medal, p) => `<span class="tcard-foot-item">${medal} ${p ? escHtml(p.name) : '–'}</span>`;
+            const foot = t.closed_by
+                ? `<span class="tcard-foot-note">Geschlossen von ${escHtml(t.closed_by)}</span>`
+                : pod('🥇', winner) + pod('🥈', runner) + (third ? pod('🥉', third) : '');
+            const meta = [dateStr, `👥 ${playerCount}`].filter(Boolean).join(' · ');
+            // The whole tile opens the overview (podium, highlights, match history)
             return `
-                <div class="tourn-row tourn-row--finished">
-                    <div class="tourn-row-top">
-                        <span class="tourn-name">${t.name}</span>
-                        <span class="tourn-tag">👥 ${playerCount}</span>
+                <a href="tournament-summary.html?id=${t.id}" class="tcard" style="${tournTintStyle(t)}">
+                    ${tournHeadHtml(t, '<span class="tcard-go">›</span>')}
+                    <div class="tcard-foot">
+                        ${foot}
+                        <span class="tcard-foot-item tcard-foot-item--muted">${meta}</span>
                     </div>
-                    <div class="tourn-tags">${setupCard(t)}</div>
-                    ${footer}
-                </div>
+                </a>
+            `;
+        }
+
+        // Running tournament: how far is it? (counts come from checkAndCloseTournaments)
+        function renderActiveRow(t, playerCount) {
+            const items = [];
+            if (playerCount) items.push(`👥 ${playerCount}`);
+            if (t._played != null)  items.push(`✓ ${t._played} gespielt`);
+            if (t._running)         items.push(`⏳ ${t._running} offen`);
+            return `
+                <a href="tournament-view.html?id=${t.id}" class="tcard" style="${tournTintStyle(t)}">
+                    ${tournHeadHtml(t, '<span class="tcard-go">›</span>')}
+                    <div class="tcard-foot">
+                        ${tournPillHtml('active')}
+                        ${items.map(i => `<span class="tcard-foot-item">${i}</span>`).join('')}
+                    </div>
+                </a>
             `;
         }
 
@@ -210,15 +215,13 @@
             if (nowOngoing.length === 0) {
                 onEl.innerHTML = '<p class="muted-text">Keine laufenden Turniere.</p>';
             } else {
-                onEl.innerHTML = nowOngoing.map(t => `
-                    <a href="tournament-view.html?id=${t.id}" class="tourn-row">
-                        <div class="tourn-row-top">
-                            <span class="tourn-name">${t.name}</span>
-                            <span class="tourn-status tourn-status--active">● AKTIV</span>
-                        </div>
-                        <div class="tourn-tags">${setupCard(t)}</div>
-                    </a>
-                `).join('');
+                // Player counts for the progress line (a failed lookup just leaves the count out)
+                const { data: aParts } = await supa
+                    .from('tournament_participants')
+                    .select('tournament_id, is_bye')
+                    .in('tournament_id', nowOngoing.map(t => t.id));
+                const countOf = t => (aParts || []).filter(p => p.tournament_id === t.id && !p.is_bye).length;
+                onEl.innerHTML = nowOngoing.map(t => renderActiveRow(t, countOf(t))).join('');
             }
 
             // Finished (member + admin only) — first page; runs after auto-close

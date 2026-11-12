@@ -173,7 +173,12 @@ async function saveMatchToSupabase() {
             ? (pStats.pointsPre170 / (pStats.dartsPre170 / 3)).toFixed(2)
             : 0;
 
+        // Tournament match this game belongs to (tournament-logic.js) — only set for tournament
+        // games, so everything else is saved exactly as before
+        const tournamentMatchId = (typeof _tournMatchId !== 'undefined' && _tournMatchId) ? _tournMatchId : null;
+
         const matchData = {
+            ...(tournamentMatchId ? { tournament_match_id: tournamentMatchId } : {}),
             player_id: playerObj.id,
             player_name: pName,
             opponent_name: gameState.pNames[opponentIdx],

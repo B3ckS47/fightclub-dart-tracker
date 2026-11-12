@@ -166,6 +166,7 @@ async function advanceSwiss(winnerId, loserId, thisMatch, ctx) {
                 runner_up_id: loserId,
                 finished_at:  new Date().toISOString()
             }).eq('id', tournId);
+            await saveThirdPlace(tournId);
             return;
         }
 
@@ -438,6 +439,7 @@ async function advanceSwissInstant(winnerId, loserId, thisMatch, ctx) {
                 runner_up_id: loserId,
                 finished_at:  new Date().toISOString()
             }).eq('id', tournId);
+            await saveThirdPlace(tournId);
             return;
         }
 
@@ -620,4 +622,107 @@ async function advanceBounty(winnerId, loserId, tourn, ctx) {
         if (rows.length > 0) await insertRoundOnce(rows);
 
     } catch(e) { console.error('[Bounty] Error:', e); }
+}
+
+// ── PODIUM / DELETE (tournament overview) ──
+
+// 3rd place of a Swiss tournament: whoever was knocked out last = the loser of the last
+// match in the loser pool. Order: by finishing time (instant pairing), else round/number.
+function swissThirdId(ms) {
+    const lm = ms.filter(m => m.status === 'done' && m.bracket === 'losers' && m.p1_id && m.p2_id && m.loser_id);
+    if (lm.length === 0) return null;
+    lm.sort((a, b) => (Date.parse(a.finished_at) || 0) - (Date.parse(b.finished_at) || 0)
+        || a.round - b.round || a.match_number - b.match_number);
+    return lm[lm.length - 1].loser_id;
+}
+
+// Matches of a tournament, just the columns swissThirdId needs
+async function swissThirdIdOf(tournId) {
+    const { data } = await supa.from('tournament_matches')
+        .select('round, match_number, bracket, status, p1_id, p2_id, loser_id, finished_at')
+        .eq('tournament_id', tournId);
+    return swissThirdId(data || []);
+}
+
+// Stores the 3rd place when a Swiss tournament ends. A separate, tolerant step: the
+// tournament is already closed by then, a problem here must never undo that.
+async function saveThirdPlace(tournId) {
+    try {
+        const thirdId = await swissThirdIdOf(tournId);
+        if (thirdId) await supa.from('tournaments').update({ third_id: thirdId }).eq('id', tournId);
+    } catch (e) { console.warn('[Tournament] third place not saved:', e); }
+}
+
+// Children first, so it does not depend on the database cascading.
+// Returns null on success, otherwise the error message.
+async function deleteTournamentCascade(tournId) {
+    for (const table of ['tournament_matches', 'tournament_participants']) {
+        const { error } = await supa.from(table).delete().eq('tournament_id', tournId);
+        if (error) return error.message;
+    }
+    const { error } = await supa.from('tournaments').delete().eq('id', tournId);
+    return error ? error.message : null;
+}
+
+// Asks, deletes, reports. Resolves true when the tournament is gone.
+async function deleteTournamentFlow(t) {
+    const notes = [];
+    if (t.status === 'active') notes.push('Das Turnier läuft noch.');
+    notes.push('Teilnehmer und Partien werden gelöscht. Die gespielten Spiele und ihre Statistiken bleiben erhalten — sie müssen bei Bedarf einzeln gelöscht werden.');
+    if (t.mode === 'bounty') {
+        notes.push('Einsatz und Auszahlungen stehen im Strafen-Verlauf der Spieler und bleiben dort bestehen — sie müssen von Hand korrigiert werden.');
+    }
+    const ok = await showConfirm('Turnier löschen', `„${t.name}" wirklich löschen? ${notes.join(' ')} Das kann nicht rückgängig gemacht werden.`, '🗑️');
+    if (!ok) return false;
+    const err = await deleteTournamentCascade(t.id);
+    if (err) { showToast('Fehler beim Löschen: ' + err, 'error'); return false; }
+    return true;
+}
+
+// ── Tournament tile / header markup ──────────────────────────────────────────
+// Shared by tournaments.html (list), tournament-view.html and tournament-summary.html
+// so that all three look the same. Styles: .tcard* in style.css.
+// Line icons (currentColor = the mode colour): bracket, shuffle arrows, crosshair
+const _TI = (body) => `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
+const TOURN_MODES = {
+    ko:     { label: 'K.O.',          rgb: '255,93,108',  icon: _TI('<path d="M3 6h6v12H3M9 12h9"/><circle cx="20" cy="12" r="1.3" fill="currentColor"/>') },
+    swiss:  { label: 'Swiss',         rgb: '245,166,35',  icon: _TI('<polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/>') },
+    bounty: { label: 'Bounty Hunter', rgb: '179,136,255', icon: _TI('<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/>') }
+};
+
+function tournIsInstant(t) { return !!t && t.mode === 'swiss' && t.pairing === 'instant'; }
+
+// "--tm: r,g,b" inline style: the mode colour that the .tcard styles pick up
+function tournTintStyle(t) {
+    return `--tm:${(TOURN_MODES[t.mode] || TOURN_MODES.swiss).rgb}`;
+}
+
+// Status pill: kind = 'active' | 'done' | 'early'
+function tournPillHtml(kind) {
+    const text = { active: 'Aktiv', done: 'Abgeschlossen', early: 'Vorzeitig beendet' }[kind] || '';
+    return `<span class="tcard-pill tcard-pill--${kind}">${text}</span>`;
+}
+
+// Icon, name and one line with mode + settings; `side` is optional HTML on the right
+function tournHeadHtml(t, side) {
+    const m = TOURN_MODES[t.mode] || { label: t.mode, icon: '' };
+    const specs = [
+        t.game_type === 'doubles' ? 'Doppel' : 'Einzel',
+        t.start_score,
+        t.checkout === 'single' ? 'Single Out' : 'Double Out',
+        `First to ${t.legs} ${t.legs === 1 ? 'Leg' : 'Legs'}`
+    ].join(' · ');
+    return `
+        <div class="tcard-head">
+            <span class="tcard-icon">${m.icon}</span>
+            <div class="tcard-titles">
+                <div class="tcard-name">${escHtml(t.name)}</div>
+                <div class="tcard-sub">
+                    <span class="tcard-mode">${m.label}${tournIsInstant(t) ? ' ⚡ Sofort' : ''}</span>
+                    ${t.is_official === false ? '<span class="tcard-mode tcard-mode--plain">🎮 Fun</span>' : ''}
+                    <span class="tcard-specs">${specs}</span>
+                </div>
+            </div>
+            ${side ? `<div class="tcard-side">${side}</div>` : ''}
+        </div>`;
 }
