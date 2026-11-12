@@ -13,6 +13,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <script src="config.js"></script>
     <script src="ui-utils.js"></script>
+    <script src="tournament-logic.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script>document.documentElement.setAttribute("data-theme",localStorage.getItem("fc47_theme")||"dark");</script>
 </head>
@@ -70,6 +71,13 @@
             <div id="all-matches-list"></div>
         </div>
 
+        <!-- Swiss "Sofort": wer wartet gerade auf einen Gegner -->
+        <div id="instant-waiting-card" class="card" style="display:none;">
+            <h2 class="card-title">⏳ WARTET AUF GEGNER</h2>
+            <div class="divider"></div>
+            <div id="instant-waiting-list"></div>
+        </div>
+
         <!-- Für K.O.-Modus: nur Winner-Matches -->
         <div id="current-round-section" style="display:none;">
             <h2 class="section-title" id="current-round-title">AKTUELLE RUNDE</h2>
@@ -88,6 +96,13 @@
             <h2 class="card-title">LOSER-POOL · 1 NIEDERLAGE</h2>
             <div class="divider"></div>
             <div id="loser-bracket-tree" class="bracket-tree"></div>
+        </div>
+
+        <!-- Swiss "Sofort": bisherige Ergebnisse -->
+        <div id="instant-results-card" class="card" style="display:none; margin-top:24px;">
+            <h2 class="card-title">BISHERIGE ERGEBNISSE</h2>
+            <div class="divider"></div>
+            <div id="instant-results-list"></div>
         </div>
 
         <!-- 5) Swiss Standings -->
@@ -197,6 +212,66 @@
             }
 
             render();
+            if (isInstant()) sweepInstantPairing();
+        }
+
+        // Swiss with instant pairing: no rounds, no bracket tree
+        const isInstant = () => tournament && tournament.mode === 'swiss' && tournament.pairing === 'instant';
+
+        // Whoever has the page open pairs what can be paired: normally the result handler on
+        // the game page already did it; this catches the rare case that two results
+        // collided or a device went offline right at that moment. Reservations
+        // (tournament-logic.js) make it safe to run from several devices at once.
+        let _sweeping = false;
+        async function sweepInstantPairing() {
+            if (_sweeping || tournament.status !== 'active') return;
+            const plan = planInstantPairs(participants.map(p => ({ id: p.id, seed: p.seed })), matches);
+            if (!plan.final && plan.pairs.length === 0) return;
+            _sweeping = true;
+            try { await pairFreePlayers(tournId); await load(); }
+            catch (e) { console.error('Nachpaarung fehlgeschlagen:', e); }
+            finally { _sweeping = false; }
+        }
+
+        function renderInstantExtras() {
+            const done    = matches.filter(m => m.status === 'done' && m.p2_id);          // byes excluded
+            const pending = matches.filter(m => m.status === 'pending' && m.p1_id && m.p2_id);
+            const losses  = id => done.filter(m => m.loser_id === id).length;
+            const busy    = new Set();
+            pending.forEach(m => { busy.add(m.p1_id); busy.add(m.p2_id); });
+
+            // Waiting for an opponent
+            const waiting = participants.filter(p => losses(p.id) < 2 && !busy.has(p.id));
+            const wCard   = document.getElementById('instant-waiting-card');
+            if (tournament.status !== 'active' || waiting.length === 0) {
+                wCard.style.display = 'none';
+            } else {
+                wCard.style.display = 'block';
+                document.getElementById('instant-waiting-list').innerHTML = waiting.map(p => {
+                    const l = losses(p.id);
+                    return `<div class="swiss-standing-row ${l === 0 ? 'swiss-standing--winner' : 'swiss-standing--loser'}">
+                        <span class="swiss-standing-name">${p.name}</span>
+                        <span class="swiss-standing-record">${l === 0 ? '🟢 Winner Pool' : '🟡 Loser Pool'}</span>
+                        <span></span>
+                        <span class="swiss-standing-status">wartet</span>
+                    </div>`;
+                }).join('');
+            }
+
+            // Results so far, newest first
+            const rCard = document.getElementById('instant-results-card');
+            if (done.length === 0) { rCard.style.display = 'none'; return; }
+            rCard.style.display = 'block';
+            const order = [...done].sort((a, b) => (Date.parse(b.finished_at) || 0) - (Date.parse(a.finished_at) || 0) || b.round - a.round);
+            document.getElementById('instant-results-list').innerHTML = order.map(m => {
+                const tag = m.bracket === 'final' ? '🏆 Finale' : m.bracket === 'losers' ? 'Loser Pool' : 'Winner Pool';
+                return `<div class="swiss-standing-row swiss-standing--winner">
+                    <span class="swiss-standing-name">${matchTeamName(m, m.winner_id)} ✓</span>
+                    <span class="swiss-standing-record">schlägt</span>
+                    <span class="swiss-standing-bye">${tag}</span>
+                    <span class="swiss-standing-status">${matchTeamName(m, m.loser_id)}</span>
+                </div>`;
+            }).join('');
         }
 
         function render() {
@@ -213,7 +288,7 @@
             }
 
             document.getElementById('tourn-setup-tags').innerHTML = `
-                <span class="tourn-tag">${MODE_LABEL[t.mode]}</span>
+                <span class="tourn-tag">${MODE_LABEL[t.mode]}${isInstant() ? ' ⚡ Sofort' : ''}</span>
                 <span class="tourn-tag">${TYPE_LABEL[t.game_type]}</span>
                 <span class="tourn-tag">${t.start_score}</span>
                 <span class="tourn-tag">${OUT_LABEL[t.checkout]}</span>
@@ -229,8 +304,19 @@
                 document.getElementById('current-round-section').style.display  = 'none';
                 document.getElementById('all-matches-section').style.display    = 'none';
                 renderBounty();
+            } else if (isInstant()) {
+                // No rounds: the bracket tree makes no sense — matches, waiting players, results
+                document.querySelector('.card:has(#bracket-tree)').style.display = 'none';
+                document.getElementById('loser-bracket-card').style.display      = 'none';
+                document.getElementById('current-round-section').style.display   = 'none';
+                renderAllSwissMatches();
+                renderInstantExtras();
+                renderSwissStandings();
+                document.getElementById('swiss-standings-card').style.display = 'block';
             } else {
                 document.querySelector('.card:has(#bracket-tree)').style.display = '';
+                document.getElementById('instant-waiting-card').style.display = 'none';
+                document.getElementById('instant-results-card').style.display = 'none';
                 renderBracketTree();
                 if (t.mode === 'swiss') {
                     renderAllSwissMatches();
@@ -410,7 +496,7 @@
                                 :           'tourn-match-card';
                 return `
                     <a ${matchLinkAttrs(m)} class="${cardClass}">
-                        <div class="tourn-match-meta">${poolBadge}<span class="tourn-match-round">Runde ${m.round}</span></div>
+                        <div class="tourn-match-meta">${poolBadge}${isInstant() ? '' : `<span class="tourn-match-round">Runde ${m.round}</span>`}</div>
                         <div class="tourn-match-players">
                             <span class="tourn-match-player">${matchTeamName(m, m.p1_id)}</span>
                             <span class="tourn-match-vs">VS</span>

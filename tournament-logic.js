@@ -30,29 +30,34 @@ async function saveTournamentResult(winnerName, ctx = tournamentCtxFromUrl()) {
         const winnerId = winnerName === ctx.p1Name ? ctx.p1Id : ctx.p2Id;
         const loserId  = winnerName === ctx.p1Name ? ctx.p2Id : ctx.p1Id;
 
+        // The tournament first: its mode (and pairing) decide how the result is written
+        const { data: tourn } = await supa.from('tournaments').select('*').eq('id', ctx.tournId).single();
+        if (!tourn) return true;
+        const instant = tourn.mode === 'swiss' && tourn.pairing === 'instant';
+
         // Claim the result: only the first writer gets the row back. A double tap or a
         // second device stops here instead of advancing the tournament twice.
         const { data: claimed, error: claimError } = await supa.from('tournament_matches')
-            .update({ winner_id: winnerId, loser_id: loserId, status: 'done' })
+            .update({
+                winner_id: winnerId, loser_id: loserId, status: 'done',
+                // instant pairing pairs whoever has waited longest — needs the finishing time
+                ...(instant ? { finished_at: new Date().toISOString() } : {})
+            })
             .eq('id', ctx.matchId)
             .neq('status', 'done')
             .select('id');
         if (claimError) throw claimError;
         if (!claimed || claimed.length === 0) return true; // already recorded by someone else
 
-        // Fetch tournament mode + this match details
-        const [{ data: tourn }, { data: thisMatch }] = await Promise.all([
-            supa.from('tournaments').select('mode, name').eq('id', ctx.tournId).single(),
-            supa.from('tournament_matches')
-                .select('bracket, round, match_number, next_match_id')
-                .eq('id', ctx.matchId).single()
-        ]);
-        if (!tourn || !thisMatch) return true;
+        const { data: thisMatch } = await supa.from('tournament_matches')
+            .select('bracket, round, match_number, next_match_id')
+            .eq('id', ctx.matchId).single();
+        if (!thisMatch) return true;
 
         if (tourn.mode === 'ko') {
             await advanceKO(winnerId, loserId, thisMatch, ctx);
         } else if (tourn.mode === 'swiss') {
-            await advanceSwiss(winnerId, loserId, thisMatch, ctx);
+            await (instant ? advanceSwissInstant : advanceSwiss)(winnerId, loserId, thisMatch, ctx);
         } else if (tourn.mode === 'bounty') {
             await advanceBounty(winnerId, loserId, tourn, ctx);
         }
@@ -286,6 +291,174 @@ async function advanceSwiss(winnerId, loserId, thisMatch, ctx) {
     } catch(e) { console.error('[Swiss] Error:', e); }
 }
 
+
+// ── SWISS WITH INSTANT PAIRING (tournaments.pairing = 'instant') ──
+// No rounds: whenever two players with the same number of losses are free, they get a
+// new match right away — nobody waits for the slowest match of a "round".
+//   * level = number of losses (0 = winner pool, 1 = loser pool, 2 = out)
+//   * a winner stays on his level, the loser drops one level
+//   * among the free players of a level the one who has waited longest is paired first,
+//     preferably with someone he has not played yet
+//   * a lone free player simply waits (no bye after round 1) — someone always arrives:
+//     a match of his level ends or a player drops down from the level above
+//   * finished when exactly one player is left on each level and nothing is running:
+//     the final
+// Players are reserved with tournament_participants.in_match (one conditional UPDATE),
+// so two devices finishing at the same moment can never put someone in two matches.
+
+// Pure planning — no database access. parts: { id, seed }, ms: all matches of the tournament.
+// Returns { final: { p1, p2 } | null, pairs: [{ a, b, level }] }.
+function planInstantPairs(parts, ms) {
+    if (ms.some(m => m.bracket === 'final')) return { final: null, pairs: [] };
+
+    const done    = ms.filter(m => m.status === 'done');
+    const pending = ms.filter(m => m.status === 'pending' && m.p1_id && m.p2_id);
+    const losses  = id => done.filter(m => m.loser_id === id).length;
+    const busy    = new Set();
+    pending.forEach(m => { busy.add(m.p1_id); busy.add(m.p2_id); });
+
+    const alive = parts.filter(p => losses(p.id) < 2);
+    const free  = alive.filter(p => !busy.has(p.id));
+
+    if (pending.length === 0) {
+        const l0 = alive.filter(p => losses(p.id) === 0);
+        const l1 = alive.filter(p => losses(p.id) === 1);
+        if (alive.length === 2 && l0.length === 1 && l1.length === 1) {
+            return { final: { p1: l0[0].id, p2: l1[0].id }, pairs: [] };
+        }
+    }
+
+    const met = (a, b) => ms.some(m => (m.p1_id === a && m.p2_id === b) || (m.p1_id === b && m.p2_id === a));
+    const waitingSince = id => {
+        const t = done.filter(m => m.p1_id === id || m.p2_id === id).map(m => (m.finished_at ? Date.parse(m.finished_at) : 0));
+        return t.length ? Math.max(...t) : 0;
+    };
+
+    const pairs = [];
+    [0, 1].forEach(level => {
+        const pool = free.filter(p => losses(p.id) === level)
+            .sort((a, b) => waitingSince(a.id) - waitingSince(b.id) || (a.seed || 0) - (b.seed || 0));
+        while (pool.length >= 2) {
+            const a = pool.shift();
+            let j = pool.findIndex(b => !met(a.id, b.id));   // a fresh opponent if there is one
+            if (j < 0) j = 0;
+            pairs.push({ a: a.id, b: pool.splice(j, 1)[0].id, level });
+        }
+    });
+    return { final: null, pairs };
+}
+
+function newMatchId() {
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+        const r = Math.random() * 16 | 0;
+        return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+    });
+}
+
+// Creates one pending match and reserves both players. Returns false if somebody else was
+// faster (the match is withdrawn again). Insert first, then reserve: a reservation always
+// points to an existing match, so leftovers can be told apart from a claim in flight.
+async function createInstantMatch(tournId, aId, bId, bracket) {
+    const id = newMatchId();
+    let inserted = false;
+    for (let tries = 0; tries < 5 && !inserted; tries++) {
+        const { data: ms } = await supa.from('tournament_matches')
+            .select('round, bracket, match_number, p1_id, p2_id, status').eq('tournament_id', tournId);
+        const rows   = ms || [];
+        const played = pid => rows.filter(m => m.status === 'done' && (m.p1_id === pid || m.p2_id === pid)).length;
+        // "round" = the next game of the more experienced player; the final comes last
+        const round  = bracket === 'final'
+            ? Math.max(0, ...rows.map(m => m.round)) + 1
+            : 1 + Math.max(played(aId), played(bId));
+        // highest number + 1 (not the count: a withdrawn match leaves a gap that would collide)
+        const number = 1 + Math.max(0, ...rows.filter(m => m.round === round && m.bracket === bracket).map(m => m.match_number));
+        const { error } = await supa.from('tournament_matches').insert([{
+            id, tournament_id: tournId, round, match_number: number, bracket,
+            p1_id: aId, p2_id: bId, status: 'pending'
+        }]);
+        if (!error) { inserted = true; break; }
+        if (error.code !== '23505') { console.error('[Swiss instant] Match insert error:', error.message); return false; }
+        // the slot (round/bracket/number) was taken at the same moment — look again
+    }
+    if (!inserted) return false;
+
+    const { data: got, error: reserveError } = await supa.from('tournament_participants')
+        .update({ in_match: id })
+        .in('id', [aId, bId])
+        .is('in_match', null)
+        .select('id');
+    if (reserveError || !got || got.length !== 2) {
+        if (got && got.length) {
+            await supa.from('tournament_participants').update({ in_match: null }).in('id', got.map(r => r.id)).eq('in_match', id);
+        }
+        await supa.from('tournament_matches').delete().eq('id', id);
+        return false;
+    }
+    return true;
+}
+
+// Pairs everything that can be paired right now (and creates the final when it is time).
+// Safe to call from anywhere, any number of times: reservations make it idempotent.
+async function pairFreePlayers(tournId) {
+    for (let attempt = 0; attempt < 6; attempt++) {
+        // participants first, matches after: a reservation seen here belongs to a match
+        // that was inserted before — and is therefore in the match list fetched next.
+        const { data: parts } = await supa.from('tournament_participants').select('id, seed, in_match').eq('tournament_id', tournId);
+        const { data: ms }    = await supa.from('tournament_matches')
+            .select('id, round, bracket, p1_id, p2_id, status, winner_id, loser_id, finished_at').eq('tournament_id', tournId);
+        if (!parts || !ms) return;
+
+        // Reservations of matches that are over (or gone) would block the player for good
+        const pendingIds = new Set(ms.filter(m => m.status === 'pending').map(m => m.id));
+        const stale = parts.filter(p => p.in_match && !pendingIds.has(p.in_match)).map(p => p.id);
+        if (stale.length) await supa.from('tournament_participants').update({ in_match: null }).in('id', stale);
+
+        const plan = planInstantPairs(parts, ms);
+        let created = 0, failed = 0;
+        if (plan.final) {
+            (await createInstantMatch(tournId, plan.final.p1, plan.final.p2, 'final')) ? created++ : failed++;
+        }
+        for (const pr of plan.pairs) {
+            (await createInstantMatch(tournId, pr.a, pr.b, pr.level === 0 ? 'winners' : 'losers')) ? created++ : failed++;
+        }
+        if (failed === 0) return;
+        // somebody else paired at the same time — let them finish, then look again
+        await new Promise(r => setTimeout(r, 80 + Math.random() * 250));
+    }
+}
+
+async function advanceSwissInstant(winnerId, loserId, thisMatch, ctx) {
+    const { tournId } = ctx;
+    try {
+        if (thisMatch.bracket === 'final') {
+            await supa.from('tournaments').update({
+                status:       'finished',
+                winner_id:    winnerId,
+                runner_up_id: loserId,
+                finished_at:  new Date().toISOString()
+            }).eq('id', tournId);
+            return;
+        }
+
+        // Display counters (standings) + release both players from this match. The release
+        // only counts while the reservation still belongs to THIS match — a sweep may have
+        // paired the player again in the meantime.
+        const { data: parts } = await supa.from('tournament_participants').select('id, wins, losses').eq('tournament_id', tournId);
+        const winnerPart = (parts || []).find(p => p.id === winnerId);
+        const loserPart  = (parts || []).find(p => p.id === loserId);
+        await Promise.all([
+            supa.from('tournament_participants')
+                .update({ wins: ((winnerPart && winnerPart.wins) || 0) + 1 }).eq('id', winnerId),
+            supa.from('tournament_participants')
+                .update({ losses: ((loserPart && loserPart.losses) || 0) + 1 }).eq('id', loserId)
+        ]);
+        await supa.from('tournament_participants').update({ in_match: null })
+            .in('id', [winnerId, loserId]).eq('in_match', ctx.matchId);
+
+        await pairFreePlayers(tournId);
+    } catch (e) { console.error('[Swiss instant] Error:', e); }
+}
 
 // ── BOUNTY HUNTER MODE ──
 async function advanceBounty(winnerId, loserId, tourn, ctx) {

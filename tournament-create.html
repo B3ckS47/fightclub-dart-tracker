@@ -49,6 +49,16 @@
                     </select>
                 </div>
 
+                <!-- Swiss only: when are new matches set up? -->
+                <div class="settings-field" id="pairing-field">
+                    <label class="settings-label">PAARUNG</label>
+                    <div class="game-type-selector">
+                        <button type="button" id="pairing-instant" class="game-type-btn game-type-btn--active" onclick="setPairing('instant')">⚡ Sofort</button>
+                        <button type="button" id="pairing-rounds" class="game-type-btn" onclick="setPairing('rounds')">📋 Runden</button>
+                    </div>
+                    <p class="tourn-hint" id="pairing-hint" style="margin-top:8px;"></p>
+                </div>
+
                 <div class="settings-field">
                     <label class="settings-label">SPIELTYP</label>
                     <div class="game-type-selector">
@@ -243,7 +253,21 @@
         function setMode(m) {
             mode = m;
             document.getElementById('bounty-settings').style.display = m === 'bounty' ? 'block' : 'none';
+            document.getElementById('pairing-field').style.display   = m === 'swiss'  ? 'block' : 'none';
         }
+
+        // Swiss pairing: 'instant' = a new match as soon as two players with the same record
+        // are free; 'rounds' = wait until every match of the round is finished.
+        let pairing = 'instant';
+        function setPairing(p) {
+            pairing = p;
+            document.getElementById('pairing-instant').classList.toggle('game-type-btn--active', p === 'instant');
+            document.getElementById('pairing-rounds').classList.toggle('game-type-btn--active', p === 'rounds');
+            document.getElementById('pairing-hint').textContent = p === 'instant'
+                ? 'Eine neue Partie entsteht, sobald zwei Spieler mit gleichem Stand frei sind. Niemand wartet auf die letzte Partie einer Runde.'
+                : 'Erst wenn alle Partien einer Runde fertig sind, wird neu gepaart.';
+        }
+        setPairing('instant');
 
         function setType(t) {
             gameType = t;
@@ -668,7 +692,7 @@
             }
         }
 
-        async function generateSwissBracket(tournId, partIds) {
+        async function generateSwissBracket(tournId, partIds, instant) {
             const shuffled = [...partIds];
             const n        = shuffled.length;
             const pairs    = Math.floor(n / 2);
@@ -700,15 +724,25 @@
                     status:        'done'
                 });
 
-                await supa.from('tournament_matches').insert(matchRows);
+                const { data: created } = await supa.from('tournament_matches').insert(matchRows).select('id, p1_id, p2_id, status');
+                if (instant) await reserveInstantPlayers(created);
 
                 // Immediately credit the bye recipient: wins +1, bye_count +1
                 await supa.from('tournament_participants')
                     .update({ wins: 1, bye_count: 1 })
                     .eq('id', byeParticipantId);
             } else {
-                await supa.from('tournament_matches').insert(matchRows);
+                const { data: created } = await supa.from('tournament_matches').insert(matchRows).select('id, p1_id, p2_id, status');
+                if (instant) await reserveInstantPlayers(created);
             }
+        }
+
+        // Instant pairing: the players of the first matches are reserved for them
+        // (tournament_participants.in_match), see tournament-logic.js
+        async function reserveInstantPlayers(created) {
+            await Promise.all((created || [])
+                .filter(m => m.status === 'pending' && m.p1_id && m.p2_id)
+                .map(m => supa.from('tournament_participants').update({ in_match: m.id }).in('id', [m.p1_id, m.p2_id])));
         }
 
         // ── CREATE ──
@@ -768,7 +802,8 @@
                     legs,
                     status:      'active',
                     is_official: isOfficial,
-                    created_by:  user.username
+                    created_by:  user.username,
+                    ...(mode === 'swiss' ? { pairing } : {})
                 }])
                 .select('id')
                 .single();
@@ -801,7 +836,7 @@
             if (mode === 'ko') {
                 await generateKOBracket(tournId, sortedIds);
             } else if (mode === 'swiss') {
-                await generateSwissBracket(tournId, sortedIds);
+                await generateSwissBracket(tournId, sortedIds, pairing === 'instant');
             } else if (mode === 'bounty') {
                 await generateBountyRound(tournId, sortedIds, 1);
                 const bountyAmount = parseFloat(document.getElementById('bounty-amount').value);
