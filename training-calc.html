@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FlightClub · Rechnen</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0d0d0f">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <script src="config.js"></script>
+    <script src="ui-utils.js"></script>
+    <script src="checkout.js"></script>
+    <script src="dartbot.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>document.documentElement.setAttribute("data-theme",localStorage.getItem("fc47_theme")||"dark");</script>
+</head>
+<body>
+
+    <nav id="nav-training-calc">
+        <div class="nav-inner nav-inner--default">
+            <a href="index.html" class="nav-brand" style="text-decoration:none;color:inherit;">FLIGHTCLUB</a>
+            <div class="nav-links">
+                <a href="training.html" class="nav-btn">« Training</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="app-wrapper">
+
+        <!-- SETUP -->
+        <div class="card" id="calc-setup-view">
+            <h2 class="card-title">RECHNEN</h2>
+            <div class="divider"></div>
+            <p class="muted-text" style="font-size:0.85rem; line-height:1.5;">
+                Der Bot wirft, du bist der Schreiber: Jeder Dart wird einzeln gezeigt und du tippst die Summe der Aufnahme ein.
+                Überwirft der Bot sich (Bust), zählt die Aufnahme 0.
+            </p>
+
+            <h3 class="section-label" style="margin-top:18px;">Startpunkte</h3>
+            <div class="game-type-selector">
+                <button type="button" id="calc-score-501" class="game-type-btn game-type-btn--active" onclick="setStartScore(501)">
+                    <span class="game-type-label">501</span>
+                </button>
+                <button type="button" id="calc-score-301" class="game-type-btn" onclick="setStartScore(301)">
+                    <span class="game-type-label">301</span>
+                </button>
+            </div>
+
+            <div class="training-subpanel" style="margin-top:18px;">
+                <label class="training-subpanel-label" for="bot-target-avg-input">Bot-Stärke · Ziel-Average</label>
+                <div class="training-avg-row">
+                    <input type="range" id="calc-avg-slider" min="20" max="100" step="1" value="45" oninput="syncAvg(this.value)">
+                    <input type="number" id="bot-target-avg-input" class="select-field select-small" min="20" max="100" step="1" value="45" oninput="syncAvg(this.value)">
+                </div>
+                <p class="muted-text" style="font-size:0.78rem; margin-top:8px; line-height:1.5;">
+                    Der Bot zielt wie ein Spieler (T20, dann Setup und Double) und trifft mit realer Streuung auf dem Board.
+                    Double Out, Bust inklusive.
+                </p>
+            </div>
+
+            <button class="btn btn-primary btn-full" style="margin-top:8px;" onclick="startGame()">START</button>
+        </div>
+
+        <!-- PLAY -->
+        <div class="card calc-card" id="calc-play-view" style="display:none;">
+            <div class="calc-top">
+                <span id="calc-visit-no">Aufnahme 1</span>
+                <span id="calc-bot-label">🤖 Ø 45</span>
+            </div>
+
+            <div class="calc-rest-label">REST</div>
+            <div class="calc-rest" id="calc-rest">501</div>
+
+            <div class="calc-darts" id="calc-darts"></div>
+            <div class="calc-slot">
+                <div class="calc-status" id="calc-status"></div>
+                <div class="calc-feedback" id="calc-feedback" style="display:none;"></div>
+            </div>
+
+            <div class="input-preview-row">
+                Summe: <span id="calc-input" class="input-preview-value">0</span>
+            </div>
+            <div class="calc-pad" id="calc-pad">
+                <button class="key-btn" onclick="pressKey('1')">1</button>
+                <button class="key-btn" onclick="pressKey('2')">2</button>
+                <button class="key-btn" onclick="pressKey('3')">3</button>
+                <button class="key-btn" onclick="pressKey('4')">4</button>
+                <button class="key-btn" onclick="pressKey('5')">5</button>
+                <button class="key-btn" onclick="pressKey('6')">6</button>
+                <button class="key-btn" onclick="pressKey('7')">7</button>
+                <button class="key-btn" onclick="pressKey('8')">8</button>
+                <button class="key-btn" onclick="pressKey('9')">9</button>
+                <button class="key-btn key-clear" onclick="clearInput()">C</button>
+                <button class="key-btn" onclick="pressKey('0')">0</button>
+                <button class="key-btn key-undo" onclick="backspace()">⌫</button>
+                <button class="key-btn key-submit" id="calc-submit" onclick="submitAnswer()">EINGABE</button>
+            </div>
+
+            <div class="stats-grid calc-stats">
+                <div class="stat-box">
+                    <div class="stat-label">Aufnahmen</div>
+                    <div class="stat-value" id="calc-st-visits">0</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">Richtig</div>
+                    <div class="stat-value stat-value--green" id="calc-st-correct">0</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">Quote</div>
+                    <div class="stat-value" id="calc-st-rate">–</div>
+                </div>
+            </div>
+            <button class="btn btn-full" style="margin-top:14px;" onclick="quitGame()">Beenden</button>
+        </div>
+
+        <!-- RESULT -->
+        <div class="card training-result-card" id="calc-result-view" style="display:none;">
+            <h2 class="card-title" id="calc-result-title">LEG BEENDET</h2>
+            <div class="divider"></div>
+            <div class="training-result-number" id="calc-result-rate">0 %</div>
+            <div class="training-result-label">Richtig gerechnet</div>
+            <div class="stats-grid calc-stats" style="margin-top:18px;">
+                <div class="stat-box">
+                    <div class="stat-label">Richtig</div>
+                    <div class="stat-value stat-value--green" id="calc-res-correct">0</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">Ø Zeit</div>
+                    <div class="stat-value" id="calc-res-time">–</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">Beste Serie</div>
+                    <div class="stat-value" id="calc-res-streak">0</div>
+                </div>
+            </div>
+            <p class="muted-text" id="calc-result-best" style="margin-top:4px;"></p>
+            <div class="training-action-buttons" style="margin-top:20px;">
+                <button class="btn btn-primary training-action-btn" onclick="resetGame()">Nochmal</button>
+                <button class="btn btn-full training-action-btn" onclick="window.location.href='training.html'">Fertig</button>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const supa = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
+
+        let currentUser = null;
+        (function () {
+            var raw = sessionStorage.getItem('fc47_user');
+            if (!raw) { window.location.href = 'index.html'; return; }
+            currentUser = JSON.parse(raw);
+            if (currentUser.role === 'ipad') { window.location.href = 'index.html'; return; }
+        })();
+
+        const DART_DELAY = 800;    // ms between the single darts
+        const MIN_VISITS_TO_SAVE = 3;
+
+        // ── SETUP ──
+        let startScore = 501;
+        (function restoreSetup() {
+            try {
+                const cfg = JSON.parse(localStorage.getItem('fc47_calc_cfg') || 'null');
+                if (cfg) {
+                    if (cfg.start === 301) setStartScore(301);
+                    if (cfg.avg >= 20 && cfg.avg <= 100) syncAvg(cfg.avg);
+                }
+            } catch (e) { /* no stored setup */ }
+        })();
+
+        function setStartScore(n) {
+            startScore = n;
+            document.getElementById('calc-score-501').classList.toggle('game-type-btn--active', n === 501);
+            document.getElementById('calc-score-301').classList.toggle('game-type-btn--active', n === 301);
+        }
+        function syncAvg(v) {
+            v = Math.max(20, Math.min(100, parseInt(v) || 45));
+            document.getElementById('calc-avg-slider').value      = v;
+            document.getElementById('bot-target-avg-input').value = v;
+        }
+
+        // ── GAME STATE ──
+        let botAvg = 45, sigma = 20;
+        let rest = 501, visitNo = 0, visit = null;
+        let phase = 'idle';          // 'throwing' | 'input' | 'feedback' | 'idle'
+        let inputStr = '', shownAt = 0, timers = [];
+        let st = null;               // statistics of this leg
+        let personalBest = null;
+
+        function newStats() {
+            return { visits: 0, correct: 0, wrong: 0, times: [], streak: 0, bestStreak: 0, botScored: 0 };
+        }
+
+        function setTimer(fn, ms) { timers.push(setTimeout(fn, ms)); }
+        function clearTimers() { timers.forEach(clearTimeout); timers = []; }
+
+        function show(id) {
+            ['calc-setup-view', 'calc-play-view', 'calc-result-view'].forEach(v =>
+                document.getElementById(v).style.display = v === id ? 'block' : 'none');
+        }
+
+        function startGame() {
+            botAvg = Math.max(20, Math.min(100, parseInt(document.getElementById('bot-target-avg-input').value) || 45));
+            try { localStorage.setItem('fc47_calc_cfg', JSON.stringify({ start: startScore, avg: botAvg })); } catch (e) {}
+            // Scatter that makes the bot's average over a whole leg come out at the wish (a few ms)
+            sigma = DartBot.sigmaForLegAverage(botAvg, startScore);
+
+            rest = startScore; visitNo = 0; st = newStats();
+            document.getElementById('calc-bot-label').textContent = `🤖 Ø ${botAvg} · ${startScore}`;
+            renderRest(false);
+            renderStats();
+            show('calc-play-view');
+            nextVisit();
+        }
+
+        // ── ONE VISIT ──
+        function nextVisit() {
+            clearTimers();
+            visit = DartBot.playVisit(rest, sigma);
+            visitNo++;
+            inputStr = ''; renderInput();
+            hideFeedback();
+            document.getElementById('calc-visit-no').textContent = `Aufnahme ${visitNo}`;
+            setStatus('🤖 wirft …');
+            setPadEnabled(false);
+            phase = 'throwing';
+
+            const row = document.getElementById('calc-darts');
+            row.innerHTML = [0, 1, 2].map(i => `<div class="calc-dart" id="calc-dart-${i}"><span class="calc-dart-n">${i + 1}</span><span class="calc-dart-v">·</span></div>`).join('');
+
+            visit.darts.forEach((d, i) => setTimer(() => revealDart(i), 500 + i * DART_DELAY));
+            // After the last dart the scorer is up. If the bot stopped early (bust or checkout) the
+            // empty slots stay empty — exactly what the scorer would see.
+            setTimer(() => {
+                phase = 'input';
+                shownAt = performance.now();
+                setStatus('Wie viel hat der Bot geworfen?');
+                setPadEnabled(true);
+            }, 500 + (visit.darts.length - 1) * DART_DELAY + 450);
+        }
+
+        function revealDart(i) {
+            const d = visit.darts[i].hit;
+            const el = document.getElementById('calc-dart-' + i);
+            if (!el) return;
+            const kind = d.mult === 3 ? 't' : d.mult === 2 ? 'd' : d.score === 0 ? 'miss' : 's';
+            el.className = `calc-dart calc-dart--in calc-dart--${kind}`;
+            el.querySelector('.calc-dart-v').textContent = d.label;
+        }
+
+        // ── INPUT ──
+        function pressKey(k) {
+            if (phase !== 'input' || inputStr.length >= 3) return;
+            inputStr = inputStr === '0' ? k : inputStr + k;
+            renderInput();
+        }
+        function clearInput() { if (phase !== 'input') return; inputStr = ''; renderInput(); }
+        function backspace()  { if (phase !== 'input') return; inputStr = inputStr.slice(0, -1); renderInput(); }
+        function renderInput() { document.getElementById('calc-input').textContent = inputStr === '' ? '0' : inputStr; }
+
+        function setPadEnabled(on) {
+            document.querySelectorAll('#calc-pad .key-btn').forEach(b => b.disabled = !on);
+            document.getElementById('calc-pad').classList.toggle('calc-pad--off', !on);
+        }
+        function setStatus(t) { document.getElementById('calc-status').textContent = t; }
+
+        // ── ANSWER ──
+        // "60 + 5 + 16 = 81" (a single dart is just its value)
+        function sumText(v, total) {
+            const parts = v.darts.map(d => d.hit.score);
+            return parts.length === 1 ? String(parts[0]) : `${parts.join(' + ')} = ${total}`;
+        }
+
+        function submitAnswer() {
+            if (phase !== 'input' || inputStr === '') return;
+            const entered = parseInt(inputStr, 10);
+            const ms      = performance.now() - shownAt;
+            const ok      = entered === visit.sum;
+            phase = 'feedback';
+            setPadEnabled(false);
+
+            st.visits++; st.times.push(ms);
+            if (ok) { st.correct++; st.streak++; st.bestStreak = Math.max(st.bestStreak, st.streak); }
+            else    { st.wrong++;   st.streak = 0; }
+            st.botScored += visit.sum;
+
+            // What actually happened, so a wrong answer can be understood
+            const thrown = visit.darts.reduce((s, d) => s + d.hit.score, 0);
+            let detail;
+            if (visit.finished)      detail = `Game Shot mit ${visit.darts[visit.darts.length - 1].hit.label}: ${sumText(visit, visit.sum)}`;
+            else if (visit.bust)     detail = `Bust (${visit.bustReason}): ${sumText(visit, thrown)} bei Rest ${rest} → die Aufnahme zählt 0, der Rest bleibt ${rest}`;
+            else                     detail = sumText(visit, visit.sum);
+
+            const fb = document.getElementById('calc-feedback');
+            fb.style.display = 'block';
+            if (ok) {
+                fb.className = 'calc-feedback calc-feedback--ok';
+                fb.innerHTML = visit.finished ? `✓ Richtig · 🎯 Game Shot!` : visit.bust ? `✓ Richtig · Bust = 0` : `✓ Richtig · ${visit.sum}`;
+                setStatus('');
+            } else {
+                fb.className = 'calc-feedback calc-feedback--bad';
+                fb.innerHTML = `✗ Richtig wäre <b>${visit.sum}</b> <span class="calc-feedback-sub">Du hast ${entered} eingegeben.<br>${detail}</span>
+                                <button class="btn btn-primary btn-full calc-next" onclick="afterFeedback()">WEITER</button>`;
+                setStatus('');
+            }
+
+            // The rest changes right away, so the consequence is visible
+            rest = visit.restAfter;
+            renderRest(true, visit.bust ? 0 : visit.sum);
+            renderStats();
+
+            if (ok) setTimer(afterFeedback, visit.finished ? 1600 : 1100);
+        }
+
+        function afterFeedback() {
+            if (phase !== 'feedback') return;
+            clearTimers();
+            if (visit.finished) endGame(true); else nextVisit();
+        }
+
+        function hideFeedback() {
+            const fb = document.getElementById('calc-feedback');
+            fb.style.display = 'none'; fb.innerHTML = '';
+        }
+
+        // ── DISPLAY ──
+        function renderRest(animate, scored) {
+            const el = document.getElementById('calc-rest');
+            el.textContent = rest;
+            if (animate && scored) {
+                el.classList.remove('calc-rest--tick'); void el.offsetWidth; el.classList.add('calc-rest--tick');
+            }
+        }
+        function renderStats() {
+            document.getElementById('calc-st-visits').textContent  = st.visits;
+            document.getElementById('calc-st-correct').textContent = st.correct;
+            document.getElementById('calc-st-rate').textContent    = st.visits ? Math.round(100 * st.correct / st.visits) + ' %' : '–';
+        }
+
+        // ── END ──
+        async function quitGame() {
+            if (st.visits === 0) { clearTimers(); phase = 'idle'; show('calc-setup-view'); return; }
+            const ok = await showConfirm('Beenden', 'Das Leg jetzt beenden? Das Ergebnis der bisherigen Aufnahmen wird gespeichert.', '🏁');
+            if (ok) endGame(false);
+        }
+
+        async function endGame(completed) {
+            clearTimers(); phase = 'idle';
+            const rate = st.visits ? Math.round(100 * st.correct / st.visits) : 0;
+            const avgMs = st.times.length ? st.times.reduce((a, b) => a + b, 0) / st.times.length : 0;
+
+            document.getElementById('calc-result-title').textContent = completed ? 'LEG GESPIELT' : 'BEENDET';
+            document.getElementById('calc-result-rate').textContent  = st.visits ? rate + ' %' : '–';
+            document.getElementById('calc-res-correct').textContent  = `${st.correct} / ${st.visits}`;
+            document.getElementById('calc-res-time').textContent     = avgMs ? (avgMs / 1000).toFixed(1) + ' s' : '–';
+            document.getElementById('calc-res-streak').textContent   = st.bestStreak;
+            document.getElementById('calc-result-best').textContent  = '';
+            show('calc-result-view');
+
+            if (!currentUser.player_id || st.visits < MIN_VISITS_TO_SAVE) {
+                if (st.visits < MIN_VISITS_TO_SAVE) document.getElementById('calc-result-best').textContent = `Erst ab ${MIN_VISITS_TO_SAVE} Aufnahmen wird ein Ergebnis gespeichert.`;
+                return;
+            }
+            await loadPersonalBest();
+            const bestEl = document.getElementById('calc-result-best');
+            if (completed) {
+                if (personalBest === null)      bestEl.textContent = 'Erstes gespeichertes Leg!';
+                else if (rate > personalBest)   bestEl.textContent = `Neue Bestleistung! (vorher: ${personalBest} %)`;
+                else                            bestEl.textContent = `Persönliche Bestleistung: ${personalBest} %`;
+            }
+            const { error } = await supa.from('training_results').insert([{
+                player_id: currentUser.player_id,
+                game:      'calc',
+                score:     rate,
+                meta: {
+                    completed,
+                    startScore,
+                    botAvg,
+                    visits:     st.visits,
+                    correct:    st.correct,
+                    wrong:      st.wrong,
+                    avgMs:      Math.round(avgMs),
+                    bestStreak: st.bestStreak,
+                    botLegAvg:  st.visits ? Math.round(10 * st.botScored / st.visits) / 10 : 0
+                }
+            }]);
+            if (error) { console.error('Rechnen: Speichern fehlgeschlagen', error); showToast('Ergebnis konnte nicht gespeichert werden.', 'error'); }
+        }
+
+        async function loadPersonalBest() {
+            personalBest = null;
+            const { data } = await supa.from('training_results').select('score, meta')
+                .eq('player_id', currentUser.player_id).eq('game', 'calc');
+            const done = (data || []).filter(r => r.meta && r.meta.completed);
+            if (done.length) personalBest = Math.max(...done.map(r => r.score));
+        }
+
+        function resetGame() { show('calc-setup-view'); }
+
+        // Keyboard (desktop): digits, Backspace, Enter
+        document.addEventListener('keydown', e => {
+            if (document.getElementById('calc-play-view').style.display === 'none') return;
+            if (e.ctrlKey || e.metaKey || e.altKey) return;
+            if (/^[0-9]$/.test(e.key)) pressKey(e.key);
+            else if (e.key === 'Backspace') backspace();
+            else if (e.key === 'Enter') { phase === 'feedback' ? afterFeedback() : submitAnswer(); }
+        });
+    </script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/fightclub-dart-tracker/sw.js')
+                .catch(() => {});
+        }
+    </script>
+</body>
+</html>

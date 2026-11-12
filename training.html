@@ -91,6 +91,15 @@
                 <div class="menu-card-arrow">»</div>
             </a>
 
+            <a href="training-calc.html" class="menu-card menu-card--training">
+                <div class="menu-card-icon">🧮</div>
+                <div class="menu-card-body">
+                    <div class="menu-card-title">RECHNEN</div>
+                    <div class="menu-card-sub" id="calc-best-sub">Bot wirft · du schreibst mit</div>
+                </div>
+                <div class="menu-card-arrow">»</div>
+            </a>
+
             <a href="training-stats.html" class="menu-card menu-card--training">
                 <div class="menu-card-icon">📈</div>
                 <div class="menu-card-body">
@@ -122,9 +131,11 @@
                 .eq('player_id', playerId);
             if (error || !data || data.length === 0) return;
 
-            const byGame = { clock: [], bobs27: [], checkout: [], jdc: [], aim: [] };
+            const byGame = { clock: [], bobs27: [], checkout: [], jdc: [], aim: [], calc: [] };
             data.forEach(r => {
                 if (!byGame[r.game]) return;
+                // Rechnen: only finished legs count for the best quota (a 2-visit run would be 100 % trivially)
+                if (r.game === 'calc' && !(r.meta && r.meta.completed)) return;
                 // Clock runs over a partial range (e.g. 15–20) are stored but
                 // not comparable to full 1–Bull runs — exclude them from the
                 // "Beste Runde" headline. Rows without from/to predate the
@@ -154,6 +165,10 @@
             if (byGame.aim.length > 0) {
                 const best = Math.max(...byGame.aim);
                 document.getElementById('aim-best-sub').textContent = `Beste Quote: ${best} %`;
+            }
+            if (byGame.calc.length > 0) {
+                const best = Math.max(...byGame.calc);
+                document.getElementById('calc-best-sub').textContent = `Beste Quote: ${best} %`;
             }
         }
 

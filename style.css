@@ -122,7 +122,8 @@ body {
 #nav-training-checkout,
 #nav-training-stats,
 #nav-training-jdc,
-#nav-training-aim {
+#nav-training-aim,
+#nav-training-calc {
     position: sticky;
     top: 0;
     z-index: 100;
@@ -6137,3 +6138,79 @@ a.tcard:active { transform: scale(0.995); }
         flex-direction: column;
     }
 }
+
+/* ── TRAINING: RECHNEN (training-calc.html) ── */
+.calc-card { padding: 20px 18px 22px; }
+.calc-top {
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--font-display);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+.calc-rest-label {
+    margin-top: 8px;
+    text-align: center;
+    font-family: var(--font-display);
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 3px;
+    color: var(--text-muted);
+}
+.calc-rest {
+    text-align: center;
+    font-family: var(--font-display);
+    font-size: 4.4rem;
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: -1px;
+    color: var(--text-primary);
+}
+.calc-rest--tick { animation: calc-tick 0.5s ease-out; }
+@keyframes calc-tick { 0% { transform: scale(1.18); color: var(--green); } 100% { transform: scale(1); } }
+
+.calc-darts { display: flex; justify-content: center; gap: 10px; margin: 14px 0 8px; }
+.calc-dart {
+    flex: 1;
+    max-width: 104px;
+    min-height: 62px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-md);
+    border: 1px dashed var(--border-light);
+    background: var(--bg-element);
+    font-family: var(--font-display);
+    font-size: 1.7rem;
+    font-weight: 800;
+    color: var(--text-muted);
+}
+.calc-dart-n { font-size: 0.6rem; font-weight: 700; letter-spacing: 2px; color: var(--text-muted); }
+.calc-dart--in { border-style: solid; color: var(--text-primary); animation: calc-pop 0.28s ease-out; }
+.calc-dart--t    { border-color: #f5a623; background: rgba(245,166,35,0.14); }
+.calc-dart--d    { border-color: var(--green); background: var(--green-dim); }
+.calc-dart--miss { color: var(--text-muted); font-size: 1.1rem; }
+@keyframes calc-pop { from { transform: scale(0.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+/* fixed slot so that the numpad does not jump when the short feedback appears and disappears */
+.calc-slot { min-height: 58px; margin-bottom: 6px; }
+.calc-status { padding-top: 14px; text-align: center; font-size: 0.85rem; color: var(--text-secondary); }
+.calc-feedback {
+    border-radius: var(--radius-md);
+    padding: 10px 12px;
+    text-align: center;
+    font-weight: 600;
+}
+.calc-feedback--ok  { background: var(--green-dim); border: 1px solid var(--green); color: var(--green); }
+.calc-feedback--bad { background: var(--red-dim);   border: 1px solid var(--red);   color: var(--red); }
+.calc-feedback-sub  { display: block; margin-top: 4px; font-weight: 400; font-size: 0.82rem; line-height: 1.45; color: var(--text-secondary); }
+.calc-next { margin-top: 10px; }
+
+.calc-pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; max-width: 360px; margin: 0 auto; }
+.calc-pad .key-btn { padding: 14px; }
+.calc-pad--off { opacity: 0.45; }
+.calc-stats { grid-template-columns: repeat(3, 1fr); margin: 16px 0 0; }
