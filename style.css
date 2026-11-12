@@ -2558,6 +2558,8 @@ body {
 .fines-col-date   { color: var(--text-muted); font-size: 0.78rem; }
 .fines-col-reason { color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fines-col-by     { color: var(--text-muted); font-size: 0.78rem; }
+/* Payment rows: the balance before → after, as a small line under the reason */
+.fines-saldo-line { display: block; margin-top: 1px; font-size: 0.74rem; color: var(--text-muted); }
 .fines-col-amount { font-family: var(--font-display); font-weight: 800; font-size: 0.95rem; text-align: right; }
 
 .fines-type--fine         { color: var(--red);   font-size: 0.78rem; }

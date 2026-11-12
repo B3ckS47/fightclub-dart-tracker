@@ -30,6 +30,7 @@
             <div id="entry-sheet-amount" class="entry-sheet-amount"></div>
             <div class="entry-sheet-rows">
                 <div class="entry-sheet-row"><span class="entry-sheet-label">Datum</span><span id="entry-sheet-date" class="entry-sheet-value"></span></div>
+                <div class="entry-sheet-row"><span class="entry-sheet-label">Saldo</span><span id="entry-sheet-saldo" class="entry-sheet-value"></span></div>
                 <div class="entry-sheet-row"><span class="entry-sheet-label">Grund</span><span id="entry-sheet-reason" class="entry-sheet-value"></span></div>
                 <div class="entry-sheet-row"><span class="entry-sheet-label">Eingetragen von</span><span id="entry-sheet-by" class="entry-sheet-value"></span></div>
                 <div id="entry-sheet-note-row" class="entry-sheet-row" style="display:none;"><span class="entry-sheet-label">Notiz</span><span id="entry-sheet-note" class="entry-sheet-value"></span></div>
@@ -154,6 +155,27 @@
         // loadLedger() and reused by the CSV/PDF exports (no extra queries).
         let _entries = [];
         let _balance = 0; // sum of _entries — open amount (negative = credit)
+        // Running balance around every entry: id → { before, after } (cents-rounded).
+        // Lets a payment row say what was open when it was paid and what remained.
+        let _saldoById = new Map();
+
+        function computeRunningSaldo(entriesDesc) {
+            const map = new Map();
+            let run = 0;
+            for (let i = entriesDesc.length - 1; i >= 0; i--) { // oldest first
+                const before = run;
+                run = Math.round((run + parseFloat(entriesDesc[i].amount)) * 100) / 100;
+                map.set(entriesDesc[i].id, { before, after: run });
+            }
+            return map;
+        }
+
+        // "30,00 €" open, "Guthaben 9,00 €" in credit, "0,00 €" settled
+        function fmtSaldo(b) {
+            if (b < -0.005) return `Guthaben ${formatEur(b)}`;
+            return formatEur(b > 0.005 ? b : 0);
+        }
+        function fmtSaldoChange(s) { return `${fmtSaldo(s.before)} → ${fmtSaldo(s.after)}`; }
 
         // ── ENTRY TYPE METADATA ──
         const TYPE_META = {
@@ -246,7 +268,11 @@
                 noteDisplay = e.note;
             }
 
-            const reason = [e.reason, noteDisplay].filter(Boolean).join(' · ') || '–';
+            // A payment states the balance it changed; without a reason text the
+            // payment row would only show a dash, so that is left out.
+            const saldo    = e.type === 'payment' ? _saldoById.get(e.id) : null;
+            const reason   = [e.reason, noteDisplay].filter(Boolean).join(' · ') || (saldo ? '' : '–');
+            const saldoHtml = saldo ? `<span class="fines-saldo-line">Saldo ${escHtml(fmtSaldoChange(saldo))}</span>` : '';
             const clickAttr = isAdmin
                 ? `onclick="openEntrySheet('${e.id}','${escHtml(e.type)}','${escHtml(e.reason||'')}','${escHtml(noteDisplay)}',${e.amount},'${escHtml(e.created_by||'')}','${escHtml(dateStr)}')"`
                 : '';
@@ -259,7 +285,7 @@
 <div class="${cls}" ${clickAttr}>
     <span class="fines-col-date">${firstCol}</span>
     <span class="fines-col-type ${meta.css}">${meta.label}</span>
-    <span class="fines-col-reason">${escHtml(reason)}</span>
+    <span class="fines-col-reason">${escHtml(reason)}${saldoHtml}</span>
     <span class="fines-col-by">${escHtml(e.created_by)}</span>
     <span class="fines-col-amount ${meta.debit ? 'fines-amount--debt' : 'fines-amount--zero'}">${meta.debit ? '+' : '–'}${formatEur(Math.abs(e.amount))}</span>
 </div>`;
@@ -382,6 +408,7 @@
             const entries = _entries;
             const balance = entries.reduce((sum, e) => sum + parseFloat(e.amount), 0);
             _balance = balance;
+            _saldoById = computeRunningSaldo(entries);
             const isZero  = balance <= 0;
 
             document.getElementById('detail-balance').textContent = formatEur(balance);
@@ -646,6 +673,8 @@
             document.getElementById('entry-sheet-amount').textContent  = (meta.debit ? '+' : '–') + formatEur(Math.abs(parseFloat(amount)));
             document.getElementById('entry-sheet-amount').className    = 'entry-sheet-amount ' + (meta.debit ? 'fines-amount--debt' : 'fines-amount--zero');
             document.getElementById('entry-sheet-date').textContent    = dateStr;
+            const saldo = _saldoById.get(id);
+            document.getElementById('entry-sheet-saldo').textContent   = saldo ? fmtSaldoChange(saldo) : '–';
             document.getElementById('entry-sheet-reason').textContent  = reason || '–';
             document.getElementById('entry-sheet-by').textContent      = createdBy || '–';
             const noteRow = document.getElementById('entry-sheet-note-row');
